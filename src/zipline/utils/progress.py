@@ -144,6 +144,10 @@ class BacktestProgressLogger:
 
         self.days_completed += 1
 
+        # ALWAYS track metrics (even if we don't log them)
+        # This ensures max drawdown is accurate
+        self._track_metrics(daily)
+
         # Only log at specified intervals
         if self.days_completed % self.update_interval != 0 and self.days_completed != self.total_days:
             return
@@ -152,8 +156,8 @@ class BacktestProgressLogger:
         progress_pct = (self.days_completed / self.total_days * 100) if self.total_days > 0 else 0
         progress_bar = self._make_progress_bar(progress_pct)
 
-        # Extract and format metrics
-        metrics_str = self._extract_metrics(daily) if self.show_metrics else ""
+        # Format metrics for display
+        metrics_str = self._format_metrics(daily) if self.show_metrics else ""
 
         # Format the progress line
         log_line = (
@@ -172,9 +176,43 @@ class BacktestProgressLogger:
         bar = '█' * filled + '-' * (width - filled)
         return bar
 
-    def _extract_metrics(self, daily: dict) -> str:
+    def _track_metrics(self, daily: dict):
         """
-        Extract and format portfolio metrics.
+        Track portfolio metrics on EVERY day (not just logging days).
+
+        This ensures max drawdown is accurate even when update_interval > 1.
+
+        Parameters
+        ----------
+        daily : dict
+            Daily performance dictionary from zipline
+        """
+        # Portfolio value
+        portfolio_value = daily.get("portfolio_value", 0)
+
+        # Initialize starting value on first update
+        if self.start_portfolio_value is None:
+            self.start_portfolio_value = portfolio_value
+            self.peak_portfolio_value = portfolio_value
+
+        # Track returns for Sharpe calculation
+        daily_return = daily.get("returns", 0)
+        self.returns_history.append(daily_return)
+
+        # Update peak portfolio value
+        if portfolio_value > self.peak_portfolio_value:
+            self.peak_portfolio_value = portfolio_value
+
+        # Track maximum drawdown
+        if self.peak_portfolio_value > 0:
+            current_drawdown = ((portfolio_value - self.peak_portfolio_value) / self.peak_portfolio_value) * 100
+            # Update max drawdown if this is worse
+            if current_drawdown < self.max_drawdown:
+                self.max_drawdown = current_drawdown
+
+    def _format_metrics(self, daily: dict) -> str:
+        """
+        Format portfolio metrics for display.
 
         Metrics displayed:
         - Cumulative Returns: percentage gain/loss from start
@@ -185,11 +223,6 @@ class BacktestProgressLogger:
         # Portfolio value
         portfolio_value = daily.get("portfolio_value", 0)
 
-        # Initialize starting value on first update
-        if self.start_portfolio_value is None:
-            self.start_portfolio_value = portfolio_value
-            self.peak_portfolio_value = portfolio_value
-
         # Calculate cumulative return
         if self.start_portfolio_value > 0:
             cum_return = (portfolio_value / self.start_portfolio_value - 1) * 100
@@ -197,9 +230,6 @@ class BacktestProgressLogger:
             cum_return = 0.0
 
         # Calculate Sharpe ratio
-        daily_return = daily.get("returns", 0)
-        self.returns_history.append(daily_return)
-
         if len(self.returns_history) > 2:
             returns_array = np.array(self.returns_history)
             mean_return = np.mean(returns_array)
@@ -212,18 +242,6 @@ class BacktestProgressLogger:
                 sharpe = 0.0
         else:
             sharpe = 0.0
-
-        # Calculate drawdown
-        if portfolio_value > self.peak_portfolio_value:
-            self.peak_portfolio_value = portfolio_value
-
-        if self.peak_portfolio_value > 0:
-            current_drawdown = ((portfolio_value - self.peak_portfolio_value) / self.peak_portfolio_value) * 100
-            # Track maximum drawdown
-            if current_drawdown < self.max_drawdown:
-                self.max_drawdown = current_drawdown
-        else:
-            current_drawdown = 0.0
 
         # Calculate cumulative PNL
         cum_pnl = portfolio_value - self.start_portfolio_value

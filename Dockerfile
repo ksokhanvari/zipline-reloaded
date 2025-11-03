@@ -29,6 +29,9 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel cython
 RUN pip install --no-cache-dir bcolz-zipline --verbose || \
     pip install --no-cache-dir --no-build-isolation bcolz-zipline
 
+# Install nasdaq-data-link for Sharadar bundle support
+RUN pip install --no-cache-dir nasdaq-data-link
+
 # Copy the entire project including .git for version detection
 COPY . .
 

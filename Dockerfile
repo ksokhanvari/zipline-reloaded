@@ -41,8 +41,11 @@ RUN pip install --no-cache-dir -e . --no-build-isolation
 # Create necessary directories
 RUN mkdir -p /notebooks /data /root/.zipline /scripts
 
+# Copy extension.py to register custom bundles
+COPY extension.py /root/.zipline/extension.py
+
 # Set up Jupyter
-RUN pip install --no-cache-dir jupyter jupyterlab notebook
+RUN pip install --no-cache-dir jupyter jupyterlab notebook matplotlib
 
 # Expose Jupyter port
 EXPOSE 8888

@@ -620,6 +620,20 @@ class TradingAlgorithm:
                 self.asset_finder is not None
             ), "Have data portal without asset_finder."
 
+        # Initialize progress logger if enabled
+        progress_logger = None
+        try:
+            from zipline.utils.progress import get_progress_logger
+            progress_logger = get_progress_logger()
+            if progress_logger is not None:
+                progress_logger.initialize(
+                    self.sim_params.start_session,
+                    self.sim_params.end_session,
+                    self.trading_calendar
+                )
+        except:
+            progress_logger = None
+
         # Create zipline and loop through simulated_trading.
         # Each iteration returns a perf dictionary
         try:
@@ -627,8 +641,23 @@ class TradingAlgorithm:
             for perf in self.get_generator():
                 perfs.append(perf)
 
+                # Update progress logger with daily performance
+                if progress_logger is not None and "daily_perf" in perf:
+                    try:
+                        dt = perf["daily_perf"]["period_close"]
+                        progress_logger.update(dt, perf["daily_perf"])
+                    except:
+                        pass  # Silently fail if progress logging has issues
+
             # convert perf dict to pandas dataframe
             daily_stats = self._create_daily_stats(perfs)
+
+            # Finalize progress logger
+            if progress_logger is not None:
+                try:
+                    progress_logger.finalize(daily_stats)
+                except:
+                    pass
 
             self.analyze(daily_stats)
         finally:

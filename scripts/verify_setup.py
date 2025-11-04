@@ -59,6 +59,17 @@ def check_bundle_registration():
     """Check if Sharadar bundle is registered."""
     print("\n3. Checking bundle registration...")
     try:
+        # First, manually load extension.py (like zipline does)
+        import runpy
+        extension_path = Path.home() / '.zipline' / 'extension.py'
+
+        if extension_path.exists():
+            try:
+                print("   Loading extension.py...")
+                runpy.run_path(str(extension_path))
+            except Exception as e:
+                print(f"   ⚠️  Error loading extension.py: {e}")
+
         from zipline.data.bundles import bundles
 
         registered = list(bundles.keys())
@@ -71,12 +82,13 @@ def check_bundle_registration():
             print("   ❌ Sharadar bundle NOT registered")
             print("\n   Troubleshooting:")
             print("   1. Check extension.py exists (see step 2)")
-            print("   2. Restart Python/Jupyter kernel")
-            print("   3. Check for import errors:")
-            print("      python -c 'from zipline.data.bundles.sharadar_bundle import sharadar_bundle'")
+            print("   2. Check for import errors in extension.py")
+            print("   3. Try: zipline bundles")
             return False
     except Exception as e:
         print(f"   ❌ Error checking bundles: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 
@@ -112,12 +124,26 @@ def check_data_ingested():
             # Check for key files
             assets_db = list(latest.glob('assets-*.db'))
             pricing = latest / 'daily_equity_pricing.bcolz'
+            adjustments = latest / 'adjustments.sqlite'
 
-            if assets_db and pricing.exists():
-                print("   ✅ Data appears complete (assets DB + pricing data)")
+            # Count what we have
+            files_found = []
+            if assets_db:
+                files_found.append("assets DB")
+            if pricing.exists():
+                files_found.append("pricing")
+            if adjustments.exists():
+                files_found.append("adjustments")
+
+            if len(files_found) >= 2:  # At least 2 of 3 key files
+                print(f"   ✅ Data appears complete ({', '.join(files_found)})")
                 return True
+            elif len(files_found) > 0:
+                print(f"   ⚠️  Partial data found ({', '.join(files_found)})")
+                print("   Ingestion may have been interrupted")
+                return False
             else:
-                print("   ⚠️  Data may be incomplete")
+                print("   ⚠️  No data files found in latest ingestion")
                 return False
         else:
             print(f"   ⚠️  Data directory exists but no ingestions found")

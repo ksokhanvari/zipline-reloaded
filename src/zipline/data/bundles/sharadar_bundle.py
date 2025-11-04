@@ -207,8 +207,9 @@ def sharadar_bundle(
                     conn.close()
 
                     if result and result[0]:
-                        # Convert Unix timestamp to date
-                        last_date = pd.to_datetime(result[0], unit='s')
+                        # Convert timestamp to date
+                        # Zipline stores timestamps as nanoseconds since epoch
+                        last_date = pd.to_datetime(result[0], unit='ns')
                         # Start from the day after last date
                         effective_start_date = (last_date + timedelta(days=1)).strftime('%Y-%m-%d')
                         is_incremental_update = True

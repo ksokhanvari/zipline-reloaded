@@ -7,8 +7,6 @@ services:
     ports:
       - "${JUPYTER_PORT:-9000}:8888"  # Jupyter Lab (host:container)
     volumes:
-      # Mount source code for live updates (no rebuild needed!)
-      - ./src:/app/src
       # Mount notebooks directory
       - ./notebooks:/notebooks
       # Mount data directory for persistence

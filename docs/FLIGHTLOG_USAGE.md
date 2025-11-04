@@ -367,37 +367,24 @@ The code now:
 
 ### Problem: "ModuleNotFoundError: No module named 'zipline.data._adjustments'"
 
-**Cause:** You're using the source code mount (`./src:/app/src`) but haven't built the Cython extensions locally.
+**Cause:** Docker image is out of date or corrupted.
 
-**What happened:** Zipline uses Cython for performance-critical modules. When you mount `./src` from your host, it overwrites the compiled `.so` files that were built inside the Docker container.
-
-**Fix:** Build the Cython extensions on your host machine:
+**Fix:** Rebuild the Docker image:
 
 ```bash
-cd /home/user/zipline-reloaded
+cd /path/to/zipline-reloaded
 
-# Install build dependencies
-pip install --user cython numpy pandas
+# Pull latest code
+git pull origin claude/continue-work-011CUkRmXtm24f1Qc3mHbrGJ
 
-# Build extensions in-place
-python setup.py build_ext --inplace
+# Rebuild Docker image (this compiles Cython extensions inside container)
+docker compose build zipline-jupyter
 
-# Restart Docker container to pick up compiled files
-docker-compose restart zipline-jupyter
+# Restart containers
+docker compose up -d
 ```
 
-**Verify extensions were built:**
-```bash
-find src/zipline -name "*.so" | wc -l
-# Should show: 16
-```
-
-**When do you need to rebuild?**
-- ✅ After `git pull` that includes changes to `.pyx` files
-- ✅ After modifying any `.pyx` file yourself
-- ❌ NOT needed for regular Python (`.py`) file changes
-
-**Alternative:** If you don't want to build locally, remove the source mount from `docker-compose.yml` and rebuild the Docker image after each `git pull`.
+**Note:** After any `git pull` that includes code changes, you should rebuild the Docker image to ensure all Cython extensions are properly compiled.
 
 ### Problem: "Connection refused"
 

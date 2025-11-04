@@ -69,14 +69,15 @@ class BacktestProgressLogger:
 
             # BUT: Also add any SocketHandlers from root logger to progress logger
             # so that FlightLog still receives progress logs
-            import logging.handlers
             root_logger = logging.getLogger()
             for root_handler in root_logger.handlers:
-                if isinstance(root_handler, logging.handlers.SocketHandler):
+                # Check if this is a SocketHandler (without importing logging.handlers locally)
+                if root_handler.__class__.__name__ == 'SocketHandler':
                     # Check if we don't already have this handler
                     has_socket = any(
-                        isinstance(h, logging.handlers.SocketHandler) and
-                        h.host == root_handler.host and h.port == root_handler.port
+                        h.__class__.__name__ == 'SocketHandler' and
+                        getattr(h, 'host', None) == getattr(root_handler, 'host', None) and
+                        getattr(h, 'port', None) == getattr(root_handler, 'port', None)
                         for h in self.logger.handlers
                     )
                     if not has_socket:

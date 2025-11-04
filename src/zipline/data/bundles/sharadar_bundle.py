@@ -162,10 +162,12 @@ def sharadar_bundle(
             print(f"\n🔍 DEBUG: Checking for previous ingestions...")
             print(f"   Current output_dir: {output_dir}")
             print(f"   Searching in: {Path(output_dir).parent}")
-            print(f"   Pattern: */assets-*.db")
+            print(f"   Pattern: */assets-*.sqlite (and */assets-*.db for backwards compatibility)")
 
-            # Look for existing asset database
-            existing_ingestions = sorted(Path(output_dir).parent.glob('*/assets-*.db'))
+            # Look for existing asset database (try both .sqlite and .db extensions)
+            existing_ingestions = sorted(Path(output_dir).parent.glob('*/assets-*.sqlite'))
+            if not existing_ingestions:
+                existing_ingestions = sorted(Path(output_dir).parent.glob('*/assets-*.db'))
 
             print(f"   Found {len(existing_ingestions)} previous ingestion(s)")
             if existing_ingestions:
@@ -179,7 +181,10 @@ def sharadar_bundle(
                     for item in sorted(parent_dir.iterdir()):
                         print(f"     - {item.name}/")
                         if item.is_dir():
-                            assets_dbs = list(item.glob('assets-*.db'))
+                            # Check for both .sqlite and .db extensions
+                            assets_dbs = list(item.glob('assets-*.sqlite'))
+                            if not assets_dbs:
+                                assets_dbs = list(item.glob('assets-*.db'))
                             if assets_dbs:
                                 existing_ingestions.extend(assets_dbs)
                                 print(f"       Found: {assets_dbs[0].name}")

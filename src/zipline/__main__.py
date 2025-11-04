@@ -394,13 +394,42 @@ def zipline_magic(line, cell=None):
 )
 def ingest(bundle, assets_version, show_progress):
     """Ingest the data for the given bundle."""
-    bundles_module.ingest(
-        bundle,
-        os.environ,
-        pd.Timestamp.utcnow(),
-        assets_version,
-        show_progress,
-    )
+    try:
+        bundles_module.ingest(
+            bundle,
+            os.environ,
+            pd.Timestamp.utcnow(),
+            assets_version,
+            show_progress,
+        )
+    except ValueError as e:
+        # Check if this is the "no new data" case (not a real error)
+        error_msg = str(e)
+        if "already up-to-date" in error_msg.lower() or "no new data" in error_msg.lower():
+            # This is expected - bundle is current, exit cleanly
+            # Clean up the empty directory that was created
+            import shutil
+            from zipline.data.bundles.core import to_bundle_ingest_dirname
+            import zipline.utils.paths as pth
+
+            timestamp = pd.Timestamp.utcnow().tz_convert("utc").tz_localize(None)
+            timestr = to_bundle_ingest_dirname(timestamp)
+            bundle_dir = pth.data_path([bundle, timestr], environ=os.environ)
+
+            # Only remove if it's empty (safety check)
+            if os.path.exists(bundle_dir):
+                try:
+                    # Check if directory is empty
+                    if not os.listdir(bundle_dir):
+                        shutil.rmtree(bundle_dir)
+                except:
+                    pass  # Ignore cleanup errors
+
+            click.echo("\n✓ Bundle ingestion skipped - already up-to-date\n")
+            return
+        else:
+            # This is an actual error, re-raise
+            raise
 
 
 @main.command()

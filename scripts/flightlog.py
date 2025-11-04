@@ -38,6 +38,7 @@ class ColoredFormatter(logging.Formatter):
         'CRITICAL': '\033[35m',   # Magenta
     }
     RESET = '\033[0m'
+    BOLD = '\033[1m'
 
     def __init__(self, use_colors=True):
         super().__init__(
@@ -50,9 +51,22 @@ class ColoredFormatter(logging.Formatter):
         if self.use_colors:
             levelname = record.levelname
             if levelname in self.COLORS:
+                # Color the level name
                 record.levelname = f"{self.COLORS[levelname]}{levelname}{self.RESET}"
 
+                # Make algorithm logs bold
+                if record.name == 'algorithm':
+                    record.msg = f"{self.BOLD}{record.msg}{self.RESET}"
+
         return super().format(record)
+
+
+class ProgressFilter(logging.Filter):
+    """Filter to exclude progress logs."""
+
+    def filter(self, record):
+        # Exclude zipline.progress logs
+        return record.name != 'zipline.progress'
 
 
 class LogRecordStreamHandler(socketserver.StreamRequestHandler):
@@ -131,6 +145,11 @@ def main():
         action='store_true',
         help='Disable color output'
     )
+    parser.add_argument(
+        '--filter-progress',
+        action='store_true',
+        help='Filter out progress logs (only show algorithm logs)'
+    )
 
     args = parser.parse_args()
 
@@ -141,6 +160,11 @@ def main():
     # Console handler with colors
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(ColoredFormatter(use_colors=not args.no_color))
+
+    # Add progress filter if requested
+    if args.filter_progress:
+        console_handler.addFilter(ProgressFilter())
+
     root_logger.addHandler(console_handler)
 
     # Optional file handler
@@ -160,6 +184,8 @@ def main():
     print(f"Log level: {args.level}")
     if args.file:
         print(f"Saving to: {args.file}")
+    if args.filter_progress:
+        print("Filter: Progress logs hidden (--filter-progress)")
     print()
     print("Waiting for backtest connections...")
     print("Press Ctrl+C to stop")

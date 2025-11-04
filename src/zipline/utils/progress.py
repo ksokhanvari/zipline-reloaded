@@ -66,6 +66,22 @@ class BacktestProgressLogger:
             # IMPORTANT: Prevent logs from propagating to root logger
             # This avoids duplicate messages when logging.basicConfig() is called multiple times
             self.logger.propagate = False
+
+            # BUT: Also add any SocketHandlers from root logger to progress logger
+            # so that FlightLog still receives progress logs
+            import logging.handlers
+            root_logger = logging.getLogger()
+            for root_handler in root_logger.handlers:
+                if isinstance(root_handler, logging.handlers.SocketHandler):
+                    # Check if we don't already have this handler
+                    has_socket = any(
+                        isinstance(h, logging.handlers.SocketHandler) and
+                        h.host == root_handler.host and h.port == root_handler.port
+                        for h in self.logger.handlers
+                    )
+                    if not has_socket:
+                        # Add the socket handler to progress logger too
+                        self.logger.addHandler(root_handler)
         else:
             self.logger = logger
 

@@ -365,6 +365,40 @@ The code now:
 - ✅ Clears old progress logger handlers on each run
 - ✅ Uses `logging.basicConfig(force=True)` in examples
 
+### Problem: "ModuleNotFoundError: No module named 'zipline.data._adjustments'"
+
+**Cause:** You're using the source code mount (`./src:/app/src`) but haven't built the Cython extensions locally.
+
+**What happened:** Zipline uses Cython for performance-critical modules. When you mount `./src` from your host, it overwrites the compiled `.so` files that were built inside the Docker container.
+
+**Fix:** Build the Cython extensions on your host machine:
+
+```bash
+cd /home/user/zipline-reloaded
+
+# Install build dependencies
+pip install --user cython numpy pandas
+
+# Build extensions in-place
+python setup.py build_ext --inplace
+
+# Restart Docker container to pick up compiled files
+docker-compose restart zipline-jupyter
+```
+
+**Verify extensions were built:**
+```bash
+find src/zipline -name "*.so" | wc -l
+# Should show: 16
+```
+
+**When do you need to rebuild?**
+- ✅ After `git pull` that includes changes to `.pyx` files
+- ✅ After modifying any `.pyx` file yourself
+- ❌ NOT needed for regular Python (`.py`) file changes
+
+**Alternative:** If you don't want to build locally, remove the source mount from `docker-compose.yml` and rebuild the Docker image after each `git pull`.
+
 ### Problem: "Connection refused"
 
 **Possible causes:**

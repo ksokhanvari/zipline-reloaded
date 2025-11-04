@@ -261,7 +261,31 @@ def sharadar_bundle(
         )
 
         if sep_data.empty:
-            raise ValueError("No equity pricing data downloaded. Check your subscription and filters.")
+            if is_incremental_update:
+                # No new data available - this is normal
+                print(f"\n{'='*60}")
+                print("✓ Already up-to-date!")
+                print(f"{'='*60}")
+                print(f"No new equity data available for {effective_start_date} to {end_date}")
+                print(f"")
+                print(f"Possible reasons:")
+                print(f"  • Data for {end_date} not yet available (check time: market closes 4PM ET, data ready ~6PM ET)")
+                print(f"  • Weekend or market holiday")
+                print(f"  • Already have the latest data")
+                print(f"")
+                print(f"Last ingestion date: {(pd.to_datetime(effective_start_date) - timedelta(days=1)).date()}")
+                print(f"Current time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S %Z')}")
+                print(f"")
+                print(f"💡 Try again after 6:00 PM ET on the next trading day")
+                print(f"{'='*60}\n")
+                return  # Exit gracefully, no error
+            else:
+                # First-time download with no data is an error
+                raise ValueError(
+                    "No equity pricing data downloaded. "
+                    "Check your subscription and filters. "
+                    f"Date range: {effective_start_date} to {end_date}"
+                )
 
         print(f"Downloaded {len(sep_data):,} equity price records for {sep_data['ticker'].nunique()} tickers")
 

@@ -158,18 +158,47 @@ def sharadar_bundle(
             from pathlib import Path
             import sqlite3
 
+            # DEBUG: Print paths being searched
+            print(f"\n🔍 DEBUG: Checking for previous ingestions...")
+            print(f"   Current output_dir: {output_dir}")
+            print(f"   Searching in: {Path(output_dir).parent}")
+            print(f"   Pattern: */assets-*.db")
+
             # Look for existing asset database
             existing_ingestions = sorted(Path(output_dir).parent.glob('*/assets-*.db'))
 
+            print(f"   Found {len(existing_ingestions)} previous ingestion(s)")
+            if existing_ingestions:
+                for ing in existing_ingestions:
+                    print(f"     - {ing}")
+            else:
+                # Try alternative detection using parent directory listing
+                parent_dir = Path(output_dir).parent
+                if parent_dir.exists():
+                    print(f"   Parent directory exists, listing contents:")
+                    for item in sorted(parent_dir.iterdir()):
+                        print(f"     - {item.name}/")
+                        if item.is_dir():
+                            assets_dbs = list(item.glob('assets-*.db'))
+                            if assets_dbs:
+                                existing_ingestions.extend(assets_dbs)
+                                print(f"       Found: {assets_dbs[0].name}")
+                    print(f"   Re-checked: Found {len(existing_ingestions)} ingestion(s) total")
+                else:
+                    print(f"   Parent directory does not exist yet")
+
             if existing_ingestions:
                 latest_db = existing_ingestions[-1]
+                print(f"   Using latest database: {latest_db}")
                 try:
                     conn = sqlite3.connect(str(latest_db))
                     cursor = conn.cursor()
 
                     # Get the latest end_date from existing equities
+                    print(f"   Querying database for last end_date...")
                     cursor.execute("SELECT MAX(end_date) FROM equities")
                     result = cursor.fetchone()
+                    print(f"   Query result: {result}")
                     conn.close()
 
                     if result and result[0]:
@@ -186,9 +215,17 @@ def sharadar_bundle(
                         print(f"Downloading new data from: {effective_start_date} to {end_date}")
                         print(f"This will be much faster than a full download!")
                         print(f"{'='*60}\n")
+                    else:
+                        print(f"   ⚠️  Database query returned no results or NULL")
+                        print(f"   Performing full download from {start_date}")
                 except Exception as e:
                     print(f"  ℹ️  Could not detect previous ingestion: {e}")
+                    print(f"     Exception type: {type(e).__name__}")
+                    import traceback
+                    print(f"     {traceback.format_exc()}")
                     print(f"  Performing full download from {start_date}")
+            else:
+                print(f"   No previous ingestions found, will perform full download")
 
         if not is_incremental_update:
             print(f"\n{'='*60}")

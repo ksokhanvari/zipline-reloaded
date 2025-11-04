@@ -262,7 +262,7 @@ def sharadar_bundle(
 
         if sep_data.empty:
             if is_incremental_update:
-                # No new data available - this is normal
+                # No new data available - abort ingestion cleanly
                 print(f"\n{'='*60}")
                 print("✓ Already up-to-date!")
                 print(f"{'='*60}")
@@ -274,11 +274,20 @@ def sharadar_bundle(
                 print(f"  • Already have the latest data")
                 print(f"")
                 print(f"Last ingestion date: {(pd.to_datetime(effective_start_date) - timedelta(days=1)).date()}")
-                print(f"Current time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S %Z')}")
+                print(f"Current time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
                 print(f"")
-                print(f"💡 Try again after 6:00 PM ET on the next trading day")
+                print(f"💡 Your existing bundle is current - no action needed!")
+                print(f"   You can run backtests using the existing data.")
                 print(f"{'='*60}\n")
-                return  # Exit gracefully, no error
+
+                # Raise a clear exception to abort the ingestion
+                # This prevents creating an incomplete bundle
+                # Note: This is not an error - just indicates no new data available
+                raise ValueError(
+                    f"No new data available. Bundle already up-to-date as of "
+                    f"{(pd.to_datetime(effective_start_date) - timedelta(days=1)).date()}. "
+                    f"Use your existing bundle for backtests - no action needed."
+                )
             else:
                 # First-time download with no data is an error
                 raise ValueError(

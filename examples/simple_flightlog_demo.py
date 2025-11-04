@@ -19,10 +19,12 @@ from zipline.utils.flightlog_client import enable_flightlog, log_to_flightlog
 # =============================================================================
 # Setup (3 lines)
 # =============================================================================
+# NOTE: These functions prevent duplicate handlers automatically,
+# so it's safe to run this multiple times in Jupyter notebooks
 
-logging.basicConfig(level=logging.INFO)
-enable_flightlog(host='localhost', port=9020)
-enable_progress_logging(algo_name='Simple-Demo', update_interval=5)
+logging.basicConfig(level=logging.INFO, force=True)  # force=True prevents duplicates
+enable_flightlog(host='localhost', port=9020)  # Auto-checks for existing handlers
+enable_progress_logging(algo_name='Simple-Demo', update_interval=5)  # Clears old handlers
 
 
 # =============================================================================

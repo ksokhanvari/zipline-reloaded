@@ -53,11 +53,19 @@ class BacktestProgressLogger:
         # Use provided logger or create default
         if logger is None:
             self.logger = logging.getLogger('zipline.progress')
-            if not self.logger.handlers:
-                handler = logging.StreamHandler(sys.stdout)
-                handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s'))
-                self.logger.addHandler(handler)
-                self.logger.setLevel(logging.INFO)
+
+            # Clear any existing handlers to prevent duplicates
+            self.logger.handlers.clear()
+
+            # Add our handler
+            handler = logging.StreamHandler(sys.stdout)
+            handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s'))
+            self.logger.addHandler(handler)
+            self.logger.setLevel(logging.INFO)
+
+            # IMPORTANT: Prevent logs from propagating to root logger
+            # This avoids duplicate messages when logging.basicConfig() is called multiple times
+            self.logger.propagate = False
         else:
             self.logger = logger
 

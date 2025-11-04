@@ -73,12 +73,24 @@ def enable_flightlog(
             )
             return False
 
-        # Create socket handler
-        socket_handler = logging.handlers.SocketHandler(host, port)
-        socket_handler.setLevel(level)
-
         # Add to root logger
         root_logger = logging.getLogger()
+
+        # Check if we already have a SocketHandler for this host:port
+        existing_handlers = [
+            h for h in root_logger.handlers
+            if isinstance(h, logging.handlers.SocketHandler) and
+               h.host == host and h.port == port
+        ]
+
+        if existing_handlers:
+            # Already have a handler for this host:port, don't add another
+            logging.debug(f"FlightLog handler already exists for {host}:{port}")
+            return True
+
+        # Create and add socket handler
+        socket_handler = logging.handlers.SocketHandler(host, port)
+        socket_handler.setLevel(level)
         root_logger.addHandler(socket_handler)
 
         # Make sure root logger level allows these messages

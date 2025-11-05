@@ -382,9 +382,17 @@ def sharadar_bundle(
         # Add sid to pricing data
         all_pricing_data['sid'] = all_pricing_data['ticker'].map(symbol_to_sid)
 
+        # Create exchanges data (required for Pipeline country_code filtering)
+        # Sharadar data includes US exchanges
+        exchanges = pd.DataFrame({
+            'exchange': ['NASDAQ', 'NYSE', 'NYSEARCA', 'BATS', 'OTC'],
+            'canonical_name': ['NASDAQ', 'NYSE', 'NYSE ARCA', 'BATS', 'OTC'],
+            'country_code': ['US', 'US', 'US', 'US', 'US']
+        })
+
         # Write metadata
         print("Writing asset metadata...")
-        asset_db_writer.write(equities=metadata)
+        asset_db_writer.write(equities=metadata, exchanges=exchanges)
 
         # Prepare and write pricing data
         print("Writing daily bars...")
@@ -846,7 +854,6 @@ def prepare_asset_metadata(
     # Add required columns
     metadata['exchange'] = 'NASDAQ'  # Sharadar is primarily NASDAQ/NYSE
     metadata['asset_name'] = metadata['symbol']
-    metadata['country_code'] = 'US'  # Sharadar is US equities/funds
 
     # Convert dates to pandas Timestamp
     metadata['start_date'] = pd.to_datetime(metadata['start_date'])

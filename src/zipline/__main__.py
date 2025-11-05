@@ -407,21 +407,31 @@ def ingest(bundle, assets_version, show_progress):
         error_msg = str(e)
         if "already up-to-date" in error_msg.lower() or "no new data" in error_msg.lower():
             # This is expected - bundle is current, exit cleanly
-            # Clean up the empty directory that was created
+            # Clean up the incomplete directory that was just created
+            # We can't use the exact timestamp because it was generated earlier,
+            # so we find the newest directory created in the last minute
             import shutil
-            from zipline.data.bundles.core import to_bundle_ingest_dirname
+            from pathlib import Path
             import zipline.utils.paths as pth
+            import time
 
-            timestamp = pd.Timestamp.utcnow().tz_convert("utc").tz_localize(None)
-            timestr = to_bundle_ingest_dirname(timestamp)
-            bundle_dir = pth.data_path([bundle, timestr], environ=os.environ)
+            bundle_root = Path(pth.data_path([bundle], environ=os.environ))
 
-            # Remove the incomplete bundle directory
-            if os.path.exists(bundle_dir):
+            if bundle_root.exists():
                 try:
-                    # Remove directory and all contents (safe because ingestion failed)
-                    shutil.rmtree(bundle_dir)
-                    click.echo(f"Cleaned up incomplete bundle directory: {timestr}")
+                    # Find directories created in the last 60 seconds
+                    now = time.time()
+                    recent_dirs = [
+                        d for d in bundle_root.iterdir()
+                        if d.is_dir() and (now - d.stat().st_mtime) < 60
+                    ]
+
+                    # Remove incomplete directories (no assets database)
+                    for dir_path in recent_dirs:
+                        assets_db = list(dir_path.glob('assets-*.sqlite'))
+                        if not assets_db:  # No assets DB = incomplete
+                            shutil.rmtree(dir_path)
+                            click.echo(f"Cleaned up incomplete bundle directory: {dir_path.name}")
                 except Exception as cleanup_err:
                     # Warn but don't fail if cleanup doesn't work
                     click.echo(f"⚠️  Could not clean up directory: {cleanup_err}", err=True)

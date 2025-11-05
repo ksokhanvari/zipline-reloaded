@@ -846,6 +846,7 @@ def prepare_asset_metadata(
     # Add required columns
     metadata['exchange'] = 'NASDAQ'  # Sharadar is primarily NASDAQ/NYSE
     metadata['asset_name'] = metadata['symbol']
+    metadata['country_code'] = 'US'  # Sharadar is US equities/funds
 
     # Convert dates to pandas Timestamp
     metadata['start_date'] = pd.to_datetime(metadata['start_date'])

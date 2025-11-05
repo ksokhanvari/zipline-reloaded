@@ -42,10 +42,14 @@ ENV SETUPTOOLS_SCM_PRETEND_VERSION=3.1.1
 RUN pip install --no-cache-dir -e . --no-build-isolation
 
 # Create necessary directories
-RUN mkdir -p /notebooks /data /root/.zipline /scripts
+RUN mkdir -p /notebooks /data /root/.zipline /scripts /root/.jupyter/lab/user-settings/@jupyterlab/notebook-extension
 
 # Copy extension.py to register custom bundles
 COPY extension.py /root/.zipline/extension.py
+
+# Copy Jupyter Lab settings for consistent notebook rendering
+COPY .jupyter/lab/user-settings/@jupyterlab/notebook-extension/tracker.jupyterlab-settings \
+     /root/.jupyter/lab/user-settings/@jupyterlab/notebook-extension/tracker.jupyterlab-settings
 
 # Set up Jupyter
 RUN pip install --no-cache-dir jupyter jupyterlab notebook matplotlib

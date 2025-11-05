@@ -1,0 +1,10 @@
+{
+  "recordTiming": false,
+  "renderCellOnScroll": true,
+  "maxOutputSize": 0,
+  "codeCellConfig": {
+    "lineWrap": "on",
+    "rulers": [],
+    "cursorBlinkRate": 600
+  }
+}

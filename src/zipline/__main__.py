@@ -416,14 +416,15 @@ def ingest(bundle, assets_version, show_progress):
             timestr = to_bundle_ingest_dirname(timestamp)
             bundle_dir = pth.data_path([bundle, timestr], environ=os.environ)
 
-            # Only remove if it's empty (safety check)
+            # Remove the incomplete bundle directory
             if os.path.exists(bundle_dir):
                 try:
-                    # Check if directory is empty
-                    if not os.listdir(bundle_dir):
-                        shutil.rmtree(bundle_dir)
-                except:
-                    pass  # Ignore cleanup errors
+                    # Remove directory and all contents (safe because ingestion failed)
+                    shutil.rmtree(bundle_dir)
+                    click.echo(f"Cleaned up incomplete bundle directory: {timestr}")
+                except Exception as cleanup_err:
+                    # Warn but don't fail if cleanup doesn't work
+                    click.echo(f"⚠️  Could not clean up directory: {cleanup_err}", err=True)
 
             click.echo("\n✓ Bundle ingestion skipped - already up-to-date\n")
             return

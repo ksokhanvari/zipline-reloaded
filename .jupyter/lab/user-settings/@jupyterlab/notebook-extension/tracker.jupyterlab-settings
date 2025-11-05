@@ -2,6 +2,7 @@
   "recordTiming": false,
   "renderCellOnScroll": true,
   "maxOutputSize": 0,
+  "windowingMode": "none",
   "codeCellConfig": {
     "lineWrap": "on",
     "rulers": [],

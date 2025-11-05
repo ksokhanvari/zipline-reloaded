@@ -51,8 +51,8 @@ COPY extension.py /root/.zipline/extension.py
 COPY .jupyter/lab/user-settings/@jupyterlab/notebook-extension/tracker.jupyterlab-settings \
      /root/.jupyter/lab/user-settings/@jupyterlab/notebook-extension/tracker.jupyterlab-settings
 
-# Set up Jupyter
-RUN pip install --no-cache-dir jupyter jupyterlab notebook matplotlib
+# Set up Jupyter and analysis tools
+RUN pip install --no-cache-dir jupyter jupyterlab notebook matplotlib pyfolio-reloaded alphalens-reloaded
 
 # Expose Jupyter port
 EXPOSE 8888

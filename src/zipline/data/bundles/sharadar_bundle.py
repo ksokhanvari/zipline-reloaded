@@ -413,11 +413,8 @@ def sharadar_bundle(
                         # Get asset_type from metadata if available
                         existing_data['asset_type'] = 'equity'  # Default
 
-                        # Add closeunadj column (same as close for existing data)
-                        existing_data['closeunadj'] = existing_data['close']
-
-                        # Keep only necessary columns (including closeunadj to match new data format)
-                        existing_data = existing_data[['ticker', 'date', 'open', 'high', 'low', 'close', 'closeunadj', 'volume', 'asset_type']]
+                        # Keep only necessary columns
+                        existing_data = existing_data[['ticker', 'date', 'open', 'high', 'low', 'close', 'volume', 'asset_type']]
 
                         print(f"   Existing data: {len(existing_data):,} records from {existing_data['date'].min().date()} to {existing_data['date'].max().date()}")
 
@@ -525,8 +522,13 @@ def sharadar_bundle(
                 if symbol_data.index.tz is not None:
                     symbol_data.index = symbol_data.index.tz_localize(None)
 
-                # Use closeunadj for close (adjustments handled separately)
-                symbol_data['close'] = symbol_data['closeunadj']
+                # Use 'close' column which is already split-adjusted historically
+                # Sharadar columns:
+                #   - 'close' = split-adjusted historically, NOT dividend-adjusted
+                #   - 'closeadj' = split-adjusted AND dividend-adjusted
+                #   - 'closeunadj' = NOT split-adjusted, NOT dividend-adjusted
+                # We use 'close' and apply dividend adjustments separately
+                # symbol_data already has 'close' from the raw data, no need to reassign
 
                 # Ensure all required columns and proper types
                 required_cols = ['open', 'high', 'low', 'close', 'volume']

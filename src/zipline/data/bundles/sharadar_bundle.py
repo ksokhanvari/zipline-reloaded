@@ -376,7 +376,17 @@ def sharadar_bundle(
                     if latest_assets_db:
                         import sqlite3
                         conn = sqlite3.connect(str(latest_assets_db[-1]))
-                        assets_df = pd.read_sql("SELECT sid, symbol FROM equities", conn)
+                        # Symbol is in equity_symbol_mappings, not equities table
+                        # Join to get sid -> symbol mapping, taking the most recent symbol for each sid
+                        assets_df = pd.read_sql("""
+                            SELECT DISTINCT esm.sid, esm.symbol
+                            FROM equity_symbol_mappings esm
+                            INNER JOIN (
+                                SELECT sid, MAX(end_date) as max_end_date
+                                FROM equity_symbol_mappings
+                                GROUP BY sid
+                            ) latest ON esm.sid = latest.sid AND esm.end_date = latest.max_end_date
+                        """, conn)
                         conn.close()
 
                         # Map sid to ticker

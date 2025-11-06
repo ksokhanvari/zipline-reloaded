@@ -248,14 +248,20 @@ def sharadar_bundle(
         total_steps = 4 if include_funds else 3
         if is_incremental_update:
             print(f"Step 1/{total_steps}: Downloading NEW Sharadar Equity Prices (incremental)...")
+            print(f"   Downloading only new data from {effective_start_date} to {end_date}")
+            print(f"   (Will merge with existing data from {start_date} onwards)")
         else:
             print(f"Step 1/{total_steps}: Downloading Sharadar Equity Prices (SEP table)...")
+
+        # For incremental updates: download only new data, then we'll merge with existing
+        # For full updates: download all data from start_date
+        download_start_date = effective_start_date if is_incremental_update else start_date
 
         sep_data = download_sharadar_table(
             table='SEP',
             api_key=api_key,
             tickers=tickers,
-            start_date=effective_start_date,
+            start_date=download_start_date,
             end_date=end_date,
             use_chunks=use_chunks,
         )
@@ -310,7 +316,7 @@ def sharadar_bundle(
                 table='SFP',
                 api_key=api_key,
                 tickers=tickers,
-                start_date=effective_start_date,
+                start_date=download_start_date,
                 end_date=end_date,
                 use_chunks=use_chunks,
             )
@@ -333,10 +339,84 @@ def sharadar_bundle(
             sep_data['asset_type'] = 'equity'
             all_pricing_data = sep_data
 
+        # For incremental updates: merge with existing data
+        if is_incremental_update:
+            print(f"\n🔄 Merging with existing data...")
+            print(f"   Newly downloaded: {len(all_pricing_data):,} records")
+
+            # Load existing data from the latest bundle
+            from pathlib import Path
+            import bcolz
+
+            try:
+                latest_bundle_dir = Path(output_dir).parent
+                existing_dirs = sorted(latest_bundle_dir.glob('*/daily_equities.bcolz'))
+
+                if existing_dirs:
+                    existing_bcolz_dir = existing_dirs[-1]
+                    print(f"   Loading from: {existing_bcolz_dir.parent.name}")
+
+                    # Read existing bcolz data
+                    existing_table = bcolz.open(str(existing_bcolz_dir), mode='r')
+
+                    # Convert to DataFrame
+                    existing_data = pd.DataFrame({
+                        col: existing_table[col][:] for col in ['open', 'high', 'low', 'close', 'volume', 'day', 'id']
+                    })
+
+                    # Convert day (nanoseconds since epoch) to date
+                    existing_data['date'] = pd.to_datetime(existing_data['day'], unit='ns')
+                    existing_data['sid'] = existing_data['id']
+
+                    # Load asset database to get ticker symbols
+                    latest_assets_db = sorted(latest_bundle_dir.glob('*/assets-*.sqlite'))
+                    if not latest_assets_db:
+                        latest_assets_db = sorted(latest_bundle_dir.glob('*/assets-*.db'))
+
+                    if latest_assets_db:
+                        import sqlite3
+                        conn = sqlite3.connect(str(latest_assets_db[-1]))
+                        assets_df = pd.read_sql("SELECT sid, symbol FROM equities", conn)
+                        conn.close()
+
+                        # Map sid to ticker
+                        sid_to_ticker = dict(zip(assets_df['sid'], assets_df['symbol']))
+                        existing_data['ticker'] = existing_data['sid'].map(sid_to_ticker)
+
+                        # Get asset_type from metadata if available
+                        existing_data['asset_type'] = 'equity'  # Default
+
+                        # Add closeunadj column (same as close for existing data)
+                        existing_data['closeunadj'] = existing_data['close']
+
+                        # Keep only necessary columns (including closeunadj to match new data format)
+                        existing_data = existing_data[['ticker', 'date', 'open', 'high', 'low', 'close', 'closeunadj', 'volume', 'asset_type']]
+
+                        print(f"   Existing data: {len(existing_data):,} records from {existing_data['date'].min().date()} to {existing_data['date'].max().date()}")
+
+                        # Filter existing data to before the new data starts
+                        cutoff_date = pd.Timestamp(download_start_date)
+                        existing_data = existing_data[existing_data['date'] < cutoff_date]
+                        print(f"   Keeping {len(existing_data):,} records before {cutoff_date.date()}")
+
+                        # Merge: existing data + new data
+                        all_pricing_data = pd.concat([existing_data, all_pricing_data], ignore_index=True)
+                        print(f"   ✓ Merged total: {len(all_pricing_data):,} records")
+                    else:
+                        print(f"   ⚠️  Could not find assets database for ticker mapping")
+                        print(f"   Proceeding with new data only")
+                else:
+                    print(f"   ⚠️  Could not find existing bundle data")
+                    print(f"   Proceeding with new data only")
+
+            except Exception as e:
+                print(f"   ⚠️  Error loading existing data: {e}")
+                print(f"   Proceeding with new data only")
+
         # Validate date range to match available data
         actual_start = all_pricing_data['date'].min()
         actual_end = all_pricing_data['date'].max()
-        print(f"Downloaded data range: {actual_start.date()} to {actual_end.date()}")
+        print(f"Final data range: {actual_start.date()} to {actual_end.date()}")
 
         # Download ACTIONS (corporate actions) data
         step_num = 3 if include_funds else 2
@@ -349,7 +429,7 @@ def sharadar_bundle(
             table='ACTIONS',
             api_key=api_key,
             tickers=tickers,
-            start_date=effective_start_date,
+            start_date=download_start_date,
             end_date=end_date,
             use_chunks=use_chunks,
         )

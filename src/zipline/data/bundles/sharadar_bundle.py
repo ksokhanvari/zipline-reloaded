@@ -1006,7 +1006,10 @@ def prepare_adjustments(
     splits = actions_data[actions_data['action'] == 'Split'].copy()
     if not splits.empty:
         splits['sid'] = splits['ticker'].map(ticker_to_sid)
-        splits['ratio'] = splits['value'].astype(float)
+        # Sharadar reports splits as multiplication factor (e.g., 4 for 4-for-1 split)
+        # Zipline expects the inverse (e.g., 0.25 for 4-for-1 split)
+        # because Zipline divides shares by ratio: new_shares = old_shares / ratio
+        splits['ratio'] = 1.0 / splits['value'].astype(float)
         splits['effective_date'] = pd.to_datetime(splits['date'])
         splits = splits[['sid', 'ratio', 'effective_date']].dropna()
     else:

@@ -983,6 +983,16 @@ def prepare_adjustments(
     """
     Prepare splits and dividends from ACTIONS table.
 
+    IMPORTANT: Sharadar's 'closeunadj' prices are already split-adjusted!
+    They only need dividend adjustments. If we apply split adjustments,
+    we get double-adjustment causing incorrect portfolio values.
+
+    From Sharadar documentation and empirical testing:
+    - 'closeunadj' is adjusted for splits but NOT for dividends
+    - 'closeadj' is adjusted for both splits and dividends
+
+    Therefore, we only apply dividend adjustments to avoid double-counting splits.
+
     Parameters
     ----------
     actions_data : pd.DataFrame
@@ -995,37 +1005,25 @@ def prepare_adjustments(
     dict
         Dictionary with 'splits' and 'dividends' DataFrames
     """
-    if actions_data.empty:
-        # Return empty adjustments
-        return {
-            'splits': pd.DataFrame(columns=['sid', 'ratio', 'effective_date']),
-            'dividends': pd.DataFrame(columns=['sid', 'amount', 'ex_date', 'record_date', 'declared_date', 'pay_date']),
-        }
+    # DO NOT apply split adjustments - Sharadar data is already split-adjusted!
+    # The 'closeunadj' column is adjusted for splits, just not for dividends.
+    # Returning empty splits prevents double-adjustment.
+    splits = pd.DataFrame(columns=['sid', 'ratio', 'effective_date'])
 
-    # Process splits
-    splits = actions_data[actions_data['action'] == 'Split'].copy()
-    if not splits.empty:
-        splits['sid'] = splits['ticker'].map(ticker_to_sid)
-        # Sharadar reports splits as multiplication factor (e.g., 4 for 4-for-1 split)
-        # Zipline expects the inverse (e.g., 0.25 for 4-for-1 split)
-        # because Zipline divides shares by ratio: new_shares = old_shares / ratio
-        splits['ratio'] = 1.0 / splits['value'].astype(float)
-        splits['effective_date'] = pd.to_datetime(splits['date'])
-        splits = splits[['sid', 'ratio', 'effective_date']].dropna()
-    else:
-        splits = pd.DataFrame(columns=['sid', 'ratio', 'effective_date'])
-
-    # Process dividends
-    dividends = actions_data[actions_data['action'] == 'Dividend'].copy()
-    if not dividends.empty:
-        dividends['sid'] = dividends['ticker'].map(ticker_to_sid)
-        dividends['amount'] = dividends['value'].astype(float)
-        dividends['ex_date'] = pd.to_datetime(dividends['date'])
-        # Sharadar doesn't provide record/declared/pay dates, use ex_date for all
-        dividends['record_date'] = dividends['ex_date']
-        dividends['declared_date'] = dividends['ex_date']
-        dividends['pay_date'] = dividends['ex_date']
-        dividends = dividends[['sid', 'amount', 'ex_date', 'record_date', 'declared_date', 'pay_date']].dropna()
+    # Process dividends (these still need to be applied)
+    if not actions_data.empty:
+        dividends = actions_data[actions_data['action'] == 'Dividend'].copy()
+        if not dividends.empty:
+            dividends['sid'] = dividends['ticker'].map(ticker_to_sid)
+            dividends['amount'] = dividends['value'].astype(float)
+            dividends['ex_date'] = pd.to_datetime(dividends['date'])
+            # Sharadar doesn't provide record/declared/pay dates, use ex_date for all
+            dividends['record_date'] = dividends['ex_date']
+            dividends['declared_date'] = dividends['ex_date']
+            dividends['pay_date'] = dividends['ex_date']
+            dividends = dividends[['sid', 'amount', 'ex_date', 'record_date', 'declared_date', 'pay_date']].dropna()
+        else:
+            dividends = pd.DataFrame(columns=['sid', 'amount', 'ex_date', 'record_date', 'declared_date', 'pay_date'])
     else:
         dividends = pd.DataFrame(columns=['sid', 'amount', 'ex_date', 'record_date', 'declared_date', 'pay_date'])
 

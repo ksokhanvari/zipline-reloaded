@@ -368,6 +368,23 @@ def sharadar_bundle(
                     existing_data['date'] = pd.to_datetime(existing_data['day'], unit='ns')
                     existing_data['sid'] = existing_data['id']
 
+                    # Filter out invalid dates (before calendar's first session or NaT)
+                    # XNYS calendar starts at 1990-01-02
+                    min_valid_date = pd.Timestamp('1990-01-02')
+                    initial_count = len(existing_data)
+
+                    # Remove NaT and dates before calendar start
+                    existing_data = existing_data[existing_data['date'].notna()]
+                    existing_data = existing_data[existing_data['date'] >= min_valid_date]
+
+                    filtered_count = initial_count - len(existing_data)
+                    if filtered_count > 0:
+                        print(f"   Filtered out {filtered_count:,} rows with invalid dates (before 1990-01-02 or NaT)")
+
+                    if len(existing_data) == 0:
+                        print(f"   ⚠️  No valid data remaining after date filtering")
+                        raise ValueError("No valid historical data")  # Will be caught below
+
                     # Load asset database to get ticker symbols
                     latest_assets_db = sorted(latest_bundle_dir.glob('*/assets-*.sqlite'))
                     if not latest_assets_db:

@@ -392,8 +392,26 @@ def zipline_magic(line, cell=None):
     default=True,
     help="Print progress information to the terminal.",
 )
-def ingest(bundle, assets_version, show_progress):
+@click.option(
+    "--log-file",
+    type=click.Path(),
+    help="Save ingest logs to file (in addition to console output).",
+)
+def ingest(bundle, assets_version, show_progress, log_file):
     """Ingest the data for the given bundle."""
+    # Add file handler if log file specified
+    if log_file:
+        root_logger = logging.getLogger()
+        file_handler = logging.FileHandler(log_file, mode='a')
+        file_handler.setFormatter(logging.Formatter(
+            '[%(asctime)s-%(levelname)s][%(name)s]\n %(message)s',
+            datefmt='%Y-%m-%dT%H:%M:%S%z'
+        ))
+        root_logger.addHandler(file_handler)
+        logging.info(f"Logging ingest to file: {log_file}")
+
+    click.echo(f"Starting ingest for bundle: {bundle}")
+
     try:
         bundles_module.ingest(
             bundle,
@@ -437,10 +455,15 @@ def ingest(bundle, assets_version, show_progress):
                     click.echo(f"⚠️  Could not clean up directory: {cleanup_err}", err=True)
 
             click.echo("\n✓ Bundle ingestion skipped - already up-to-date\n")
+            logging.info(f"Bundle {bundle} already up-to-date")
             return
         else:
             # This is an actual error, re-raise
             raise
+
+    # Log successful completion
+    click.echo(f"\n✓ Bundle {bundle} ingested successfully\n")
+    logging.info(f"Bundle {bundle} ingestion completed successfully")
 
 
 @main.command()

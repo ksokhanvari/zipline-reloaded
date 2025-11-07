@@ -26,21 +26,22 @@ SHARADAR DATA COLUMNS
 ---------------------
 Sharadar provides three price columns with different adjustment methods:
 
-- **close**: Split-adjusted historically, NOT dividend-adjusted
-  - Historical prices are adjusted backwards for all past splits
-  - Example: If a 2-for-1 split occurs, all prior prices are halved
-  - This is what we use in Zipline (with separate dividend adjustments)
+- **closeadj**: Fully adjusted (splits AND dividends) - **WE USE THIS**
+  - Historical prices adjusted backwards for both splits and dividends
+  - Provides total return pricing (price appreciation + dividend reinvestment)
+  - This is the correct column for backtesting portfolio performance
 
-- **closeadj**: Fully adjusted (splits AND dividends)
-  - Historical prices adjusted for both splits and dividends
-  - Useful for calculating total returns
+- **close**: Split-adjusted historically, NOT dividend-adjusted
+  - Historical prices are adjusted backwards for splits only
+  - Example: If a 2-for-1 split occurs, all prior prices are halved
+  - Gives price return only, missing dividend contribution
 
 - **closeunadj**: No adjustments (raw traded prices)
   - The actual prices traded on each day
   - Not suitable for backtesting (discontinuous at splits)
 
-IMPORTANT: This bundle uses the 'close' column because it's already split-adjusted.
-We only need to apply dividend adjustments on top, avoiding double-adjustment issues.
+IMPORTANT: This bundle uses the 'closeadj' column to capture TOTAL RETURN.
+We do NOT apply any additional adjustments since they're already in the prices.
 
 INCREMENTAL INGESTION
 ---------------------
@@ -54,18 +55,20 @@ When incremental=True (default):
 
 HOW ADJUSTMENTS WORK
 --------------------
-Stock splits and dividends affect historical prices differently:
+This bundle uses Sharadar's 'closeadj' column for TOTAL RETURN.
 
-Splits: Sharadar's 'close' column is ALREADY split-adjusted historically.
-        We DO NOT apply split adjustments (would cause double-adjustment).
+Total Return = Price Appreciation + Dividend Reinvestment
 
-Dividends: We DO apply dividend adjustments using the ACTIONS table.
-           This makes prices reflect total return (price + dividends).
+Sharadar's 'closeadj' column has ALL adjustments already applied:
+- Stock splits: Historical prices adjusted backwards (maintains continuity)
+- Dividends: Historical prices adjusted backwards (reflects reinvestment)
 
-Example: Apple 4-for-1 split on Aug 31, 2020
-- Aug 28: close = $124.81 (already adjusted for future split)
-- Aug 31: close = $129.04 (post-split price)
-- Result: Smooth transition, portfolio value stays consistent
+We do NOT apply any additional adjustments in Zipline to avoid double-adjustment.
+
+Example: Comparing price vs total return for a dividend-paying stock
+- Using 'close' (price only): Shows only stock price appreciation
+- Using 'closeadj' (total return): Shows price + dividend contribution
+- For SPY over 10 years: price return ~12%/yr, total return ~14%/yr (2% from dividends)
 
 USAGE EXAMPLES
 --------------
@@ -637,13 +640,21 @@ def sharadar_bundle(
                 if symbol_data.index.tz is not None:
                     symbol_data.index = symbol_data.index.tz_localize(None)
 
-                # Use 'close' column which is already split-adjusted historically
+                # Use 'closeadj' column for TOTAL RETURN (includes splits AND dividends)
                 # Sharadar columns:
-                #   - 'close' = split-adjusted historically, NOT dividend-adjusted
-                #   - 'closeadj' = split-adjusted AND dividend-adjusted
-                #   - 'closeunadj' = NOT split-adjusted, NOT dividend-adjusted
-                # We use 'close' and apply dividend adjustments separately
-                # symbol_data already has 'close' from the raw data, no need to reassign
+                #   - 'close' = split-adjusted historically, NOT dividend-adjusted (price return only)
+                #   - 'closeadj' = split-adjusted AND dividend-adjusted (total return)
+                #   - 'closeunadj' = NOT split-adjusted, NOT dividend-adjusted (raw prices)
+                #
+                # IMPORTANT: We use 'closeadj' to get total return including dividends.
+                # This is the correct approach for backtesting total portfolio performance.
+                #
+                # We rename 'closeadj' to 'close' for Zipline compatibility
+                if 'closeadj' in symbol_data.columns:
+                    symbol_data['close'] = symbol_data['closeadj']
+                # If closeadj not available, fall back to close (backward compatibility)
+                elif 'close' not in symbol_data.columns:
+                    raise ValueError(f"Neither 'closeadj' nor 'close' column found for sid {sid}")
 
                 # Ensure all required columns and proper types
                 required_cols = ['open', 'high', 'low', 'close', 'volume']
@@ -1142,37 +1153,30 @@ def prepare_adjustments(
     """
     Prepare split and dividend adjustments from Sharadar ACTIONS table.
 
-    CRITICAL: This function intentionally returns EMPTY split adjustments!
+    CRITICAL: This function returns EMPTY adjustments for both splits AND dividends!
 
-    WHY NO SPLIT ADJUSTMENTS?
-    -------------------------
-    Sharadar's 'close' column is ALREADY split-adjusted historically.
-    Applying split adjustments on top of already-adjusted prices causes
-    double-adjustment, which manifests as sudden portfolio value drops.
+    WHY NO ADJUSTMENTS?
+    -------------------
+    We use Sharadar's 'closeadj' column which is ALREADY fully adjusted for
+    both splits AND dividends historically. This gives us total return prices.
 
-    Evidence from empirical testing (Apple 4-for-1 split on Aug 31, 2020):
-    - Aug 28: close = $124.81 (already adjusted for future split)
-    - Aug 31: close = $129.04 (post-split price)
-    - Result: Smooth price transition, no discontinuity
-
-    If we applied split adjustments:
-    - Portfolio would drop to 1/4 value on split date
-    - Historical performance metrics would be completely wrong
+    Applying adjustments on top of already-adjusted prices causes double-adjustment,
+    which would manifest as incorrect returns.
 
     SHARADAR PRICE COLUMN DEFINITIONS
     ---------------------------------
-    - 'close': Split-adjusted historically, NOT dividend-adjusted
-      → This is what we use for backtesting
-    - 'closeadj': Fully adjusted (splits AND dividends)
+    - 'close': Split-adjusted historically, NOT dividend-adjusted (price return only)
       → Not used in this bundle
+    - 'closeadj': Fully adjusted (splits AND dividends) (total return)
+      → This is what we use for backtesting
     - 'closeunadj': Raw traded prices, no adjustments
       → Not used in this bundle
 
-    DIVIDEND ADJUSTMENTS
-    -------------------
-    We DO apply dividend adjustments because the 'close' column is NOT
-    dividend-adjusted. This allows backtests to capture total return
-    (price appreciation + dividends).
+    TOTAL RETURN APPROACH
+    --------------------
+    By using 'closeadj', backtests automatically capture total return
+    (price appreciation + dividend reinvestment) without needing separate
+    adjustment processing. This is the standard approach for performance analysis.
 
     Parameters
     ----------
@@ -1226,27 +1230,14 @@ def prepare_adjustments(
     prepare_asset_metadata : Creates asset metadata from pricing data
     download_sharadar_table : Downloads Sharadar tables including ACTIONS
     """
-    # DO NOT apply split adjustments - Sharadar data is already split-adjusted!
-    # The 'closeunadj' column is adjusted for splits, just not for dividends.
-    # Returning empty splits prevents double-adjustment.
+    # DO NOT apply any adjustments - Sharadar 'closeadj' data is already fully adjusted!
+    # Returning empty adjustments prevents double-adjustment.
+
+    # Empty splits (already applied in closeadj)
     splits = pd.DataFrame(columns=['sid', 'ratio', 'effective_date'])
 
-    # Process dividends (these still need to be applied)
-    if not actions_data.empty:
-        dividends = actions_data[actions_data['action'] == 'Dividend'].copy()
-        if not dividends.empty:
-            dividends['sid'] = dividends['ticker'].map(ticker_to_sid)
-            dividends['amount'] = dividends['value'].astype(float)
-            dividends['ex_date'] = pd.to_datetime(dividends['date'])
-            # Sharadar doesn't provide record/declared/pay dates, use ex_date for all
-            dividends['record_date'] = dividends['ex_date']
-            dividends['declared_date'] = dividends['ex_date']
-            dividends['pay_date'] = dividends['ex_date']
-            dividends = dividends[['sid', 'amount', 'ex_date', 'record_date', 'declared_date', 'pay_date']].dropna()
-        else:
-            dividends = pd.DataFrame(columns=['sid', 'amount', 'ex_date', 'record_date', 'declared_date', 'pay_date'])
-    else:
-        dividends = pd.DataFrame(columns=['sid', 'amount', 'ex_date', 'record_date', 'declared_date', 'pay_date'])
+    # Empty dividends (already applied in closeadj)
+    dividends = pd.DataFrame(columns=['sid', 'amount', 'ex_date', 'record_date', 'declared_date', 'pay_date'])
 
     return {
         'splits': splits,

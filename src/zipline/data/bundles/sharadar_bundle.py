@@ -591,12 +591,104 @@ def sharadar_bundle(
 
         # Prepare metadata first (to get sid assignments)
         print("Preparing asset metadata...")
-        # Use actual dates from the data to ensure consistency
-        metadata = prepare_asset_metadata(
-            all_pricing_data,
-            actual_start.strftime('%Y-%m-%d'),
-            actual_end.strftime('%Y-%m-%d')
-        )
+
+        # For incremental updates: merge with existing metadata to preserve historical start dates
+        if is_incremental_update:
+            print("   Merging with existing asset metadata...")
+            try:
+                # Load existing asset metadata
+                from pathlib import Path
+                import sqlite3
+
+                latest_assets_db = sorted(Path(output_dir).parent.glob('*/assets-*.sqlite'))
+                if not latest_assets_db:
+                    latest_assets_db = sorted(Path(output_dir).parent.glob('*/assets-*.db'))
+
+                if latest_assets_db:
+                    conn = sqlite3.connect(str(latest_assets_db[-1]))
+                    existing_metadata = pd.read_sql("SELECT * FROM equities", conn)
+                    conn.close()
+
+                    print(f"   Loaded {len(existing_metadata)} existing assets")
+
+                    # Create new metadata from current data
+                    new_metadata = prepare_asset_metadata(
+                        all_pricing_data,
+                        actual_start.strftime('%Y-%m-%d'),
+                        actual_end.strftime('%Y-%m-%d')
+                    )
+
+                    # Merge: keep existing start_dates, update end_dates
+                    # Convert timestamp columns for comparison
+                    if 'start_date' in existing_metadata.columns:
+                        existing_metadata['start_date'] = pd.to_datetime(existing_metadata['start_date'], unit='ns')
+                    if 'end_date' in existing_metadata.columns:
+                        existing_metadata['end_date'] = pd.to_datetime(existing_metadata['end_date'], unit='ns')
+
+                    # Merge on symbol
+                    metadata = pd.merge(
+                        new_metadata[['symbol', 'asset_type', 'exchange', 'asset_name']],
+                        existing_metadata[['symbol', 'start_date', 'end_date']],
+                        on='symbol',
+                        how='outer'  # Keep all symbols from both
+                    )
+
+                    # For assets in new_metadata: update end_date, keep original start_date
+                    new_symbols = set(new_metadata['symbol'])
+                    for idx, row in metadata.iterrows():
+                        if row['symbol'] in new_symbols:
+                            # Get dates from new_metadata
+                            new_row = new_metadata[new_metadata['symbol'] == row['symbol']].iloc[0]
+                            # Keep existing start_date (earlier), update end_date (later)
+                            if pd.isna(row['start_date']):
+                                metadata.loc[idx, 'start_date'] = new_row['start_date']
+                            else:
+                                metadata.loc[idx, 'start_date'] = min(row['start_date'], new_row['start_date'])
+                            metadata.loc[idx, 'end_date'] = new_row['end_date']
+
+                            # Fill in missing metadata columns
+                            if pd.isna(row['asset_type']):
+                                metadata.loc[idx, 'asset_type'] = new_row['asset_type']
+                            if pd.isna(row['exchange']):
+                                metadata.loc[idx, 'exchange'] = new_row['exchange']
+                            if pd.isna(row['asset_name']):
+                                metadata.loc[idx, 'asset_name'] = new_row['asset_name']
+                        else:
+                            # Asset from existing metadata only (no new data)
+                            # Keep as-is, fill in defaults if needed
+                            if pd.isna(row['asset_type']):
+                                metadata.loc[idx, 'asset_type'] = 'equity'
+                            if pd.isna(row['exchange']):
+                                metadata.loc[idx, 'exchange'] = 'NASDAQ'
+                            if pd.isna(row['asset_name']):
+                                metadata.loc[idx, 'asset_name'] = row['symbol']
+
+                    print(f"   ✓ Merged metadata: {len(metadata)} total assets")
+                    print(f"     New/updated: {len(new_symbols)}, Preserved: {len(metadata) - len(new_symbols)}")
+
+                else:
+                    print(f"   ⚠️  Could not find existing assets database")
+                    print(f"   Creating new metadata from current data")
+                    metadata = prepare_asset_metadata(
+                        all_pricing_data,
+                        actual_start.strftime('%Y-%m-%d'),
+                        actual_end.strftime('%Y-%m-%d')
+                    )
+            except Exception as e:
+                print(f"   ⚠️  Error merging metadata: {e}")
+                print(f"   Creating new metadata from current data")
+                metadata = prepare_asset_metadata(
+                    all_pricing_data,
+                    actual_start.strftime('%Y-%m-%d'),
+                    actual_end.strftime('%Y-%m-%d')
+                )
+        else:
+            # Full ingestion: create new metadata from scratch
+            metadata = prepare_asset_metadata(
+                all_pricing_data,
+                actual_start.strftime('%Y-%m-%d'),
+                actual_end.strftime('%Y-%m-%d')
+            )
 
         # Create symbol to sid mapping
         symbol_to_sid = {row['symbol']: idx for idx, row in metadata.iterrows()}

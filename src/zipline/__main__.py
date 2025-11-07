@@ -395,7 +395,9 @@ def zipline_magic(line, cell=None):
 @click.option(
     "--log-file",
     type=click.Path(),
-    help="Save ingest logs to file (in addition to console output).",
+    help="Save ingest logs to file (in addition to console output). "
+         "Example: --log-file logs/ingest_$(date +%%Y%%m%%d).log "
+         "See scripts/README.md for more details.",
 )
 def ingest(bundle, assets_version, show_progress, log_file):
     """Ingest the data for the given bundle."""

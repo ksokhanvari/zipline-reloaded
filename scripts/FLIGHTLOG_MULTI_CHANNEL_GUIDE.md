@@ -255,6 +255,177 @@ enable_multi_channel_flightlog({
 # Progress logs will appear in the FlightLog terminal
 ```
 
+## Data Ingestion Monitoring
+
+Monitor data bundle ingestion in real-time using FlightLog. This is especially useful for large datasets or automated ingestion processes.
+
+### Basic Ingest Monitoring
+
+**Terminal 1: Start FlightLog for ingest logs**
+```bash
+python scripts/flightlog.py --port 9030 --channel "INGEST" --file logs/ingest_history.log
+```
+
+**Terminal 2: Run ingest (Python script or CLI)**
+```python
+from zipline.utils.flightlog_client import enable_flightlog
+
+# Connect to FlightLog
+enable_flightlog(host='localhost', port=9030)
+
+# Now run your ingest - logs will appear in FlightLog window
+from zipline.data.bundles import ingest
+ingest('sharadar', show_progress=True)
+```
+
+Or directly from CLI (logs go to console, but you can combine with file logging):
+```bash
+# Save logs to file (new feature!)
+zipline ingest -b sharadar --log-file logs/ingest_$(date +%Y%m%d).log
+```
+
+### Multi-Channel Ingest Monitoring
+
+Separate different types of ingest logs for better visibility:
+
+**Terminal 1: Data fetching logs**
+```bash
+python scripts/flightlog.py --port 9030 --channel "FETCH" \
+    --logger-filter zipline.data --level DEBUG
+```
+
+**Terminal 2: Database writing logs**
+```bash
+python scripts/flightlog.py --port 9031 --channel "WRITE" \
+    --logger-filter zipline.data.bundles --level INFO
+```
+
+**Terminal 3: Errors only**
+```bash
+python scripts/flightlog.py --port 9032 --channel "ERRORS" \
+    --level ERROR --file logs/ingest_errors.log
+```
+
+**Ingest Script:**
+```python
+from zipline.utils.flightlog_client import enable_multi_channel_flightlog
+import logging
+
+# Route different log types to different windows
+enable_multi_channel_flightlog({
+    'fetch': {'port': 9030, 'logger': 'zipline.data', 'level': logging.DEBUG},
+    'write': {'port': 9031, 'logger': 'zipline.data.bundles', 'level': logging.INFO},
+    'errors': {'port': 9032, 'level': logging.ERROR},
+}, host='localhost')
+
+# Run ingest
+from zipline.data.bundles import ingest
+ingest('sharadar', show_progress=True)
+```
+
+### Automated/Scheduled Ingest with Logging
+
+For cron jobs or automated data updates:
+
+**Setup Script: `ingest_with_logging.py`**
+```python
+#!/usr/bin/env python
+"""
+Automated ingest with comprehensive logging.
+Run via cron or scheduler.
+"""
+import logging
+import os
+from datetime import datetime
+from zipline.data.bundles import ingest
+from zipline.utils.flightlog_client import enable_flightlog
+
+# Setup file logging
+log_dir = os.path.expanduser('~/.zipline/logs')
+os.makedirs(log_dir, exist_ok=True)
+
+log_file = os.path.join(log_dir, f"ingest_{datetime.now():%Y%m%d}.log")
+
+# Configure logging to file
+logging.basicConfig(
+    filename=log_file,
+    level=logging.INFO,
+    format='[%(asctime)s][%(levelname)s][%(name)s] %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+
+# Optional: Also send to FlightLog if running
+try:
+    enable_flightlog(host='localhost', port=9030)
+    logging.info("FlightLog enabled")
+except:
+    logging.info("FlightLog not available, logging to file only")
+
+# Run ingest
+logging.info("Starting sharadar bundle ingest")
+try:
+    ingest('sharadar', show_progress=False)  # No progress bar in automated mode
+    logging.info("Ingest completed successfully")
+except Exception as e:
+    logging.error(f"Ingest failed: {e}", exc_info=True)
+    raise
+```
+
+**Crontab Entry:**
+```bash
+# Run daily at 7 AM
+0 7 * * * cd /path/to/zipline && /usr/bin/python3 ingest_with_logging.py
+```
+
+**Monitor Logs:**
+```bash
+# Optional: Keep FlightLog running to see live updates
+python scripts/flightlog.py --port 9030 --channel "DAILY-INGEST" \
+    --file logs/ingest_continuous.log
+```
+
+### Ingest Log Analysis
+
+**View today's ingest logs:**
+```bash
+tail -f ~/.zipline/logs/ingest_$(date +%Y%m%d).log
+```
+
+**Check for errors in recent ingests:**
+```bash
+grep -i error ~/.zipline/logs/ingest_*.log
+```
+
+**Monitor ingest performance:**
+```bash
+# Show timing for each ingest step
+grep -i "ingesting\|completed" ~/.zipline/logs/ingest_*.log
+```
+
+### Combining CLI --log-file with FlightLog
+
+The new `--log-file` option works great with FlightLog:
+
+```bash
+# Terminal 1: Real-time monitoring
+python scripts/flightlog.py --port 9030 --channel "INGEST"
+
+# Terminal 2: Run ingest with both FlightLog AND file logging
+# (Connect via Python first, then run CLI)
+python -c "
+from zipline.utils.flightlog_client import enable_flightlog
+enable_flightlog(host='localhost', port=9030)
+
+import os
+os.system('zipline ingest -b sharadar --log-file logs/ingest.log')
+"
+```
+
+This gives you:
+- **Real-time monitoring** in FlightLog window
+- **Permanent record** in log file for later analysis
+- **Console output** for immediate feedback
+
 ## Docker Compose Setup
 
 For Docker users, set up multiple FlightLog services:

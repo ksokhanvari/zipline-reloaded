@@ -530,5 +530,14 @@ def bundles():
             click.echo("%s %s" % (bundle, timestamp))
 
 
+# Add custom-data command group
+try:
+    from zipline.data.custom.cli import custom_data_group
+    main.add_command(custom_data_group)
+except ImportError:
+    # Custom data module not available
+    pass
+
+
 if __name__ == "__main__":
     main()

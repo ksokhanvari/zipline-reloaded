@@ -5,7 +5,7 @@ FlightLog - Real-time log viewer for Zipline backtests.
 A standalone log server that displays backtest logs in a separate terminal,
 similar to QuantRocket's flightlog.
 
-Usage:
+Single Channel Usage:
     # Start the log server
     python scripts/flightlog.py
 
@@ -14,6 +14,18 @@ Usage:
 
     # Custom options
     python scripts/flightlog.py --port 9021 --file logs/backtest.log
+
+Multi-Channel Usage:
+    # Terminal 1: Algorithm logs only
+    python scripts/flightlog.py --port 9020 --channel algorithm --logger-filter algorithm
+
+    # Terminal 2: Progress logs only
+    python scripts/flightlog.py --port 9021 --channel progress --logger-filter zipline.progress
+
+    # Terminal 3: Errors only
+    python scripts/flightlog.py --port 9022 --channel errors --level ERROR
+
+For complete multi-channel guide, see: scripts/FLIGHTLOG_MULTI_CHANNEL_GUIDE.md
 """
 
 import argparse
@@ -67,6 +79,30 @@ class ProgressFilter(logging.Filter):
     def filter(self, record):
         # Exclude zipline.progress logs
         return record.name != 'zipline.progress'
+
+
+class LoggerFilter(logging.Filter):
+    """Filter to only show logs from specific logger."""
+
+    def __init__(self, logger_name):
+        super().__init__()
+        self.logger_name = logger_name
+
+    def filter(self, record):
+        # Only show logs from the specified logger (or its children)
+        return record.name == self.logger_name or record.name.startswith(self.logger_name + '.')
+
+
+class ExcludeLoggerFilter(logging.Filter):
+    """Filter to exclude logs from specific logger."""
+
+    def __init__(self, logger_name):
+        super().__init__()
+        self.logger_name = logger_name
+
+    def filter(self, record):
+        # Exclude logs from the specified logger (and its children)
+        return not (record.name == self.logger_name or record.name.startswith(self.logger_name + '.'))
 
 
 class LogRecordStreamHandler(socketserver.StreamRequestHandler):
@@ -150,6 +186,19 @@ def main():
         action='store_true',
         help='Filter out progress logs (only show algorithm logs)'
     )
+    parser.add_argument(
+        '--channel',
+        default='default',
+        help='Channel name for this listener (default: default)'
+    )
+    parser.add_argument(
+        '--logger-filter',
+        help='Only show logs from specific logger (e.g., "algorithm", "zipline.progress")'
+    )
+    parser.add_argument(
+        '--exclude-logger',
+        help='Exclude logs from specific logger (e.g., "zipline.finance")'
+    )
 
     args = parser.parse_args()
 
@@ -161,9 +210,15 @@ def main():
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(ColoredFormatter(use_colors=not args.no_color))
 
-    # Add progress filter if requested
+    # Add filters as requested
     if args.filter_progress:
         console_handler.addFilter(ProgressFilter())
+
+    if args.logger_filter:
+        console_handler.addFilter(LoggerFilter(args.logger_filter))
+
+    if args.exclude_logger:
+        console_handler.addFilter(ExcludeLoggerFilter(args.exclude_logger))
 
     root_logger.addHandler(console_handler)
 
@@ -178,14 +233,28 @@ def main():
 
     # Print banner
     print("=" * 70)
-    print("FlightLog Server - Real-time Zipline Backtest Logging")
+    print(f"FlightLog Server - Channel: {args.channel.upper()}")
     print("=" * 70)
     print(f"Listening on: {args.host}:{args.port}")
     print(f"Log level: {args.level}")
     if args.file:
         print(f"Saving to: {args.file}")
+
+    # Show active filters
+    filters_active = []
     if args.filter_progress:
-        print("Filter: Progress logs hidden (--filter-progress)")
+        filters_active.append("Hiding progress logs")
+    if args.logger_filter:
+        filters_active.append(f"Only showing '{args.logger_filter}' logger")
+    if args.exclude_logger:
+        filters_active.append(f"Excluding '{args.exclude_logger}' logger")
+
+    if filters_active:
+        print()
+        print("Active Filters:")
+        for f in filters_active:
+            print(f"  • {f}")
+
     print()
     print("Waiting for backtest connections...")
     print("Press Ctrl+C to stop")

@@ -98,9 +98,15 @@ def diagnose_bundle(bundle_name='quandl', symbol='SPY'):
             daily_bar_reader = bundle_data.equity_daily_bar_reader
 
             # Try to load price data for the asset
+            # Make sure dates are timezone-aware for comparison
+            end_date = asset.end_date
+            if end_date.tz is None:
+                end_date = end_date.tz_localize('UTC')
+
+            now = pd.Timestamp.now(tz='UTC')
             sessions = calendar.sessions_in_range(
                 asset.start_date,
-                min(asset.end_date, pd.Timestamp.now(tz='UTC'))
+                min(end_date, now)
             )
 
             # Get close prices
@@ -177,6 +183,19 @@ def diagnose_bundle(bundle_name='quandl', symbol='SPY'):
         print(f"\n{'='*70}")
         print("RECOMMENDATIONS:")
         print(f"{'='*70}\n")
+
+        # Check for critically small dataset (less than 10 days)
+        if len(sessions) < 10:
+            print("🔴 CRITICAL ISSUE: Bundle has less than 10 days of data!")
+            print(f"   Only {len(sessions)} trading day(s) available.\n")
+            print("This indicates a failed or incomplete bundle ingestion.\n")
+            print("REQUIRED ACTION:")
+            print("  1. Delete the incomplete bundle data")
+            print("  2. Re-ingest from scratch:\n")
+            print(f"     zipline ingest -b {bundle_name}\n")
+            print("  This will download the complete historical dataset.")
+            print("  Initial ingest may take 15-30 minutes.\n")
+            return
 
         if num_missing > 0:
             print("Your bundle has missing data. To fix this:\n")

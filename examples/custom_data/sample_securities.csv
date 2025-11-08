@@ -1,4 +1,4 @@
-Symbol,Sid,Name,Exchange,Sector
+Ticker,Sid,Name,Exchange,Sector
 AAPL,24,Apple Inc.,NASDAQ,Technology
 MSFT,5061,Microsoft Corporation,NASDAQ,Technology
 GOOGL,26890,Alphabet Inc. Class A,NASDAQ,Technology

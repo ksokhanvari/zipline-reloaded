@@ -114,15 +114,22 @@ AAPL,2023-06-30,81797000000,19881000000,352755000000,62146000000,15697400000,1.2
 ### Securities CSV Format
 
 ```csv
-Symbol,Sid,Name,Exchange,Sector
+Ticker,Sid,Name,Exchange,Sector
 AAPL,24,Apple Inc.,NASDAQ,Technology
 MSFT,5061,Microsoft Corporation,NASDAQ,Technology
 ...
 ```
 
 **Required Columns:**
-- `Symbol`: Ticker symbol (must match fundamentals.csv Ticker column)
+- **Identifier column** (e.g., `Ticker`, `Symbol`): **Must match the identifier column name in your fundamentals CSV**
 - `Sid`: Zipline asset ID (get from your bundle's asset database)
+
+**IMPORTANT:** The identifier column name (e.g., `Ticker`) must be **identical** in both:
+1. Your fundamentals CSV
+2. Your securities CSV
+
+If your fundamentals CSV has `Ticker`, then securities CSV must also have `Ticker`.
+If your fundamentals CSV has `Symbol`, then securities CSV must also have `Symbol`.
 
 **Optional Columns:**
 - `Name`: Company name
@@ -149,7 +156,7 @@ assets = bundle_data.asset_finder.retrieve_all(
 import pandas as pd
 
 securities_df = pd.DataFrame({
-    'Symbol': [a.symbol for a in assets],
+    'Ticker': [a.symbol for a in assets],  # Use 'Ticker' to match fundamentals CSV
     'Sid': [a.sid for a in assets],
     'Name': [a.asset_name for a in assets],
     'Exchange': [a.exchange for a in assets],
@@ -157,6 +164,9 @@ securities_df = pd.DataFrame({
 
 # Save to CSV
 securities_df.to_csv('my_securities.csv', index=False)
+
+# NOTE: If your fundamentals CSV uses 'Symbol' instead of 'Ticker',
+# change 'Ticker' above to 'Symbol' to match
 ```
 
 ### Manual Lookup
@@ -296,6 +306,37 @@ If you see this when creating a database:
 rm ~/.zipline/custom_data/quant_fundamentals.sqlite
 
 # Re-run the database creation cell
+```
+
+### "sid_map DataFrame must have columns" Error
+
+**Error Message:**
+```
+sid_map DataFrame must have columns 'Ticker' and 'Sid'
+```
+
+**Cause:** The identifier column name doesn't match between your files.
+
+**Solution:** Ensure both CSVs use the **same identifier column name**:
+
+```python
+# ✗ WRONG - Column names don't match
+# fundamentals.csv has: Ticker,Date,Revenue,...
+# securities.csv has:   Symbol,Sid,Name,...     <- Symbol ≠ Ticker
+
+# ✓ CORRECT - Column names match
+# fundamentals.csv has: Ticker,Date,Revenue,...
+# securities.csv has:   Ticker,Sid,Name,...     <- Both use 'Ticker'
+```
+
+**Quick Fix:**
+```python
+# If your securities CSV has 'Symbol' but you need 'Ticker'
+securities_df = pd.read_csv('securities.csv')
+securities_df = securities_df.rename(columns={'Symbol': 'Ticker'})
+
+# Then load data
+result = load_csv_to_db(..., sid_map=securities_df, id_col='Ticker')
 ```
 
 ### "Unmapped identifiers" Warning

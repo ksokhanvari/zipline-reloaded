@@ -110,7 +110,7 @@ def make_pipeline_with_database_class():
     manageable_debt = (debt_to_equity < 5.0)
 
     # Liquidity (from pricing)
-    avg_volume = volume.mavg(20)
+    avg_volume = EquityPricing.volume.mavg(20)
     liquid = (avg_volume > 100000)
 
     # Combined screen

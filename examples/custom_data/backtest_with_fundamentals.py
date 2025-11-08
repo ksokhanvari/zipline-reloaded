@@ -187,7 +187,7 @@ def make_pipeline():
     volume = EquityPricing.volume.latest
 
     # Calculate technical indicators
-    avg_volume_20d = volume.mavg(20)  # 20-day average volume
+    avg_volume_20d = EquityPricing.volume.mavg(20)  # 20-day average volume
 
     # Define screening filters
     # 1. Fundamental quality

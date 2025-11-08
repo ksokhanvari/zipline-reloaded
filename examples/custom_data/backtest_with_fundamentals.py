@@ -28,31 +28,11 @@ from zipline.pipeline import Pipeline, CustomFactor
 from zipline.pipeline.data import EquityPricing
 from zipline.pipeline.filters import StaticAssets
 from zipline.data.bundles import load as load_bundle
-from zipline.data.custom import (
-    make_custom_dataset_class,
-    CustomSQLiteLoader,
-)
+# CustomSQLiteLoader is automatically used based on Database.CODE
 
 # ============================================================================
 # CONFIGURATION
 # ============================================================================
-
-# Database configuration
-DB_CODE = 'fundamentals'
-FUNDAMENTALS_SCHEMA = {
-    'Revenue': 'int',
-    'NetIncome': 'int',
-    'TotalAssets': 'int',
-    'TotalEquity': 'int',
-    'SharesOutstanding': 'int',
-    'EPS': 'float',
-    'BookValuePerShare': 'float',
-    'ROE': 'float',
-    'DebtToEquity': 'float',
-    'CurrentRatio': 'float',
-    'PERatio': 'float',
-    'Sector': 'text',
-}
 
 # Strategy parameters
 TOP_N_STOCKS = 10
@@ -64,17 +44,47 @@ END_DATE = '2024-01-31'
 INITIAL_CAPITAL = 100000.0
 
 # ============================================================================
-# CREATE CUSTOM DATASET
+# DEFINE CUSTOM DATABASE CLASS
 # ============================================================================
 
-# Create Fundamentals DataSet from custom database
-Fundamentals = make_custom_dataset_class(
-    db_code=DB_CODE,
-    columns=FUNDAMENTALS_SCHEMA,
-    base_name='Fundamentals',
-)
+from zipline.pipeline.data.db import Database, Column
 
-print("✓ Fundamentals DataSet created")
+
+class Fundamentals(Database):
+    """
+    Custom fundamentals database.
+
+    This approach is cleaner than make_custom_dataset_class() and allows
+    direct usage like: Fundamentals.ROE.latest
+    """
+
+    CODE = "fundamentals"  # Must match your database code
+    LOOKBACK_WINDOW = 240  # Days to look back
+
+    # Income Statement
+    Revenue = Column(float)
+    NetIncome = Column(float)
+
+    # Balance Sheet
+    TotalAssets = Column(float)
+    TotalEquity = Column(float)
+    SharesOutstanding = Column(float)
+
+    # Per-Share Metrics
+    EPS = Column(float)
+    BookValuePerShare = Column(float)
+
+    # Financial Ratios
+    ROE = Column(float)
+    DebtToEquity = Column(float)
+    CurrentRatio = Column(float)
+    PERatio = Column(float)
+
+    # Metadata
+    Sector = Column(str)
+
+
+print("✓ Fundamentals Database class defined")
 
 # ============================================================================
 # CUSTOM FACTORS

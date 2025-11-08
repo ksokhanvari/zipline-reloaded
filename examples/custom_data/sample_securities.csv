@@ -1,0 +1,12 @@
+Symbol,Sid,Name,Exchange,Sector
+AAPL,24,Apple Inc.,NASDAQ,Technology
+MSFT,5061,Microsoft Corporation,NASDAQ,Technology
+GOOGL,26890,Alphabet Inc. Class A,NASDAQ,Technology
+AMZN,16841,Amazon.com Inc.,NASDAQ,Consumer
+NVDA,5692,NVIDIA Corporation,NASDAQ,Technology
+TSLA,39840,Tesla Inc.,NASDAQ,Consumer
+META,42950,Meta Platforms Inc.,NASDAQ,Technology
+JPM,3496,JPMorgan Chase & Co.,NYSE,Financials
+WMT,8229,Walmart Inc.,NYSE,Consumer
+XOM,4705,Exxon Mobil Corporation,NYSE,Energy
+V,21839,Visa Inc.,NYSE,Financials

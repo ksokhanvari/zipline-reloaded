@@ -56,6 +56,108 @@ Execute cells sequentially to:
 4. Screen and rank stocks
 5. Visualize results
 
+## Database Storage Locations
+
+### Where Your Custom Data is Stored
+
+**If running in Docker** (using docker-compose):
+- **Container path**: `/data/custom_databases/`
+- **Host path**: `./data/custom_databases/` (from zipline-reloaded project root)
+- **Persistent**: Yes - data survives container restarts
+- **Configured by**: `ZIPLINE_CUSTOM_DATA_DIR` environment variable in docker-compose.yml
+
+**If running locally** (not in Docker):
+- **Default path**: `~/.zipline/custom_data/`
+- **Persistent**: Yes - stored alongside bundle data
+- **Customizable**: Set `ZIPLINE_CUSTOM_DATA_DIR` environment variable
+
+**Database filename format**: `quant_{db_code}.sqlite`
+- Example: `quant_fundamentals.sqlite` for db_code='fundamentals'
+
+### Checking Your Storage Location
+
+```python
+from zipline.data.custom.config import get_custom_data_dir
+storage_dir = get_custom_data_dir()
+print(f"Custom data directory: {storage_dir}")
+```
+
+### Docker Volume Mapping
+
+The docker-compose.yml file includes this configuration:
+
+```yaml
+environment:
+  - ZIPLINE_CUSTOM_DATA_DIR=/data/custom_databases
+volumes:
+  - ./data:/data  # Host ./data maps to container /data
+```
+
+This means:
+- Custom databases are saved to `./data/custom_databases/` on your host machine
+- The `./data` directory is in your zipline-reloaded project root
+- You can access the SQLite files directly from your host filesystem
+- Data persists even if you remove and recreate containers
+
+## Database Management
+
+### Listing Databases
+
+```python
+from zipline.data.custom import list_custom_dbs
+
+# List all custom databases
+dbs = list_custom_dbs()
+print(f"Available databases: {dbs}")
+```
+
+### Getting Database Information
+
+```python
+from zipline.data.custom import describe_custom_db
+
+# Get detailed info about a database
+info = describe_custom_db('fundamentals')
+print(f"Path: {info['db_path']}")
+print(f"Rows: {info['row_count']}")
+print(f"Columns: {info['columns']}")
+print(f"Date range: {info['date_range']}")
+print(f"Assets: {info['sids']}")
+```
+
+### Direct SQL Queries
+
+```python
+from zipline.data.custom import connect_db
+import pandas as pd
+
+# Connect and query
+conn = connect_db('fundamentals')
+df = pd.read_sql("SELECT * FROM Price WHERE Sid='24' ORDER BY Date", conn)
+conn.close()
+```
+
+### Backing Up Your Data
+
+```bash
+# If running in Docker
+cp ./data/custom_databases/quant_fundamentals.sqlite ./data/custom_databases/quant_fundamentals_backup.sqlite
+
+# If running locally
+cp ~/.zipline/custom_data/quant_fundamentals.sqlite ~/.zipline/custom_data/quant_fundamentals_backup.sqlite
+```
+
+### Deleting a Database
+
+```python
+import os
+from zipline.data.custom import get_db_path
+
+# CAUTION: This permanently deletes the database!
+db_path = get_db_path('fundamentals')
+os.remove(db_path)
+```
+
 ## What You'll Learn
 
 ### Core Concepts

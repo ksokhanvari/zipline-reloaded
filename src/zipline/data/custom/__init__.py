@@ -39,7 +39,7 @@ from .db_manager import (
     describe_custom_db,
 )
 from .loader import load_csv_to_db
-from .query import get_prices, get_prices_reindexed_like
+from .query import get_prices, get_prices_reindexed_like, get_latest_values
 from .pipeline_integration import (
     make_custom_dataset_class,
     CustomSQLiteLoader,
@@ -61,6 +61,7 @@ __all__ = [
     # Querying
     'get_prices',
     'get_prices_reindexed_like',
+    'get_latest_values',
     # Pipeline integration
     'make_custom_dataset_class',
     'CustomSQLiteLoader',

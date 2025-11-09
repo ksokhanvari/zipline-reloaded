@@ -12,8 +12,23 @@ This directory contains comprehensive examples for using Zipline's custom data f
   - Stock screening and ranking
   - Sector analysis
   - Visualizations
+  - Database management
   - Integration with backtesting
   - Troubleshooting guide
+
+- **`backtest_helpers_example.ipynb`** - Examples using the backtest helper functions
+  - Running backtests with simple function calls
+  - Analyzing results with pyfolio
+  - Comparing multiple backtest scenarios
+  - Custom analysis and plotting
+
+### Helper Modules
+
+- **`backtest_helpers.py`** - Easy-to-use functions for running backtests and analyzing results
+  - `backtest()` - Run a backtest and save results
+  - `analyze_results()` - Load and analyze saved results with pyfolio
+  - `quick_backtest()` - Run and analyze in one step
+  - See [BACKTEST_HELPERS_README.md](BACKTEST_HELPERS_README.md) for details
 
 ### Sample Data Files
 

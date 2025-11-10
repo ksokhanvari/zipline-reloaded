@@ -9,7 +9,7 @@ import pandas as pd
 from pathlib import Path
 
 from zipline.data.bundles import load as load_bundle
-from zipline.data.custom import create_custom_db, insert_data
+from zipline.data.custom import create_custom_db, load_csv_to_db
 
 # Configuration
 DB_CODE = "fundamentals"
@@ -77,66 +77,65 @@ def main():
         print(f"    zipline ingest -b {BUNDLE_NAME}")
         return 1
 
-    # Step 4: Convert tickers to SIDs
-    print("Converting tickers to SIDs...")
+    # Step 4: Build ticker-to-SID mapping
+    print("Building ticker-to-SID mapping...")
     tickers = df['Ticker'].unique()
-    ticker_to_sid = {}
+    sid_map = {}
 
     for ticker in tickers:
         try:
             # Get the most recent asset for this ticker
             assets = asset_finder.lookup_symbols([ticker], as_of_date=None)
             if assets and assets[0] is not None:
-                ticker_to_sid[ticker] = assets[0].sid
+                sid_map[ticker] = assets[0].sid
                 print(f"  {ticker} -> SID {assets[0].sid}")
             else:
                 print(f"  ⚠ {ticker} not found in bundle")
         except Exception as e:
             print(f"  ⚠ Error looking up {ticker}: {e}")
 
-    if not ticker_to_sid:
+    if not sid_map:
         print("✗ No tickers could be converted to SIDs")
         return 1
 
-    print(f"✓ Converted {len(ticker_to_sid)} tickers to SIDs")
+    print(f"✓ Converted {len(sid_map)} tickers to SIDs")
     print()
 
-    # Step 5: Prepare data for insertion
-    print("Preparing data for insertion...")
-    df['Sid'] = df['Ticker'].map(ticker_to_sid)
-
-    # Drop rows where ticker wasn't found
-    df = df.dropna(subset=['Sid'])
-    df['Sid'] = df['Sid'].astype(int)
-
-    # Drop the Ticker column (we only need Sid)
-    df = df.drop(columns=['Ticker'])
-
-    # Ensure Date is in the right format
-    df['Date'] = pd.to_datetime(df['Date']).dt.strftime('%Y-%m-%d')
-
-    print(f"✓ Prepared {len(df)} rows for insertion")
-    print()
-
-    # Step 6: Insert data
-    print("Inserting data into database...")
+    # Step 5: Load CSV data into database
+    print("Loading data into database...")
     try:
-        insert_data(DB_CODE, df)
-        print(f"✓ Inserted {len(df)} rows into {DB_CODE} database")
+        result = load_csv_to_db(
+            csv_path=SAMPLE_DATA_FILE,
+            db_code=DB_CODE,
+            sid_map=sid_map,
+            id_col='Ticker',  # CSV uses 'Ticker' not 'Symbol'
+            date_col='Date',
+            fail_on_unmapped=False,  # Continue even if some tickers aren't found
+        )
+        print(f"✓ Inserted {result['rows_inserted']} rows into {DB_CODE} database")
+
+        if result['unmapped_ids']:
+            print(f"  ⚠ {len(result['unmapped_ids'])} unmapped tickers: {', '.join(result['unmapped_ids'])}")
+
+        if result['errors']:
+            print(f"  ⚠ {len(result['errors'])} errors occurred")
+            for error in result['errors']:
+                print(f"    - {error}")
         print()
     except Exception as e:
-        print(f"✗ Error inserting data: {e}")
+        print(f"✗ Error loading data: {e}")
+        import traceback
+        traceback.print_exc()
         return 1
 
-    # Step 7: Verify
+    # Step 6: Verify
     print("=" * 80)
     print("DATABASE CREATED SUCCESSFULLY")
     print("=" * 80)
     print()
     print(f"Database location: {db_path}")
-    print(f"Records inserted: {len(df)}")
-    print(f"Date range: {df['Date'].min()} to {df['Date'].max()}")
-    print(f"Tickers: {', '.join(sorted(ticker_to_sid.keys()))}")
+    print(f"Records inserted: {result['rows_inserted']}")
+    print(f"Tickers: {', '.join(sorted(sid_map.keys()))}")
     print()
     print("You can now run the backtest with fundamentals!")
     print()

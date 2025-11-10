@@ -58,7 +58,16 @@ def _setup_custom_loaders(algo_module):
         # Database class not available, no custom loaders needed
         return None
 
-    custom_loader_dict = {}
+    # Use a custom dict that handles .get() properly
+    class LoaderDict(dict):
+        """Dict that raises KeyError on .get() for missing keys"""
+        def get(self, key, default=None):
+            # Check if key exists, if not raise KeyError
+            if key not in self:
+                raise KeyError(key)
+            return self[key]
+
+    custom_loader_dict = LoaderDict()
 
     # Scan module for Database subclasses
     for attr_name in dir(algo_module):
@@ -79,14 +88,27 @@ def _setup_custom_loaders(algo_module):
             # Create a CustomSQLiteLoader for this database
             loader = CustomSQLiteLoader(code)
 
-            # Map all columns from this database to the loader
-            for col_name in dir(attr):
-                col = getattr(attr, col_name)
-                # Check if it's a BoundColumn (has dtype attribute)
-                if hasattr(col, 'dtype'):
-                    custom_loader_dict[col] = loader
-
-            print(f"    Registered {len([c for c in dir(attr) if hasattr(getattr(attr, c), 'dtype')])} columns")
+            # Get the underlying dataset class that was generated
+            dataset_class = getattr(attr, '_dataset_class', None)
+            if dataset_class:
+                # Use columns from the dataset class (these are the actual BoundColumns used in pipeline)
+                column_count = 0
+                for col_name in dir(dataset_class):
+                    col = getattr(dataset_class, col_name)
+                    # Check if it's a BoundColumn (has dtype and dataset attributes)
+                    if hasattr(col, 'dtype') and hasattr(col, 'dataset'):
+                        custom_loader_dict[col] = loader
+                        column_count += 1
+                print(f"    Registered {column_count} columns from dataset class")
+            else:
+                # Fallback to using Database class attributes
+                column_count = 0
+                for col_name in dir(attr):
+                    col = getattr(attr, col_name)
+                    if hasattr(col, 'dtype') and hasattr(col, 'dataset'):
+                        custom_loader_dict[col] = loader
+                        column_count += 1
+                print(f"    Registered {column_count} columns from Database class")
 
     if custom_loader_dict:
         print(f"  Total custom columns registered: {len(custom_loader_dict)}")

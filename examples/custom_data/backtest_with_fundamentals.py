@@ -27,6 +27,7 @@ from zipline.api import (
 from zipline.pipeline import Pipeline, CustomFactor
 from zipline.pipeline.data import EquityPricing
 from zipline.pipeline.filters import StaticAssets
+from zipline.pipeline.factors import SimpleMovingAverage
 from zipline.data.bundles import load as load_bundle
 # CustomSQLiteLoader is automatically used based on Database.CODE
 
@@ -187,7 +188,7 @@ def make_pipeline():
     volume = EquityPricing.volume.latest
 
     # Calculate technical indicators
-    avg_volume_20d = EquityPricing.volume.mavg(20)  # 20-day average volume
+    avg_volume_20d = SimpleMovingAverage(inputs=[EquityPricing.volume], window_length=20)
 
     # Define screening filters
     # 1. Fundamental quality

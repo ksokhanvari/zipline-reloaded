@@ -34,6 +34,65 @@ warnings.filterwarnings('ignore')
 from zipline import run_algorithm
 from zipline.data.bundles import load as load_bundle
 from zipline.utils.calendar_utils import get_calendar
+from zipline.data.custom import CustomSQLiteLoader
+
+
+def _setup_custom_loaders(algo_module):
+    """
+    Detect Database classes in the algorithm module and create custom loaders.
+
+    Parameters
+    ----------
+    algo_module : module
+        Loaded algorithm module
+
+    Returns
+    -------
+    dict or None
+        Dictionary mapping BoundColumns to CustomSQLiteLoader instances,
+        or None if no Database classes found
+    """
+    try:
+        from zipline.pipeline.data.db import Database
+    except ImportError:
+        # Database class not available, no custom loaders needed
+        return None
+
+    custom_loader_dict = {}
+
+    # Scan module for Database subclasses
+    for attr_name in dir(algo_module):
+        attr = getattr(algo_module, attr_name)
+
+        # Check if it's a Database subclass (but not Database itself)
+        if (isinstance(attr, type) and
+            issubclass(attr, Database) and
+            attr is not Database):
+
+            # Get the database CODE
+            code = getattr(attr, 'CODE', None)
+            if not code:
+                continue
+
+            print(f"  Found custom database: {attr_name} (code: {code})")
+
+            # Create a CustomSQLiteLoader for this database
+            loader = CustomSQLiteLoader(code)
+
+            # Map all columns from this database to the loader
+            for col_name in dir(attr):
+                col = getattr(attr, col_name)
+                # Check if it's a BoundColumn (has dtype attribute)
+                if hasattr(col, 'dtype'):
+                    custom_loader_dict[col] = loader
+
+            print(f"    Registered {len([c for c in dir(attr) if hasattr(getattr(attr, c), 'dtype')])} columns")
+
+    if custom_loader_dict:
+        print(f"  Total custom columns registered: {len(custom_loader_dict)}")
+        return custom_loader_dict
+    else:
+        return None
 
 
 def backtest(
@@ -153,6 +212,18 @@ def backtest(
     if analyze_func:
         print(", analyze", end="")
     print()
+    print()
+
+    # Set up custom loaders for Database classes
+    print("Detecting custom databases...")
+    custom_loader = _setup_custom_loaders(algo_module)
+    if custom_loader:
+        print("✓ Custom loaders configured")
+        # Add to kwargs if not already specified
+        if 'custom_loader' not in kwargs:
+            kwargs['custom_loader'] = custom_loader
+    else:
+        print("  No custom databases found")
     print()
 
     # Load bundle

@@ -253,7 +253,8 @@ def _generate_output_dataframe(data_subset, defaults):
     return data_subset
 
 
-def _check_asset_group(group):
+def _check_asset_group(group, **kwargs):
+    # Accept **kwargs for pandas 2.2+ compatibility (include_groups parameter)
     # workaround until fixed: https://github.com/pandas-dev/pandas/issues/47985
     if group.empty:
         return group
@@ -301,7 +302,8 @@ def _check_symbol_mappings(df, exchanges, asset_exchange):
 
     ambiguous = {}
 
-    def check_intersections(persymbol):
+    def check_intersections(persymbol, **kwargs):
+        # Accept **kwargs for pandas 2.2+ compatibility (include_groups parameter)
         intersections = list(
             intersecting_ranges(
                 map(
@@ -319,7 +321,7 @@ def _check_symbol_mappings(df, exchanges, asset_exchange):
             ambiguous[persymbol.name] = intersections, msg_component
 
     mappings.groupby(["symbol", "country_code"], group_keys=False).apply(
-        check_intersections
+        check_intersections, include_groups=False
     )
 
     if ambiguous:

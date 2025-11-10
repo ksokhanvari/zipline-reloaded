@@ -2,6 +2,9 @@
 from . import quandl  # noqa
 from . import csvdir  # noqa
 
+# Note: sharadar_bundle is registered via extension.py, not imported here
+# to avoid requiring nasdaqdatalink dependency for all users
+
 from .core import (
     UnknownBundle,
     bundles,

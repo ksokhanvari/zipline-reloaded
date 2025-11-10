@@ -392,15 +392,80 @@ def zipline_magic(line, cell=None):
     default=True,
     help="Print progress information to the terminal.",
 )
-def ingest(bundle, assets_version, show_progress):
+@click.option(
+    "--log-file",
+    type=click.Path(),
+    help="Save ingest logs to file (in addition to console output). "
+         "Example: --log-file logs/ingest_$(date +%%Y%%m%%d).log "
+         "See scripts/README.md for more details.",
+)
+def ingest(bundle, assets_version, show_progress, log_file):
     """Ingest the data for the given bundle."""
-    bundles_module.ingest(
-        bundle,
-        os.environ,
-        pd.Timestamp.utcnow(),
-        assets_version,
-        show_progress,
-    )
+    # Add file handler if log file specified
+    if log_file:
+        root_logger = logging.getLogger()
+        file_handler = logging.FileHandler(log_file, mode='a')
+        file_handler.setFormatter(logging.Formatter(
+            '[%(asctime)s-%(levelname)s][%(name)s]\n %(message)s',
+            datefmt='%Y-%m-%dT%H:%M:%S%z'
+        ))
+        root_logger.addHandler(file_handler)
+        logging.info(f"Logging ingest to file: {log_file}")
+
+    click.echo(f"Starting ingest for bundle: {bundle}")
+
+    try:
+        bundles_module.ingest(
+            bundle,
+            os.environ,
+            pd.Timestamp.utcnow(),
+            assets_version,
+            show_progress,
+        )
+    except ValueError as e:
+        # Check if this is the "no new data" case (not a real error)
+        error_msg = str(e)
+        if "already up-to-date" in error_msg.lower() or "no new data" in error_msg.lower():
+            # This is expected - bundle is current, exit cleanly
+            # Clean up the incomplete directory that was just created
+            # We can't use the exact timestamp because it was generated earlier,
+            # so we find the newest directory created in the last minute
+            import shutil
+            from pathlib import Path
+            import zipline.utils.paths as pth
+            import time
+
+            bundle_root = Path(pth.data_path([bundle], environ=os.environ))
+
+            if bundle_root.exists():
+                try:
+                    # Find directories created in the last 60 seconds
+                    now = time.time()
+                    recent_dirs = [
+                        d for d in bundle_root.iterdir()
+                        if d.is_dir() and (now - d.stat().st_mtime) < 60
+                    ]
+
+                    # Remove incomplete directories (no assets database)
+                    for dir_path in recent_dirs:
+                        assets_db = list(dir_path.glob('assets-*.sqlite'))
+                        if not assets_db:  # No assets DB = incomplete
+                            shutil.rmtree(dir_path)
+                            click.echo(f"Cleaned up incomplete bundle directory: {dir_path.name}")
+                except Exception as cleanup_err:
+                    # Warn but don't fail if cleanup doesn't work
+                    click.echo(f"⚠️  Could not clean up directory: {cleanup_err}", err=True)
+
+            click.echo("\n✓ Bundle ingestion skipped - already up-to-date\n")
+            logging.info(f"Bundle {bundle} already up-to-date")
+            return
+        else:
+            # This is an actual error, re-raise
+            raise
+
+    # Log successful completion
+    click.echo(f"\n✓ Bundle {bundle} ingested successfully\n")
+    logging.info(f"Bundle {bundle} ingestion completed successfully")
 
 
 @main.command()
@@ -463,6 +528,15 @@ def bundles():
         # no ingestions have yet been made.
         for timestamp in ingestions or ["<no ingestions>"]:
             click.echo("%s %s" % (bundle, timestamp))
+
+
+# Add custom-data command group
+try:
+    from zipline.data.custom.cli import custom_data_group
+    main.add_command(custom_data_group)
+except ImportError:
+    # Custom data module not available
+    pass
 
 
 if __name__ == "__main__":

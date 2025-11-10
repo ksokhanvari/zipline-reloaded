@@ -54,6 +54,7 @@ def _setup_custom_loaders(algo_module):
     """
     try:
         from zipline.pipeline.data.db import Database
+        from zipline.pipeline.data.dataset import BoundColumn
     except ImportError:
         # Database class not available, no custom loaders needed
         return None
@@ -94,21 +95,34 @@ def _setup_custom_loaders(algo_module):
                 # Use columns from the dataset class (these are the actual BoundColumns used in pipeline)
                 column_count = 0
                 for col_name in dir(dataset_class):
-                    col = getattr(dataset_class, col_name)
-                    # Check if it's a BoundColumn (has dtype and dataset attributes)
-                    if hasattr(col, 'dtype') and hasattr(col, 'dataset'):
-                        custom_loader_dict[col] = loader
-                        column_count += 1
-                print(f"    Registered {column_count} columns from dataset class")
+                    # Skip private and special attributes
+                    if col_name.startswith('_'):
+                        continue
+                    try:
+                        col = getattr(dataset_class, col_name)
+                        # Check if it's a BoundColumn instance
+                        if isinstance(col, BoundColumn):
+                            custom_loader_dict[col] = loader
+                            column_count += 1
+                            print(f"    - Registered column: {col_name} -> {col}")
+                    except AttributeError:
+                        continue
+                print(f"    Total: {column_count} columns registered")
             else:
                 # Fallback to using Database class attributes
                 column_count = 0
                 for col_name in dir(attr):
-                    col = getattr(attr, col_name)
-                    if hasattr(col, 'dtype') and hasattr(col, 'dataset'):
-                        custom_loader_dict[col] = loader
-                        column_count += 1
-                print(f"    Registered {column_count} columns from Database class")
+                    if col_name.startswith('_'):
+                        continue
+                    try:
+                        col = getattr(attr, col_name)
+                        if isinstance(col, BoundColumn):
+                            custom_loader_dict[col] = loader
+                            column_count += 1
+                            print(f"    - Registered column: {col_name} -> {col}")
+                    except AttributeError:
+                        continue
+                print(f"    Total: {column_count} columns registered")
 
     if custom_loader_dict:
         print(f"  Total custom columns registered: {len(custom_loader_dict)}")

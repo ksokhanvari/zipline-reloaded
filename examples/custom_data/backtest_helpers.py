@@ -89,40 +89,25 @@ def _setup_custom_loaders(algo_module):
             # Create a CustomSQLiteLoader for this database
             loader = CustomSQLiteLoader(code)
 
-            # Get the underlying dataset class that was generated
-            dataset_class = getattr(attr, '_dataset_class', None)
-            if dataset_class:
-                # Use columns from the dataset class (these are the actual BoundColumns used in pipeline)
-                column_count = 0
-                for col_name in dir(dataset_class):
-                    # Skip private and special attributes
-                    if col_name.startswith('_'):
-                        continue
-                    try:
-                        col = getattr(dataset_class, col_name)
-                        # Check if it's a BoundColumn instance
-                        if isinstance(col, BoundColumn):
-                            custom_loader_dict[col] = loader
-                            column_count += 1
-                            print(f"    - Registered column: {col_name} -> {col}")
-                    except AttributeError:
-                        continue
-                print(f"    Total: {column_count} columns registered")
-            else:
-                # Fallback to using Database class attributes
-                column_count = 0
-                for col_name in dir(attr):
-                    if col_name.startswith('_'):
-                        continue
-                    try:
-                        col = getattr(attr, col_name)
-                        if isinstance(col, BoundColumn):
-                            custom_loader_dict[col] = loader
-                            column_count += 1
-                            print(f"    - Registered column: {col_name} -> {col}")
-                    except AttributeError:
-                        continue
-                print(f"    Total: {column_count} columns registered")
+            # Scan the Database class directly for BoundColumn instances
+            # The metaclass copies these from the dataset_class, so they're the actual
+            # columns referenced in the algorithm code
+            column_count = 0
+            for col_name in dir(attr):
+                # Skip private/special attributes and class attributes
+                if col_name.startswith('_') or col_name in ('CODE', 'LOOKBACK_WINDOW'):
+                    continue
+                try:
+                    col = getattr(attr, col_name)
+                    # Check if it's a BoundColumn instance
+                    if isinstance(col, BoundColumn):
+                        custom_loader_dict[col] = loader
+                        column_count += 1
+                        print(f"    - Registered: {col_name} = {col}")
+                except (AttributeError, TypeError) as e:
+                    print(f"    - Skipped {col_name}: {e}")
+                    continue
+            print(f"    Total: {column_count} columns registered from {attr_name}")
 
     if custom_loader_dict:
         print(f"  Total custom columns registered: {len(custom_loader_dict)}")

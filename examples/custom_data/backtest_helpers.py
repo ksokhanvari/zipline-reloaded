@@ -60,14 +60,40 @@ def _setup_custom_loaders(algo_module):
         print(f"  Database class not available: {e}")
         return None
 
-    # Use a custom dict that handles .get() properly
+    # Use a custom dict that matches columns by dataset and name
+    # This handles domain-aware columns (e.g., FundamentalsDataSet<US>.ROE)
     class LoaderDict(dict):
-        """Dict that raises KeyError on .get() for missing keys"""
+        """
+        Dict that matches BoundColumns by dataset and column name.
+
+        This handles the case where columns are registered without a domain
+        (FundamentalsDataSet.ROE) but looked up with a domain
+        (FundamentalsDataSet<US>.ROE).
+        """
         def get(self, key, default=None):
-            # Check if key exists, if not raise KeyError
-            if key not in self:
-                raise KeyError(key)
-            return self[key]
+            # First try exact match
+            if key in self:
+                return self[key]
+
+            # If key is a BoundColumn, try matching by dataset name and column name
+            if hasattr(key, 'dataset') and hasattr(key, 'name'):
+                # Extract dataset name without domain (remove <DOMAIN> part)
+                key_dataset_name = str(key.dataset).split('<')[0]
+                key_col_name = key.name
+
+                # Search for a matching column in our registered columns
+                for registered_col, loader in self.items():
+                    if hasattr(registered_col, 'dataset') and hasattr(registered_col, 'name'):
+                        reg_dataset_name = str(registered_col.dataset).split('<')[0]
+                        reg_col_name = registered_col.name
+
+                        # Match by dataset name and column name
+                        if key_dataset_name == reg_dataset_name and key_col_name == reg_col_name:
+                            print(f"    Matched {key} -> {registered_col} (loader)")
+                            return loader
+
+            # No match found
+            raise KeyError(key)
 
     custom_loader_dict = LoaderDict()
 

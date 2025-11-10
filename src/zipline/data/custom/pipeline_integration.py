@@ -257,12 +257,27 @@ class CustomSQLiteLoader(PipelineLoader):
         try:
             df = pd.read_sql_query(sql, conn, params=params)
 
+            log.debug(
+                f"Loaded {len(df)} rows for {len(column_names)} columns "
+                f"from {self.db_code} database"
+            )
+
+            if len(df) == 0:
+                log.warning(
+                    f"No data found in {self.db_code} database for "
+                    f"dates {start_date} to {end_date}, sids {sids_str[:5]}..."
+                )
+
             # Parse dates
             df['Date'] = pd.to_datetime(df['Date'])
 
             # Convert Sid to int for indexing
             df['Sid'] = df['Sid'].astype(int)
 
+        except Exception as e:
+            log.error(f"Error querying {self.db_code} database: {e}")
+            conn.close()
+            raise
         finally:
             conn.close()
 

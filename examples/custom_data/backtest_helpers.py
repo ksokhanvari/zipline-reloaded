@@ -165,9 +165,9 @@ def backtest(
         print(f"✗ Error loading bundle: {e}")
         raise
 
-    # Parse dates
-    start_date = pd.Timestamp(start_date, tz='UTC')
-    end_date = pd.Timestamp(end_date, tz='UTC')
+    # Parse dates (must be timezone-naive for exchange_calendars)
+    start_date = pd.Timestamp(start_date)
+    end_date = pd.Timestamp(end_date)
 
     # Run backtest
     print("=" * 80)

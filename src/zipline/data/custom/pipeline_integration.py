@@ -172,7 +172,8 @@ class CustomSQLiteLoader(PipelineLoader):
         )
 
         # Query database for all needed columns at once
-        data = self._query_database(dates, sids, column_names)
+        # Pass columns with their dtypes so we know which to convert to numeric
+        data = self._query_database(dates, sids, columns)
 
         # Build AdjustedArrays for each column
         arrays = {}
@@ -229,7 +230,7 @@ class CustomSQLiteLoader(PipelineLoader):
         self,
         dates: pd.DatetimeIndex,
         sids: pd.Index,
-        column_names: list,
+        columns: list,
     ) -> Dict[str, np.ndarray]:
         """
         Query database and return data as dict of arrays.
@@ -240,16 +241,20 @@ class CustomSQLiteLoader(PipelineLoader):
             Dates to query
         sids : pd.Index
             Sids to query
-        column_names : list of str
-            Column names to retrieve
+        columns : list of BoundColumn
+            Columns to retrieve (with dtype information)
 
         Returns
         -------
         dict
             Mapping from column name to 2D array of shape (len(dates), len(sids))
         """
-        if not column_names:
+        if not columns:
             return {}
+
+        # Extract column names and build dtype mapping
+        column_names = [col.name for col in columns]
+        column_dtypes = {col.name: col.dtype for col in columns}
 
         # Convert dates to strings for SQL query
         start_date = dates.min().strftime('%Y-%m-%d')
@@ -310,19 +315,16 @@ class CustomSQLiteLoader(PipelineLoader):
                 log.warning(f"Column '{col_name}' not in query results")
                 continue
 
-            # Try to convert column to numeric if it looks like numbers
+            # Convert to numeric if the column's dtype is numeric
             # This handles cases where SQLite returns numeric values as strings
-            # BUT skip conversion for text/categorical columns
-            try:
-                # Check if the column looks numeric by trying to convert
-                # If successful and not all NaN, it's numeric
-                converted = pd.to_numeric(df[col_name], errors='coerce')
-                # Only use conversion if at least some values converted successfully
-                if not converted.isna().all():
-                    df[col_name] = converted
-                # Otherwise keep original (for text columns like Sector)
-            except:
-                pass  # Keep original if conversion fails
+            col_dtype = column_dtypes.get(col_name)
+            if col_dtype in (np.float64, np.float32, np.int64, np.int32):
+                # This column should be numeric, force conversion
+                try:
+                    df[col_name] = pd.to_numeric(df[col_name], errors='coerce')
+                except Exception as e:
+                    log.warning(f"Could not convert column '{col_name}' to numeric: {e}")
+            # else: keep as-is for text/object columns
 
             # Create a pivot table
             pivot = df.pivot(index='Date', columns='Sid', values=col_name)

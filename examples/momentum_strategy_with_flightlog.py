@@ -20,6 +20,7 @@ Usage:
 
 import logging
 import pandas as pd
+from custom_data.register_bundles import ensure_bundles_registered
 from zipline import run_algorithm
 from zipline.api import (
     attach_pipeline,
@@ -37,6 +38,9 @@ from zipline.pipeline.data import USEquityPricing
 from zipline.pipeline.factors import Returns
 from zipline.utils.progress import enable_progress_logging
 from zipline.utils.flightlog_client import enable_flightlog, log_to_flightlog
+
+# Ensure bundles are registered
+ensure_bundles_registered()
 
 
 # =============================================================================

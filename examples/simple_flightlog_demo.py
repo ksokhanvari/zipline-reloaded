@@ -10,10 +10,14 @@ Terminal 2: python examples/simple_flightlog_demo.py
 
 import logging
 import pandas as pd
+from custom_data.register_bundles import ensure_bundles_registered
 from zipline import run_algorithm
 from zipline.api import order_target_percent, symbol
 from zipline.utils.progress import enable_progress_logging
 from zipline.utils.flightlog_client import enable_flightlog, log_to_flightlog
+
+# Ensure bundles are registered
+ensure_bundles_registered()
 
 
 # =============================================================================

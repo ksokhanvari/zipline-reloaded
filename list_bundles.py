@@ -4,13 +4,11 @@ List all available bundles and their ingestions.
 """
 
 import os
-from zipline.data.bundles import register, bundles, ingestions_for_bundle
-from zipline.data.bundles.sharadar_bundle import sharadar_bundle
+from examples.custom_data.register_bundles import ensure_bundles_registered
+from zipline.data.bundles import bundles, ingestions_for_bundle
 
-# Register sharadar bundle
-if 'sharadar' not in bundles:
-    register('sharadar', sharadar_bundle(tickers=None, incremental=True, include_funds=True))
-    print("✓ Registered sharadar bundle\n")
+# Ensure bundles are registered
+ensure_bundles_registered()
 
 print("="*70)
 print("Available Bundles and Ingestions")

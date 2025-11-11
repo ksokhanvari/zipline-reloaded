@@ -12,21 +12,12 @@ Example:
 
 import sys
 import pandas as pd
-from zipline.data.bundles import load, register, bundles
+from examples.custom_data.register_bundles import ensure_bundles_registered
+from zipline.data.bundles import load, bundles
 from zipline.utils.calendar_utils import get_calendar
 
-
-def register_sharadar_bundle():
-    """Register the sharadar bundle if not already registered."""
-    if 'sharadar' not in bundles:
-        try:
-            from zipline.data.bundles.sharadar_bundle import sharadar_bundle
-            register('sharadar', sharadar_bundle(tickers=None, incremental=True, include_funds=True))
-            print("✓ Registered sharadar bundle\n")
-        except ImportError:
-            print("⚠ Warning: Could not import sharadar_bundle module\n")
-        except Exception as e:
-            print(f"⚠ Warning: Could not register sharadar bundle: {e}\n")
+# Ensure bundles are registered
+ensure_bundles_registered()
 
 
 def diagnose_bundle(bundle_name='quandl', symbol='SPY'):
@@ -43,10 +34,6 @@ def diagnose_bundle(bundle_name='quandl', symbol='SPY'):
     print(f"\n{'='*70}")
     print(f"Bundle Data Diagnostics: {bundle_name}")
     print(f"{'='*70}\n")
-
-    # Register sharadar bundle if needed
-    if bundle_name.lower() == 'sharadar':
-        register_sharadar_bundle()
 
     # Check if bundle is registered
     if bundle_name not in bundles:

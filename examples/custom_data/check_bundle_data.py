@@ -12,6 +12,16 @@ def main():
     print("=" * 80)
     print()
 
+    # Register Sharadar bundles
+    print("Registering Sharadar bundles...")
+    try:
+        from zipline.data.bundles.sharadar_bundle import register_sharadar_bundles
+        register_sharadar_bundles()
+        print("✓ Sharadar bundles registered")
+    except Exception as e:
+        print(f"⚠ Warning: Could not register Sharadar bundles: {e}")
+    print()
+
     # Load bundle
     print("Loading Sharadar bundle...")
     bundle_data = load_bundle('sharadar')

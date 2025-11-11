@@ -193,6 +193,26 @@ class CustomSQLiteLoader(PipelineLoader):
                 )
             else:
                 # Ensure correct dtype - data already converted in _query_database
+                # Additional safety: if we got object array for numeric column, force convert
+                if col_data.dtype == object and column.dtype in (np.float64, np.float32, np.int64, np.int32):
+                    log.warning(
+                        f"Column '{column.name}' has object dtype, forcing numeric conversion. "
+                        f"Sample values: {col_data.flatten()[:5]}"
+                    )
+                    try:
+                        # Flatten, convert to numeric, reshape
+                        flat = col_data.flatten()
+                        numeric_flat = pd.to_numeric(flat, errors='coerce')
+                        col_data = numeric_flat.values.reshape(col_data.shape)
+                    except Exception as e:
+                        log.error(f"Failed to convert object array to numeric: {e}")
+                        col_data = np.full(
+                            (len(dates), len(sids)),
+                            column.missing_value,
+                            dtype=column.dtype
+                        )
+
+                # Final dtype conversion
                 try:
                     col_data = col_data.astype(column.dtype)
                 except Exception as e:

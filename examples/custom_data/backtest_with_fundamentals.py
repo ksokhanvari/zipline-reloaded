@@ -117,6 +117,14 @@ class QualityScore(CustomFactor):
         pe_latest = pe[0]
         debt_latest = debt[0]
 
+        # Defensive: ensure we have numeric arrays
+        if roe_latest.dtype == object or pe_latest.dtype == object or debt_latest.dtype == object:
+            import warnings
+            warnings.warn(f"QualityScore received object dtype arrays! ROE: {roe_latest.dtype}, PE: {pe_latest.dtype}, Debt: {debt_latest.dtype}")
+            # Fill with NaN if we got bad data
+            out[:] = np.nan
+            return
+
         # Normalize each metric to 0-1 scale using min-max normalization
         # ROE: higher is better
         roe_min, roe_max = np.nanmin(roe_latest), np.nanmax(roe_latest)
@@ -154,6 +162,14 @@ class ProfitMargin(CustomFactor):
     def compute(self, today, assets, out, net_income, revenue):
         latest_income = net_income[0]
         latest_revenue = revenue[0]
+
+        # Defensive: ensure we have numeric arrays
+        if latest_income.dtype == object or latest_revenue.dtype == object:
+            import warnings
+            warnings.warn(f"ProfitMargin received object dtype arrays! NetIncome: {latest_income.dtype}, Revenue: {latest_revenue.dtype}")
+            # Fill with NaN if we got bad data
+            out[:] = np.nan
+            return
 
         with np.errstate(divide='ignore', invalid='ignore'):
             profit_margin = (latest_income / latest_revenue) * 100.0
@@ -248,7 +264,7 @@ def make_pipeline():
             'eps': eps,
             'current_ratio': current_ratio,
             'profit_margin': profit_margin,
-            'sector': sector,
+            # TEMPORARILY REMOVED: 'sector': sector,  # Object dtype may cause issues
 
             # Pricing metrics
             'close': close_price,

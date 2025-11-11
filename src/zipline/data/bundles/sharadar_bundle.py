@@ -606,8 +606,16 @@ def sharadar_bundle(
 
                 if latest_assets_db:
                     conn = sqlite3.connect(str(latest_assets_db[-1]))
-                    existing_metadata = pd.read_sql("SELECT * FROM equities", conn)
+                    # Join equities with symbol mappings to get the symbol column
+                    existing_metadata = pd.read_sql("""
+                        SELECT e.sid, esm.symbol, e.asset_name, e.start_date, e.end_date, e.exchange
+                        FROM equities e
+                        LEFT JOIN equity_symbol_mappings esm ON e.sid = esm.sid
+                    """, conn)
                     conn.close()
+
+                    # Filter out assets without symbols (shouldn't happen, but be safe)
+                    existing_metadata = existing_metadata[existing_metadata['symbol'].notna()]
 
                     print(f"   Loaded {len(existing_metadata)} existing assets")
 

@@ -31,7 +31,6 @@ def main():
 
     # Check if sharadar bundle has ingested data
     print("Checking for ingested data...")
-    from zipline.data.bundles.core import bundle_timestamp_path
     import os
 
     try:
@@ -44,9 +43,15 @@ def main():
         sharadar_dir = os.path.join(bundle_dir, 'sharadar')
         if os.path.exists(sharadar_dir):
             print(f"✓ Sharadar directory exists: {sharadar_dir}")
-            # List contents
+            # List timestamp directories (ingestion dates)
             contents = os.listdir(sharadar_dir)
-            print(f"  Contents: {contents}")
+            if contents:
+                print(f"  Ingestion timestamps: {len(contents)} found")
+                # Show most recent
+                timestamps = sorted(contents, reverse=True)
+                print(f"  Most recent: {timestamps[0] if timestamps else 'none'}")
+            else:
+                print(f"  ⚠ Directory exists but is empty")
         else:
             print(f"✗ Sharadar directory not found: {sharadar_dir}")
             print("  You may need to run: zipline ingest -b sharadar")

@@ -287,10 +287,12 @@ def initialize(context):
     attach_pipeline(make_pipeline(), 'quality_stocks')
 
     # Schedule rebalancing
+    # Note: Fundamentals are quarterly (end of March, June, Sept, Dec)
+    # We rebalance monthly but will only see universe changes when new fundamentals arrive
     if REBALANCE_FREQUENCY == 'monthly':
         schedule_function(
             rebalance,
-            date_rules.month_start(),
+            date_rules.month_end(),  # Changed to month_end to align with fundamentals data
             time_rules.market_open(hours=1),
         )
     else:  # weekly

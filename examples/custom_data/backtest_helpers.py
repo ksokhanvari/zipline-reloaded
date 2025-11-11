@@ -409,7 +409,11 @@ def backtest(
 
     # Check for sharpe ratio
     if 'sharpe' in perf.columns:
-        print(f"Sharpe ratio: {perf['sharpe'].iloc[-1]:.3f}")
+        sharpe_value = perf['sharpe'].iloc[-1]
+        if sharpe_value is not None and not np.isnan(sharpe_value):
+            print(f"Sharpe ratio: {sharpe_value:.3f}")
+        else:
+            print(f"Sharpe ratio: N/A (insufficient data)")
     elif 'algorithm_period_return' in perf.columns:
         returns = perf['algorithm_period_return'].pct_change().dropna()
         if len(returns) > 0 and returns.std() > 0:

@@ -68,11 +68,17 @@ def diagnose_bundle(bundle_name='quandl', symbol='SPY'):
         print("Checking price data availability...")
         calendar = get_calendar(asset.exchange)
 
-        # Get all trading days in asset's range
-        trading_days = calendar.sessions_in_range(
-            asset.start_date,
-            asset.end_date
-        )
+        # Use the later of asset start date or calendar first session
+        # (exchange calendars may not have data before a certain date)
+        effective_start = max(asset.start_date, calendar.first_session)
+        effective_end = min(asset.end_date, calendar.last_session)
+
+        print(f"  - Asset range: {asset.start_date.date()} to {asset.end_date.date()}")
+        print(f"  - Calendar range: {calendar.first_session.date()} to {calendar.last_session.date()}")
+        print(f"  - Effective range: {effective_start.date()} to {effective_end.date()}")
+
+        # Get all trading days in effective range
+        trading_days = calendar.sessions_in_range(effective_start, effective_end)
 
         print(f"  - Asset listed for {len(trading_days)} trading days")
         print(f"  - From: {trading_days[0]}")
@@ -85,16 +91,11 @@ def diagnose_bundle(bundle_name='quandl', symbol='SPY'):
             daily_bar_reader = bundle_data.equity_daily_bar_reader
 
             # Try to load price data for the asset
-            # Make sure dates are timezone-aware for comparison
-            end_date = asset.end_date
-            if end_date.tz is None:
-                end_date = end_date.tz_localize('UTC')
-
+            # Use effective range (respecting calendar bounds)
             now = pd.Timestamp.now(tz='UTC')
-            sessions = calendar.sessions_in_range(
-                asset.start_date,
-                min(end_date, now)
-            )
+            query_end = min(effective_end, now)
+
+            sessions = calendar.sessions_in_range(effective_start, query_end)
 
             # Get close prices
             closes = daily_bar_reader.load_raw_arrays(

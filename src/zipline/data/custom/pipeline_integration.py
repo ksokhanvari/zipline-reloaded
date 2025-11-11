@@ -192,16 +192,8 @@ class CustomSQLiteLoader(PipelineLoader):
                     dtype=column.dtype
                 )
             else:
-                # Ensure correct dtype
+                # Ensure correct dtype - data already converted in _query_database
                 try:
-                    # For numeric dtypes, use pd.to_numeric to handle string conversions
-                    if column.dtype in (np.float64, np.float32, np.int64, np.int32):
-                        # Flatten, convert, then reshape
-                        flat_data = col_data.flatten()
-                        flat_data = pd.to_numeric(flat_data, errors='coerce')
-                        col_data = flat_data.reshape(col_data.shape)
-
-                    # Now convert to the target dtype
                     col_data = col_data.astype(column.dtype)
                 except Exception as e:
                     log.error(
@@ -309,6 +301,16 @@ class CustomSQLiteLoader(PipelineLoader):
         # Build result dictionary
         result = {}
 
+        # If dataframe is empty, create empty arrays with proper dtypes
+        if len(df) == 0:
+            for col_name in column_names:
+                col_dtype = column_dtypes.get(col_name, np.float64)
+                # Create empty array with proper dtype
+                arr = np.full((len(dates), len(sids)), np.nan, dtype=col_dtype)
+                result[col_name] = arr
+                log.warning(f"DEBUG: Column '{col_name}' created empty array with dtype: {arr.dtype}")
+            return result
+
         for col_name in column_names:
             # Pivot data to 2D array: (dates, sids)
             if col_name not in df.columns:
@@ -340,6 +342,20 @@ class CustomSQLiteLoader(PipelineLoader):
 
             # Convert to numpy array
             arr = reindexed.values
+
+            # Final safety check: if we got an object array but need numeric, convert it
+            # This handles edge cases where pivot/reindex creates object dtype despite conversion
+            if col_dtype in (np.float64, np.float32, np.int64, np.int32) and arr.dtype == object:
+                log.warning(f"Column '{col_name}' has object dtype after pivot, forcing conversion to {col_dtype}")
+                try:
+                    # Flatten, convert to numeric, reshape, and cast to target dtype
+                    flat = arr.flatten()
+                    numeric_flat = pd.to_numeric(flat, errors='coerce')
+                    arr = numeric_flat.reshape(arr.shape).astype(col_dtype)
+                except Exception as e:
+                    log.error(f"Failed to convert object array to {col_dtype}: {e}")
+                    # Create array of NaN with correct dtype as fallback
+                    arr = np.full(arr.shape, np.nan, dtype=col_dtype)
 
             # Log array dtype for debugging
             log.warning(f"DEBUG: Column '{col_name}' final array dtype: {arr.dtype}, shape: {arr.shape}, sample: {arr.flatten()[:3]}")

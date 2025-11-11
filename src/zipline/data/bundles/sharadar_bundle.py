@@ -482,8 +482,8 @@ def sharadar_bundle(
                         col: existing_table[col][:] for col in ['open', 'high', 'low', 'close', 'volume', 'day', 'id']
                     })
 
-                    # Convert day (nanoseconds since epoch) to date
-                    existing_data['date'] = pd.to_datetime(existing_data['day'], unit='ns')
+                    # Convert day (uint32 Unix timestamp in SECONDS) to date
+                    existing_data['date'] = pd.to_datetime(existing_data['day'], unit='s')
                     existing_data['sid'] = existing_data['id']
 
                     # Filter out invalid dates (before calendar's first session or NaT)

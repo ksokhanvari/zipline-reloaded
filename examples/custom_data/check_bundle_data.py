@@ -5,6 +5,7 @@ Check what data is available in the Sharadar bundle.
 
 import pandas as pd
 from zipline.data.bundles import load as load_bundle
+from zipline.data.bundles.core import bundles
 
 def main():
     print("=" * 80)
@@ -22,10 +23,48 @@ def main():
         print(f"⚠ Warning: Could not register Sharadar bundles: {e}")
     print()
 
+    # Show what bundles are registered
+    print("Registered bundles:")
+    for bundle_name in bundles.keys():
+        print(f"  - {bundle_name}")
+    print()
+
+    # Check if sharadar bundle has ingested data
+    print("Checking for ingested data...")
+    from zipline.data.bundles.core import bundle_timestamp_path
+    import os
+
+    try:
+        # Get the bundle data directory
+        from zipline.utils.paths import zipline_path
+        bundle_dir = zipline_path(['data'])
+        print(f"Bundle directory: {bundle_dir}")
+
+        # Check if sharadar directory exists
+        sharadar_dir = os.path.join(bundle_dir, 'sharadar')
+        if os.path.exists(sharadar_dir):
+            print(f"✓ Sharadar directory exists: {sharadar_dir}")
+            # List contents
+            contents = os.listdir(sharadar_dir)
+            print(f"  Contents: {contents}")
+        else:
+            print(f"✗ Sharadar directory not found: {sharadar_dir}")
+            print("  You may need to run: zipline ingest -b sharadar")
+            return
+    except Exception as e:
+        print(f"⚠ Warning checking bundle directory: {e}")
+    print()
+
     # Load bundle
     print("Loading Sharadar bundle...")
-    bundle_data = load_bundle('sharadar')
-    print("✓ Bundle loaded")
+    try:
+        bundle_data = load_bundle('sharadar')
+        print("✓ Bundle loaded")
+    except Exception as e:
+        print(f"✗ Failed to load bundle: {e}")
+        print("\nThis usually means the bundle needs to be ingested.")
+        print("Run: zipline ingest -b sharadar")
+        return
     print()
 
     # Get asset finder

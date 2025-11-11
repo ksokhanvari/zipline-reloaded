@@ -29,6 +29,7 @@ from zipline.pipeline.data import EquityPricing
 from zipline.pipeline.filters import StaticAssets
 from zipline.pipeline.factors import SimpleMovingAverage
 from zipline.data.bundles import load as load_bundle
+from zipline.assets._assets import Equity
 # CustomSQLiteLoader is automatically used based on Database.CODE
 
 # ============================================================================
@@ -38,6 +39,9 @@ from zipline.data.bundles import load as load_bundle
 # Strategy parameters
 TOP_N_STOCKS = 10
 REBALANCE_FREQUENCY = 'monthly'  # monthly or weekly
+
+# Stocks with fundamental data (must match tickers in fundamentals database)
+UNIVERSE_TICKERS = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'TSLA', 'META', 'JPM', 'WMT', 'XOM', 'V']
 
 # Backtest period
 START_DATE = '2023-04-01'
@@ -171,6 +175,23 @@ def make_pipeline():
     4. Ranks by quality score
     """
 
+    # Load bundle to get asset finder
+    bundle_data = load_bundle('sharadar')
+    asset_finder = bundle_data.asset_finder
+
+    # Create universe of stocks with fundamental data
+    universe_assets = []
+    for ticker in UNIVERSE_TICKERS:
+        try:
+            assets = asset_finder.lookup_symbols([ticker], as_of_date=None)
+            if assets and assets[0] is not None:
+                universe_assets.append(assets[0])
+        except:
+            pass
+
+    # Create base universe filter
+    base_universe = StaticAssets(universe_assets)
+
     # Get fundamental metrics from custom database
     roe = Fundamentals.ROE.latest
     pe_ratio = Fundamentals.PERatio.latest
@@ -191,6 +212,7 @@ def make_pipeline():
     avg_volume_20d = SimpleMovingAverage(inputs=[EquityPricing.volume], window_length=20)
 
     # Define screening filters
+    # 0. Base universe (stocks with fundamental data)
     # 1. Fundamental quality
     high_roe = (roe > 5.0)  # Lowered threshold for more stocks
     reasonable_pe = (pe_ratio < 50.0)  # Reasonable valuation
@@ -202,8 +224,9 @@ def make_pipeline():
     # 3. Valid price
     valid_price = (close_price > 1.0)  # Minimum price
 
-    # Combine all filters
+    # Combine all filters (start with base universe)
     quality_universe = (
+        base_universe &
         high_roe &
         reasonable_pe &
         manageable_debt &

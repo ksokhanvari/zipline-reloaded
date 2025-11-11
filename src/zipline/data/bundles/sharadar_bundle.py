@@ -633,10 +633,10 @@ def sharadar_bundle(
                     if 'end_date' in existing_metadata.columns:
                         existing_metadata['end_date'] = pd.to_datetime(existing_metadata['end_date'], unit='ns')
 
-                    # Merge on symbol
+                    # Merge on symbol - PRESERVE sid from existing_metadata!
                     metadata = pd.merge(
                         new_metadata[['symbol', 'asset_type', 'exchange', 'asset_name']],
-                        existing_metadata[['symbol', 'start_date', 'end_date']],
+                        existing_metadata[['sid', 'symbol', 'start_date', 'end_date']],
                         on='symbol',
                         how='outer'  # Keep all symbols from both
                     )
@@ -699,10 +699,43 @@ def sharadar_bundle(
             )
 
         # Create symbol to sid mapping
-        symbol_to_sid = {row['symbol']: idx for idx, row in metadata.iterrows()}
+        # For incremental mode: preserve existing SIDs, assign new ones to new symbols
+        # For full ingestion: use DataFrame index as SID
+        if 'sid' in metadata.columns:
+            # Incremental mode: we have existing SIDs
+            # For new symbols (sid is NaN), assign new SIDs starting from max+1
+            max_existing_sid = metadata['sid'].max()
+            if pd.isna(max_existing_sid):
+                max_existing_sid = -1  # No existing assets
+
+            next_sid = int(max_existing_sid) + 1
+            symbol_to_sid = {}
+
+            for idx, row in metadata.iterrows():
+                if pd.notna(row['sid']):
+                    # Existing asset: use existing SID
+                    symbol_to_sid[row['symbol']] = int(row['sid'])
+                else:
+                    # New asset: assign new SID
+                    symbol_to_sid[row['symbol']] = next_sid
+                    metadata.loc[idx, 'sid'] = next_sid
+                    next_sid += 1
+        else:
+            # Full ingestion mode: use DataFrame index as SID
+            symbol_to_sid = {row['symbol']: idx for idx, row in metadata.iterrows()}
+            metadata['sid'] = metadata.index
 
         # Add sid to pricing data
         all_pricing_data['sid'] = all_pricing_data['ticker'].map(symbol_to_sid)
+
+        # Prepare metadata for writer: set sid as index
+        # The asset writer expects sid as the DataFrame index
+        if 'sid' in metadata.columns:
+            metadata = metadata.set_index('sid')
+        else:
+            # This shouldn't happen, but handle it just in case
+            metadata['sid'] = metadata.index
+            metadata = metadata.set_index('sid')
 
         # Create exchanges data (required for Pipeline country_code filtering)
         # Sharadar data includes US exchanges

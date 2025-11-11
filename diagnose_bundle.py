@@ -92,7 +92,7 @@ def diagnose_bundle(bundle_name='quandl', symbol='SPY'):
 
             # Try to load price data for the asset
             # Use effective range (respecting calendar bounds)
-            now = pd.Timestamp.now(tz='UTC')
+            now = pd.Timestamp.now()
             query_end = min(effective_end, now)
 
             sessions = calendar.sessions_in_range(effective_start, query_end)

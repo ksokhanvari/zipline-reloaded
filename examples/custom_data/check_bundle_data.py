@@ -4,6 +4,7 @@ Check what data is available in the Sharadar bundle.
 """
 
 import pandas as pd
+from register_bundles import ensure_bundles_registered
 from zipline.data.bundles import load as load_bundle
 from zipline.data.bundles.core import bundles
 
@@ -15,26 +16,7 @@ def main():
 
     # Register Sharadar bundles
     print("Registering Sharadar bundles...")
-    try:
-        from zipline.data.bundles import register
-        from zipline.data.bundles.sharadar_bundle import sharadar_bundle
-
-        # Register the base sharadar bundle (this is normally done in extension.py)
-        register('sharadar', sharadar_bundle(
-            tickers=None,  # All tickers
-            incremental=True,
-            include_funds=True,
-        ))
-
-        # Also register the variants
-        from zipline.data.bundles.sharadar_bundle import register_sharadar_bundles
-        register_sharadar_bundles()
-
-        print("✓ Sharadar bundles registered")
-    except Exception as e:
-        print(f"⚠ Warning: Could not register Sharadar bundles: {e}")
-        import traceback
-        traceback.print_exc()
+    ensure_bundles_registered(verbose=True)
     print()
 
     # Show what bundles are registered

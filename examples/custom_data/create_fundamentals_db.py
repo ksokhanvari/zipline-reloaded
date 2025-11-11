@@ -8,8 +8,12 @@ This script creates a fundamentals database and loads sample data from CSV.
 import pandas as pd
 from pathlib import Path
 
+from register_bundles import ensure_bundles_registered
 from zipline.data.bundles import load as load_bundle
 from zipline.data.custom import create_custom_db, load_csv_to_db
+
+# Ensure bundles are registered for standalone execution
+ensure_bundles_registered()
 
 # Configuration
 DB_CODE = "fundamentals"

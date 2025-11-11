@@ -14,6 +14,7 @@ Strategy:
 
 import pandas as pd
 import numpy as np
+from register_bundles import ensure_bundles_registered
 from zipline import run_algorithm
 from zipline.api import (
     attach_pipeline,
@@ -30,6 +31,10 @@ from zipline.pipeline.filters import StaticAssets
 from zipline.pipeline.factors import SimpleMovingAverage
 from zipline.data.bundles import load as load_bundle
 from zipline.assets._assets import Equity
+
+# Ensure bundles are registered (needed for make_pipeline which uses load_bundle)
+ensure_bundles_registered()
+
 # CustomSQLiteLoader is automatically used based on Database.CODE
 
 # ============================================================================

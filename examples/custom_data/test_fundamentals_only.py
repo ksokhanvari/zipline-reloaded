@@ -6,6 +6,7 @@ This helps isolate if the string/float error is from custom data or EquityPricin
 
 import pandas as pd
 import numpy as np
+from register_bundles import ensure_bundles_registered
 from zipline import run_algorithm
 from zipline.api import attach_pipeline, pipeline_output
 from zipline.pipeline import Pipeline
@@ -13,6 +14,9 @@ from zipline.pipeline.filters import StaticAssets
 from zipline.data.bundles import load as load_bundle
 from zipline.pipeline.data.db import Database, Column
 from zipline.data.custom import CustomSQLiteLoader
+
+# Ensure bundles are registered for standalone execution
+ensure_bundles_registered()
 
 
 # Define Fundamentals database

@@ -31,6 +31,10 @@ from datetime import datetime
 import warnings
 warnings.filterwarnings('ignore')
 
+# Bundle registration (must be before other zipline imports)
+from register_bundles import ensure_bundles_registered
+ensure_bundles_registered()
+
 from zipline import run_algorithm
 from zipline.data.bundles import load as load_bundle
 from zipline.utils.calendar_utils import get_calendar

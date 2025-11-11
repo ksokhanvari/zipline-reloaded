@@ -759,12 +759,20 @@ def sharadar_bundle(
                 # Remove any NaN rows
                 symbol_data = symbol_data.dropna()
 
+                # Skip symbols with no valid data
+                if len(symbol_data) == 0:
+                    continue
+
                 # Sort by date
                 symbol_data = symbol_data.sort_index()
 
                 # Get this symbol's actual date range
                 symbol_start = symbol_data.index.min()
                 symbol_end = symbol_data.index.max()
+
+                # Skip if dates are invalid (NaT)
+                if pd.isna(symbol_start) or pd.isna(symbol_end):
+                    continue
 
                 # Get trading days for this symbol's range
                 symbol_sessions = calendar.sessions_in_range(symbol_start, symbol_end)

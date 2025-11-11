@@ -312,8 +312,15 @@ class CustomSQLiteLoader(PipelineLoader):
 
             # Try to convert column to numeric if it looks like numbers
             # This handles cases where SQLite returns numeric values as strings
+            # BUT skip conversion for text/categorical columns
             try:
-                df[col_name] = pd.to_numeric(df[col_name], errors='coerce')
+                # Check if the column looks numeric by trying to convert
+                # If successful and not all NaN, it's numeric
+                converted = pd.to_numeric(df[col_name], errors='coerce')
+                # Only use conversion if at least some values converted successfully
+                if not converted.isna().all():
+                    df[col_name] = converted
+                # Otherwise keep original (for text columns like Sector)
             except:
                 pass  # Keep original if conversion fails
 

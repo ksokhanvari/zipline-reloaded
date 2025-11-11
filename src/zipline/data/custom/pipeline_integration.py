@@ -321,9 +321,14 @@ class CustomSQLiteLoader(PipelineLoader):
             if col_dtype in (np.float64, np.float32, np.int64, np.int32):
                 # This column should be numeric, force conversion
                 try:
+                    original_dtype = df[col_name].dtype
                     df[col_name] = pd.to_numeric(df[col_name], errors='coerce')
+                    log.warning(
+                        f"DEBUG: Converted column '{col_name}' from {original_dtype} to {df[col_name].dtype}. "
+                        f"Sample values: {df[col_name].head(3).tolist()}"
+                    )
                 except Exception as e:
-                    log.warning(f"Could not convert column '{col_name}' to numeric: {e}")
+                    log.error(f"Could not convert column '{col_name}' to numeric: {e}")
             # else: keep as-is for text/object columns
 
             # Create a pivot table
@@ -335,6 +340,9 @@ class CustomSQLiteLoader(PipelineLoader):
 
             # Convert to numpy array
             arr = reindexed.values
+
+            # Log array dtype for debugging
+            log.warning(f"DEBUG: Column '{col_name}' final array dtype: {arr.dtype}, shape: {arr.shape}, sample: {arr.flatten()[:3]}")
 
             result[col_name] = arr
 

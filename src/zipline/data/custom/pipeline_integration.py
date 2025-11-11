@@ -192,7 +192,27 @@ class CustomSQLiteLoader(PipelineLoader):
                 )
             else:
                 # Ensure correct dtype
-                col_data = col_data.astype(column.dtype)
+                try:
+                    # For numeric dtypes, use pd.to_numeric to handle string conversions
+                    if column.dtype in (np.float64, np.float32, np.int64, np.int32):
+                        # Flatten, convert, then reshape
+                        flat_data = col_data.flatten()
+                        flat_data = pd.to_numeric(flat_data, errors='coerce')
+                        col_data = flat_data.reshape(col_data.shape)
+
+                    # Now convert to the target dtype
+                    col_data = col_data.astype(column.dtype)
+                except Exception as e:
+                    log.error(
+                        f"Error converting column '{column.name}' to {column.dtype}: {e}. "
+                        f"Sample values: {col_data.flatten()[:5]}"
+                    )
+                    # Fall back to creating an array of missing values
+                    col_data = np.full(
+                        (len(dates), len(sids)),
+                        column.missing_value,
+                        dtype=column.dtype
+                    )
 
             # Create AdjustedArray
             # AdjustedArrays allow for point-in-time adjustments (splits, etc.)
@@ -289,6 +309,13 @@ class CustomSQLiteLoader(PipelineLoader):
             if col_name not in df.columns:
                 log.warning(f"Column '{col_name}' not in query results")
                 continue
+
+            # Try to convert column to numeric if it looks like numbers
+            # This handles cases where SQLite returns numeric values as strings
+            try:
+                df[col_name] = pd.to_numeric(df[col_name], errors='ignore')
+            except:
+                pass  # Keep original if conversion fails
 
             # Create a pivot table
             pivot = df.pivot(index='Date', columns='Sid', values=col_name)

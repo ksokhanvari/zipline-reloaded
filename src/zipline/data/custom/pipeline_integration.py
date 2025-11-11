@@ -227,6 +227,17 @@ class CustomSQLiteLoader(PipelineLoader):
                         dtype=column.dtype
                     )
 
+            # Final verification before creating AdjustedArray
+            log.warning(
+                f"Creating AdjustedArray for {column.name}: "
+                f"dtype={col_data.dtype}, shape={col_data.shape}, "
+                f"expected_dtype={column.dtype}"
+            )
+            if col_data.dtype != column.dtype:
+                log.error(
+                    f"DTYPE MISMATCH: {column.name} has {col_data.dtype} but expected {column.dtype}!"
+                )
+
             # Create AdjustedArray
             # AdjustedArrays allow for point-in-time adjustments (splits, etc.)
             # For custom data, we typically don't have adjustments
@@ -294,10 +305,19 @@ class CustomSQLiteLoader(PipelineLoader):
         try:
             df = pd.read_sql_query(sql, conn, params=params)
 
-            log.debug(
-                f"Loaded {len(df)} rows for {len(column_names)} columns "
+            log.warning(
+                f"SQL query returned {len(df)} rows for {len(column_names)} columns "
                 f"from {self.db_code} database"
             )
+
+            # Log the dtypes that pandas assigned when reading from SQLite
+            if len(df) > 0:
+                log.warning(f"Raw DataFrame dtypes from SQLite:")
+                for col in column_names:
+                    if col in df.columns:
+                        sample_vals = df[col].head(3).tolist()
+                        sample_types = [type(v).__name__ for v in sample_vals]
+                        log.warning(f"  {col}: dtype={df[col].dtype}, sample={sample_vals}, types={sample_types}")
 
             if len(df) == 0:
                 log.warning(
@@ -377,8 +397,34 @@ class CustomSQLiteLoader(PipelineLoader):
                     # Create array of NaN with correct dtype as fallback
                     arr = np.full(arr.shape, np.nan, dtype=col_dtype)
 
-            # Log array dtype for debugging
-            log.warning(f"DEBUG: Column '{col_name}' final array dtype: {arr.dtype}, shape: {arr.shape}, sample: {arr.flatten()[:3]}")
+            # Comprehensive type checking for debugging
+            flat = arr.flatten()
+            log.warning(f"DEBUG: Column '{col_name}' array dtype: {arr.dtype}, shape: {arr.shape}")
+
+            # Check if we have mixed types (the root cause of string/float comparison errors)
+            if arr.dtype == object:
+                types_found = set(type(x).__name__ for x in flat[:100])  # Sample first 100 elements
+                log.warning(f"  Object array contains types: {types_found}")
+
+                # Count strings vs numbers
+                str_count = sum(1 for x in flat if isinstance(x, str))
+                num_count = sum(1 for x in flat if isinstance(x, (int, float)) and not isinstance(x, bool))
+                none_count = sum(1 for x in flat if x is None or (isinstance(x, float) and np.isnan(x)))
+                log.warning(f"  Breakdown: {str_count} strings, {num_count} numbers, {none_count} NaN/None")
+
+                # If this is supposed to be numeric, we have a problem!
+                if col_dtype in (np.float64, np.float32, np.int64, np.int32):
+                    log.error(f"  ERROR: Numeric column '{col_name}' has object dtype with mixed types!")
+                    log.error(f"  Sample values: {flat[:10].tolist()}")
+            else:
+                # For numeric arrays, show non-NaN values
+                if arr.dtype in (np.float64, np.float32):
+                    non_nan_mask = ~np.isnan(flat)
+                    non_nan_count = non_nan_mask.sum()
+                    non_nan_sample = flat[non_nan_mask][:5].tolist() if non_nan_count > 0 else []
+                    log.warning(f"  Non-NaN count: {non_nan_count}, sample: {non_nan_sample}")
+                else:
+                    log.warning(f"  Sample values: {flat[:5].tolist()}")
 
             result[col_name] = arr
 

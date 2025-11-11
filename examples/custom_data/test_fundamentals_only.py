@@ -12,6 +12,7 @@ from zipline.pipeline import Pipeline
 from zipline.pipeline.filters import StaticAssets
 from zipline.data.bundles import load as load_bundle
 from zipline.pipeline.data.db import Database, Column
+from zipline.data.custom import CustomSQLiteLoader
 
 
 # Define Fundamentals database
@@ -27,6 +28,43 @@ class Fundamentals(Database):
     EPS = Column(float)
     CurrentRatio = Column(float)
 
+
+# Set up custom loader
+def setup_custom_loader():
+    """Set up custom loader for fundamentals data"""
+
+    class LoaderDict(dict):
+        def get(self, key, default=None):
+            # First try exact match
+            if key in self:
+                return self[key]
+
+            # Match by dataset name and column name (ignoring domain)
+            if hasattr(key, 'dataset') and hasattr(key, 'name'):
+                key_dataset_name = str(key.dataset).split('<')[0]
+                key_col_name = key.name
+
+                for registered_col, loader in self.items():
+                    if hasattr(registered_col, 'dataset') and hasattr(registered_col, 'name'):
+                        reg_dataset_name = str(registered_col.dataset).split('<')[0]
+                        reg_col_name = registered_col.name
+
+                        if key_dataset_name == reg_dataset_name and key_col_name == reg_col_name:
+                            return loader
+
+            raise KeyError(key)
+
+    custom_loader_dict = LoaderDict()
+    loader = CustomSQLiteLoader("fundamentals")
+
+    # Register all Fundamentals columns
+    for col_name in ['Revenue', 'NetIncome', 'ROE', 'PERatio', 'DebtToEquity', 'EPS', 'CurrentRatio']:
+        col = getattr(Fundamentals, col_name)
+        custom_loader_dict[col] = loader
+        print(f"  Registered: {col_name}")
+
+    print(f"✓ Custom loader configured with {len(custom_loader_dict)} columns")
+    return custom_loader_dict
 
 def make_pipeline():
     """Create a simple pipeline with ONLY fundamentals data (no EquityPricing)"""
@@ -97,6 +135,10 @@ if __name__ == '__main__':
     print("Testing if fundamentals data works without EquityPricing")
     print()
 
+    print("Setting up custom loader...")
+    custom_loader = setup_custom_loader()
+    print()
+
     try:
         result = run_algorithm(
             start=pd.Timestamp('2023-06-01'),
@@ -106,6 +148,7 @@ if __name__ == '__main__':
             before_trading_start=before_trading_start,
             capital_base=100000.0,
             bundle='sharadar',
+            custom_loader=custom_loader,
         )
 
         print()

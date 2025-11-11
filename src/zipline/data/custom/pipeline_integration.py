@@ -313,7 +313,7 @@ class CustomSQLiteLoader(PipelineLoader):
             # Try to convert column to numeric if it looks like numbers
             # This handles cases where SQLite returns numeric values as strings
             try:
-                df[col_name] = pd.to_numeric(df[col_name], errors='ignore')
+                df[col_name] = pd.to_numeric(df[col_name], errors='coerce')
             except:
                 pass  # Keep original if conversion fails
 

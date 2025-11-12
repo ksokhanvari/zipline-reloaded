@@ -59,9 +59,8 @@ def _setup_custom_loaders(algo_module):
     try:
         from zipline.pipeline.data.db import Database
         from zipline.pipeline.data.dataset import BoundColumn
-    except ImportError as e:
+    except ImportError:
         # Database class not available, no custom loaders needed
-        print(f"  Database class not available: {e}")
         return None
 
     # Use a custom dict that matches columns by dataset and name
@@ -93,7 +92,6 @@ def _setup_custom_loaders(algo_module):
 
                         # Match by dataset name and column name
                         if key_dataset_name == reg_dataset_name and key_col_name == reg_col_name:
-                            print(f"    Matched {key} -> {registered_col} (loader)")
                             return loader
 
             # No match found
@@ -102,7 +100,6 @@ def _setup_custom_loaders(algo_module):
     custom_loader_dict = LoaderDict()
 
     # Scan module for Database subclasses
-    print(f"  Scanning algorithm module for Database classes...")
     database_classes = []
     for attr_name in dir(algo_module):
         try:
@@ -118,16 +115,11 @@ def _setup_custom_loaders(algo_module):
         except (TypeError, AttributeError):
             continue
 
-    print(f"  Found {len(database_classes)} Database class(es)")
-
     for attr_name, attr in database_classes:
         # Get the database CODE
         code = getattr(attr, 'CODE', None)
         if not code:
-            print(f"  Warning: {attr_name} has no CODE attribute, skipping")
             continue
-
-        print(f"  Found custom database: {attr_name} (code: {code})")
 
         # Create a CustomSQLiteLoader for this database
         loader = CustomSQLiteLoader(code)
@@ -135,7 +127,6 @@ def _setup_custom_loaders(algo_module):
         # Scan the Database class directly for BoundColumn instances
         # The metaclass copies these from the dataset_class, so they're the actual
         # columns referenced in the algorithm code
-        column_count = 0
         for col_name in dir(attr):
             # Skip private/special attributes and class attributes
             if col_name.startswith('_') or col_name in ('CODE', 'LOOKBACK_WINDOW'):
@@ -154,17 +145,12 @@ def _setup_custom_loaders(algo_module):
 
                 if is_bound_column:
                     custom_loader_dict[col] = loader
-                    column_count += 1
-                    print(f"    - Registered: {col_name} = {col}")
-            except (AttributeError, TypeError) as e:
+            except (AttributeError, TypeError):
                 continue
-        print(f"    Total: {column_count} columns registered from {attr_name}")
 
     if custom_loader_dict:
-        print(f"  Total custom columns registered: {len(custom_loader_dict)}")
         return custom_loader_dict
     else:
-        print(f"  No custom columns found to register")
         return None
 
 

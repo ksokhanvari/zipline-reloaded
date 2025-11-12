@@ -734,25 +734,6 @@ def sharadar_bundle(
         # Add sid to pricing data
         all_pricing_data['sid'] = all_pricing_data['ticker'].map(symbol_to_sid)
 
-        # DEBUG: Check SID mapping
-        total_rows = len(all_pricing_data)
-        unmapped_rows = all_pricing_data['sid'].isna().sum()
-        unique_sids = all_pricing_data['sid'].nunique()
-        print(f"   DEBUG: Total rows in all_pricing_data: {total_rows:,}")
-        print(f"   DEBUG: Rows with mapped SID: {total_rows - unmapped_rows:,}")
-        print(f"   DEBUG: Rows with unmapped SID (NaN): {unmapped_rows:,}")
-        print(f"   DEBUG: Unique SIDs: {unique_sids}")
-
-        # Sample some specific tickers for debugging
-        sample_tickers = ['SPY', 'AAPL', 'MSFT']
-        for ticker in sample_tickers:
-            if ticker in symbol_to_sid:
-                sid = symbol_to_sid[ticker]
-                count = len(all_pricing_data[all_pricing_data['ticker'] == ticker])
-                print(f"   DEBUG: {ticker} -> SID {sid}, {count:,} rows")
-            else:
-                print(f"   DEBUG: {ticker} not in symbol_to_sid mapping")
-
         # Prepare metadata for writer: set sid as index
         # The asset writer expects sid as the DataFrame index
         if 'sid' in metadata.columns:
@@ -785,9 +766,6 @@ def sharadar_bundle(
 
         def data_generator():
             """Generator that yields (sid, dataframe) for each symbol"""
-            total_sids = 0
-            total_rows_yielded = 0
-
             for sid in sorted(all_pricing_data['sid'].unique()):
                 if pd.isna(sid):
                     continue  # Skip any unmapped tickers
@@ -854,16 +832,7 @@ def sharadar_bundle(
                 # Drop any remaining NaN rows (at the start before first real data)
                 symbol_data = symbol_data.dropna()
 
-                total_sids += 1
-                total_rows_yielded += len(symbol_data)
-
-                # DEBUG: Print first few assets to see what's being written
-                if total_sids <= 5:
-                    print(f"   DEBUG: Yielding SID {int(sid)}, {len(symbol_data)} rows, date range: {symbol_data.index.min().date()} to {symbol_data.index.max().date()}")
-
                 yield int(sid), symbol_data
-
-            print(f"   DEBUG: Total assets yielded: {total_sids}, Total rows: {total_rows_yielded:,}")
 
         daily_bar_writer.write(data_generator(), show_progress=show_progress)
 

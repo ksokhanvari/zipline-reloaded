@@ -482,6 +482,12 @@ def sharadar_bundle(
                         col: existing_table[col][:] for col in ['open', 'high', 'low', 'close', 'volume', 'day', 'id']
                     })
 
+                    # CRITICAL: Zipline stores OHLC prices as uint32 multiplied by 1000
+                    # (see BcolzDailyBarWriter.to_ctable in bcolz_daily_bars.py line 342)
+                    # We must divide by 1000 to get actual prices
+                    for price_col in ['open', 'high', 'low', 'close']:
+                        existing_data[price_col] = existing_data[price_col] / 1000.0
+
                     # Convert day (uint32 Unix timestamp in SECONDS) to date
                     existing_data['date'] = pd.to_datetime(existing_data['day'], unit='s')
                     existing_data['sid'] = existing_data['id']

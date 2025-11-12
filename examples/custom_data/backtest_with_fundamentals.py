@@ -65,7 +65,7 @@ class CustomFundamentals(Database):
     Custom fundamentals database.
 
     This approach is cleaner than make_custom_dataset_class() and allows
-    direct usage like: CustomCustomFundamentals.ROE.latest
+    direct usage like: CustomFundamentals.ROE.latest
     """
 
     CODE = "fundamentals"  # Must match your database code

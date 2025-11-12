@@ -117,10 +117,10 @@ class QualityScore(CustomFactor):
     window_length = 1
 
     def compute(self, today, assets, out, roe, pe, debt):
-        # Get latest values (window_length=1, so just index 0)
-        roe_latest = roe[0]
-        pe_latest = pe[0]
-        debt_latest = debt[0]
+        # Get latest values - use [-1] for most recent data
+        roe_latest = roe[-1]
+        pe_latest = pe[-1]
+        debt_latest = debt[-1]
 
         # Defensive: ensure we have numeric arrays
         if roe_latest.dtype == object or pe_latest.dtype == object or debt_latest.dtype == object:
@@ -165,8 +165,8 @@ class ProfitMargin(CustomFactor):
     window_length = 1
 
     def compute(self, today, assets, out, net_income, revenue):
-        latest_income = net_income[0]
-        latest_revenue = revenue[0]
+        latest_income = net_income[-1]
+        latest_revenue = revenue[-1]
 
         # Defensive: ensure we have numeric arrays
         if latest_income.dtype == object or latest_revenue.dtype == object:

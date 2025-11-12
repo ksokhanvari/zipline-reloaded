@@ -190,10 +190,10 @@ class QualityScore(CustomFactor):
     window_length = 1
 
     def compute(self, today, assets, out, roe, pe, debt):
-        # Normalize metrics
-        roe_score = (roe[0] - np.nanmin(roe[0])) / (np.nanmax(roe[0]) - np.nanmin(roe[0]))
-        pe_score = 1 - ((pe[0] - np.nanmin(pe[0])) / (np.nanmax(pe[0]) - np.nanmin(pe[0])))
-        debt_score = 1 - ((debt[0] - np.nanmin(debt[0])) / (np.nanmax(debt[0]) - np.nanmin(debt[0])))
+        # Normalize metrics - use [-1] for most recent data
+        roe_score = (roe[-1] - np.nanmin(roe[-1])) / (np.nanmax(roe[-1]) - np.nanmin(roe[-1]))
+        pe_score = 1 - ((pe[-1] - np.nanmin(pe[-1])) / (np.nanmax(pe[-1]) - np.nanmin(pe[-1])))
+        debt_score = 1 - ((debt[-1] - np.nanmin(debt[-1])) / (np.nanmax(debt[-1]) - np.nanmin(debt[-1])))
 
         out[:] = (roe_score + pe_score + debt_score) / 3.0
 

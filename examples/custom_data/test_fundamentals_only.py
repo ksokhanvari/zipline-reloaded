@@ -19,8 +19,8 @@ from zipline.data.custom import CustomSQLiteLoader
 ensure_bundles_registered()
 
 
-# Define Fundamentals database
-class Fundamentals(Database):
+# Define CustomFundamentals database
+class CustomFundamentals(Database):
     CODE = "fundamentals"
     LOOKBACK_WINDOW = 1
 
@@ -61,9 +61,9 @@ def setup_custom_loader():
     custom_loader_dict = LoaderDict()
     loader = CustomSQLiteLoader("fundamentals")
 
-    # Register all Fundamentals columns
+    # Register all CustomFundamentals columns
     for col_name in ['Revenue', 'NetIncome', 'ROE', 'PERatio', 'DebtToEquity', 'EPS', 'CurrentRatio']:
-        col = getattr(Fundamentals, col_name)
+        col = getattr(CustomFundamentals, col_name)
         custom_loader_dict[col] = loader
         print(f"  Registered: {col_name}")
 
@@ -92,8 +92,8 @@ def make_pipeline():
     base_universe = StaticAssets(universe_assets)
 
     # Get fundamental metrics
-    roe = Fundamentals.ROE.latest
-    pe = Fundamentals.PERatio.latest
+    roe = CustomFundamentals.ROE.latest
+    pe = CustomFundamentals.PERatio.latest
 
     # Simple filter using ONLY fundamentals
     high_roe = (roe > 5.0)
@@ -157,7 +157,7 @@ if __name__ == '__main__':
 
         print()
         print("=" * 80)
-        print("✓ TEST PASSED - Fundamentals data works!")
+        print("✓ TEST PASSED - CustomFundamentals data works!")
         print("=" * 80)
 
     except Exception as e:

@@ -60,12 +60,12 @@ INITIAL_CAPITAL = 100000.0
 from zipline.pipeline.data.db import Database, Column
 
 
-class Fundamentals(Database):
+class CustomFundamentals(Database):
     """
     Custom fundamentals database.
 
     This approach is cleaner than make_custom_dataset_class() and allows
-    direct usage like: Fundamentals.ROE.latest
+    direct usage like: CustomCustomFundamentals.ROE.latest
     """
 
     CODE = "fundamentals"  # Must match your database code
@@ -94,7 +94,7 @@ class Fundamentals(Database):
     Sector = Column(str)
 
 
-print("✓ Fundamentals Database class defined")
+print("✓ CustomFundamentals Database class defined")
 
 # ============================================================================
 # CUSTOM FACTORS
@@ -110,9 +110,9 @@ class QualityScore(CustomFactor):
     Returns a normalized score where higher = better quality.
     """
     inputs = [
-        Fundamentals.ROE,
-        Fundamentals.PERatio,
-        Fundamentals.DebtToEquity,
+        CustomFundamentals.ROE,
+        CustomFundamentals.PERatio,
+        CustomFundamentals.DebtToEquity,
     ]
     window_length = 1
 
@@ -159,8 +159,8 @@ class QualityScore(CustomFactor):
 class ProfitMargin(CustomFactor):
     """Calculate profit margin: (Net Income / Revenue) * 100"""
     inputs = [
-        Fundamentals.NetIncome,
-        Fundamentals.Revenue,
+        CustomFundamentals.NetIncome,
+        CustomFundamentals.Revenue,
     ]
     window_length = 1
 
@@ -214,12 +214,12 @@ def make_pipeline():
     base_universe = StaticAssets(universe_assets)
 
     # Get fundamental metrics from custom database
-    roe = Fundamentals.ROE.latest
-    pe_ratio = Fundamentals.PERatio.latest
-    debt_to_equity = Fundamentals.DebtToEquity.latest
-    eps = Fundamentals.EPS.latest
-    current_ratio = Fundamentals.CurrentRatio.latest
-    sector = Fundamentals.Sector.latest
+    roe = CustomFundamentals.ROE.latest
+    pe_ratio = CustomFundamentals.PERatio.latest
+    debt_to_equity = CustomFundamentals.DebtToEquity.latest
+    eps = CustomFundamentals.EPS.latest
+    current_ratio = CustomFundamentals.CurrentRatio.latest
+    sector = CustomFundamentals.Sector.latest
 
     # Calculate derived metrics
     quality_score = QualityScore()

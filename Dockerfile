@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.4
 FROM python:3.11-slim
 
 LABEL maintainer="zipline-reloaded"
@@ -23,14 +24,20 @@ RUN apt-get update && apt-get install -y \
 
 # Copy requirements first for better caching
 COPY requirements*.txt pyproject.toml setup.py ./
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel cython
+
+# Use BuildKit cache mount for pip (faster rebuilds)
+# If BuildKit is not available, falls back to regular pip cache
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --upgrade pip setuptools wheel cython
 
 # Install bcolz-zipline separately with verbose output
-RUN pip install --no-cache-dir bcolz-zipline --verbose || \
-    pip install --no-cache-dir --no-build-isolation bcolz-zipline
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install bcolz-zipline --verbose || \
+    pip install --no-build-isolation bcolz-zipline
 
 # Install nasdaq-data-link for Sharadar bundle support
-RUN pip install --no-cache-dir nasdaq-data-link
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install nasdaq-data-link
 
 # Copy the entire project including .git for version detection
 COPY . .
@@ -39,7 +46,8 @@ COPY . .
 ENV SETUPTOOLS_SCM_PRETEND_VERSION=3.1.1
 
 # Install zipline-reloaded in editable mode
-RUN pip install --no-cache-dir -e . --no-build-isolation
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -e . --no-build-isolation
 
 # Create necessary directories
 RUN mkdir -p /notebooks /data /root/.zipline /scripts /root/.jupyter/lab/user-settings/@jupyterlab/notebook-extension
@@ -52,7 +60,8 @@ COPY .jupyter/lab/user-settings/@jupyterlab/notebook-extension/tracker.jupyterla
      /root/.jupyter/lab/user-settings/@jupyterlab/notebook-extension/tracker.jupyterlab-settings
 
 # Set up Jupyter and analysis tools
-RUN pip install --no-cache-dir jupyter jupyterlab notebook matplotlib pyfolio-reloaded alphalens-reloaded
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install jupyter jupyterlab notebook matplotlib pyfolio-reloaded alphalens-reloaded
 
 # Expose Jupyter port
 EXPOSE 8888

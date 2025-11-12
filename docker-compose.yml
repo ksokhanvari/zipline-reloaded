@@ -17,6 +17,8 @@ services:
       - ./scripts:/scripts
       # Mount examples directory
       - ./examples:/app/examples
+      # Mount pip cache for faster rebuilds
+      - pip-cache:/root/.cache/pip
     environment:
       - ZIPLINE_ROOT=/root/.zipline
       - ZIPLINE_CUSTOM_DATA_DIR=/data/custom_databases
@@ -59,6 +61,8 @@ services:
 
 volumes:
   zipline-data:
+    driver: local
+  pip-cache:
     driver: local
 
 networks:

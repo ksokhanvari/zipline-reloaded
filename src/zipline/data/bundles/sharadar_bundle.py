@@ -804,9 +804,11 @@ def sharadar_bundle(
                 # IMPORTANT: We use 'closeadj' to get total return including dividends.
                 # This is the correct approach for backtesting total portfolio performance.
                 #
-                # We rename 'closeadj' to 'close' for Zipline compatibility
+                # For incremental updates: new data has closeadj, existing data has close
+                # Use closeadj where available (not NaN), fall back to close for historical data
                 if 'closeadj' in symbol_data.columns:
-                    symbol_data['close'] = symbol_data['closeadj']
+                    # Use closeadj where not NaN, otherwise keep existing close value
+                    symbol_data['close'] = symbol_data['closeadj'].fillna(symbol_data.get('close', pd.Series(dtype=float)))
                 # If closeadj not available, fall back to close (backward compatibility)
                 elif 'close' not in symbol_data.columns:
                     raise ValueError(f"Neither 'closeadj' nor 'close' column found for sid {sid}")

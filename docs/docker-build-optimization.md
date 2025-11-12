@@ -22,14 +22,39 @@ BuildKit provides advanced caching features and significantly faster builds.
 
 ### Enable BuildKit permanently:
 
+**Automated setup (easiest):**
 ```bash
-# Add to ~/.bashrc or ~/.zshrc
+# Run the setup script (auto-detects your shell)
+./scripts/setup-buildkit.sh
+
+# Then reload your shell config
+source ~/.zshrc  # Mac (zsh)
+# OR
+source ~/.bashrc  # Linux (bash)
+```
+
+**Manual setup for zsh (macOS default):**
+```zsh
+echo 'export DOCKER_BUILDKIT=1' >> ~/.zshrc
+echo 'export COMPOSE_DOCKER_CLI_BUILD=1' >> ~/.zshrc
+source ~/.zshrc
+```
+
+**Manual setup for bash (Linux):**
+```bash
+echo 'export DOCKER_BUILDKIT=1' >> ~/.bashrc
+echo 'export COMPOSE_DOCKER_CLI_BUILD=1' >> ~/.bashrc
+source ~/.bashrc
+```
+
+**Or manually add to your shell config:**
+```bash
+# Add these lines to ~/.zshrc (Mac) or ~/.bashrc (Linux)
 export DOCKER_BUILDKIT=1
 export COMPOSE_DOCKER_CLI_BUILD=1
 ```
 
-Or enable for a single build:
-
+**Or enable for a single build only:**
 ```bash
 DOCKER_BUILDKIT=1 docker-compose build
 ```

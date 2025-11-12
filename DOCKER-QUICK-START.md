@@ -4,17 +4,41 @@
 
 Enable BuildKit for **5-7x faster** rebuilds:
 
+### Option 1: Automated Setup (Easiest)
+
 ```bash
-# Set environment variables (add to ~/.bashrc)
-export DOCKER_BUILDKIT=1
-export COMPOSE_DOCKER_CLI_BUILD=1
+# Run the setup script (auto-detects zsh/bash)
+./scripts/setup-buildkit.sh
+
+# Reload your shell
+source ~/.zshrc  # Mac (zsh)
+# OR
+source ~/.bashrc  # Linux (bash)
 
 # Build with caching
 docker-compose build
-
-# First build: ~15-20 min (downloads everything)
-# Subsequent builds: ~2-3 min (uses cache)
 ```
+
+### Option 2: Manual Setup
+
+```bash
+# For zsh (Mac default):
+echo 'export DOCKER_BUILDKIT=1' >> ~/.zshrc
+echo 'export COMPOSE_DOCKER_CLI_BUILD=1' >> ~/.zshrc
+source ~/.zshrc
+
+# For bash (Linux):
+echo 'export DOCKER_BUILDKIT=1' >> ~/.bashrc
+echo 'export COMPOSE_DOCKER_CLI_BUILD=1' >> ~/.bashrc
+source ~/.bashrc
+
+# Build with caching
+docker-compose build
+```
+
+**Performance:**
+- First build: ~15-20 min (downloads everything)
+- Subsequent builds: ~2-3 min (uses cache) **← 5-7x faster!**
 
 ## What Changed?
 

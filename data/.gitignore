@@ -1,0 +1,15 @@
+# Ignore all CSV files
+*.csv
+
+# Ignore all SQLite databases
+*.sqlite
+*.db
+
+# Ignore all data files
+*.parquet
+*.h5
+*.hdf5
+
+# But track the directory structure
+!.gitignore
+!README.md

@@ -60,9 +60,9 @@ def get_db_filename(db_code: str) -> str:
     Returns
     -------
     str
-        Database filename (e.g., 'quant_fundamentals.sqlite')
+        Database filename (e.g., 'fundamentals.sqlite')
     """
-    return f"quant_{db_code}.sqlite"
+    return f"{db_code}.sqlite"
 
 
 def validate_column_name(name: str) -> bool:

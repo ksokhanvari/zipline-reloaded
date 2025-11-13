@@ -14,6 +14,7 @@ Strategy:
 
 import pandas as pd
 import numpy as np
+from pathlib import Path
 from register_bundles import ensure_bundles_registered
 from zipline import run_algorithm
 from zipline.api import (
@@ -31,11 +32,10 @@ from zipline.pipeline.filters import StaticAssets
 from zipline.pipeline.factors import SimpleMovingAverage
 from zipline.data.bundles import load as load_bundle
 from zipline.assets._assets import Equity
+from zipline.data.custom import CustomSQLiteLoader
 
 # Ensure bundles are registered (needed for make_pipeline which uses load_bundle)
 ensure_bundles_registered()
-
-# CustomSQLiteLoader is automatically used based on Database.CODE
 
 # ============================================================================
 # CONFIGURATION
@@ -48,9 +48,10 @@ REBALANCE_FREQUENCY = 'monthly'  # monthly or weekly
 # Stocks with fundamental data (must match tickers in fundamentals database)
 UNIVERSE_TICKERS = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'TSLA', 'META', 'JPM', 'WMT', 'XOM', 'V']
 
-# Backtest period
-START_DATE = '2023-04-01'
-END_DATE = '2024-01-31'
+# Backtest period (dynamically set to last 3 months)
+# These will be overridden with recent dates
+START_DATE = None  # Will be set dynamically
+END_DATE = None    # Will be set dynamically
 INITIAL_CAPITAL = 100000.0
 
 # ============================================================================
@@ -95,6 +96,51 @@ class CustomFundamentals(Database):
 
 
 print("✓ CustomFundamentals Database class defined")
+
+# ============================================================================
+# CUSTOM LOADER SETUP
+# ============================================================================
+
+def setup_custom_loader():
+    """
+    Set up custom loader for fundamentals data with explicit db_dir.
+    This ensures the loader looks in the correct directory for the database.
+    """
+    class LoaderDict(dict):
+        def get(self, key, default=None):
+            # First try exact match
+            if key in self:
+                return self[key]
+
+            # Match by dataset name and column name (ignoring domain)
+            if hasattr(key, 'dataset') and hasattr(key, 'name'):
+                key_dataset_name = str(key.dataset).split('<')[0]
+                key_col_name = key.name
+
+                for registered_col, loader in self.items():
+                    if hasattr(registered_col, 'dataset') and hasattr(registered_col, 'name'):
+                        reg_dataset_name = str(registered_col.dataset).split('<')[0]
+                        reg_col_name = registered_col.name
+
+                        if key_dataset_name == reg_dataset_name and key_col_name == reg_col_name:
+                            return loader
+
+            raise KeyError(key)
+
+    custom_loader_dict = LoaderDict()
+    # Explicitly set db_dir to the correct location
+    db_dir = Path.home() / '.zipline' / 'data' / 'custom'
+    loader = CustomSQLiteLoader("fundamentals", db_dir=db_dir)
+
+    # Register all CustomFundamentals columns
+    for attr_name in dir(CustomFundamentals):
+        attr = getattr(CustomFundamentals, attr_name)
+        # Check if it's a Column (has dataset attribute)
+        if hasattr(attr, 'dataset'):
+            custom_loader_dict[attr] = loader
+
+    print(f"✓ Custom loader configured with {len(custom_loader_dict)} columns for database at {db_dir}")
+    return custom_loader_dict
 
 # ============================================================================
 # CUSTOM FACTORS
@@ -454,15 +500,26 @@ if __name__ == '__main__':
     print("\nStarting backtest with custom fundamental data...")
     print("="*70)
 
+    # Use recent dates (last 3 months) to match available data
+    end_date = pd.Timestamp.now(tz='UTC').normalize()
+    start_date = (end_date - pd.DateOffset(months=3)).normalize()
+
+    print(f"\nUsing date range: {start_date.date()} to {end_date.date()}")
+
+    # Set up custom loader with explicit db_dir
+    print("\nSetting up custom loader...")
+    custom_loader = setup_custom_loader()
+
     # Run the algorithm
     results = run_algorithm(
-        start=pd.Timestamp(START_DATE, tz='UTC'),
-        end=pd.Timestamp(END_DATE, tz='UTC'),
+        start=start_date,
+        end=end_date,
         initialize=initialize,
         before_trading_start=before_trading_start,
         analyze=analyze,
         capital_base=INITIAL_CAPITAL,
         bundle='sharadar',
+        custom_loader=custom_loader,
     )
 
     print("\n✓ Backtest complete!")

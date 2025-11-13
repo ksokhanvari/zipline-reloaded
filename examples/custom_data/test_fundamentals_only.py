@@ -6,6 +6,7 @@ This helps isolate if the string/float error is from custom data or EquityPricin
 
 import pandas as pd
 import numpy as np
+from pathlib import Path
 from register_bundles import ensure_bundles_registered
 from zipline import run_algorithm
 from zipline.api import attach_pipeline, pipeline_output
@@ -59,7 +60,9 @@ def setup_custom_loader():
             raise KeyError(key)
 
     custom_loader_dict = LoaderDict()
-    loader = CustomSQLiteLoader("fundamentals")
+    # Explicitly set db_dir to the correct location
+    db_dir = Path.home() / '.zipline' / 'data' / 'custom'
+    loader = CustomSQLiteLoader("fundamentals", db_dir=db_dir)
 
     # Register all CustomFundamentals columns
     for col_name in ['Revenue', 'NetIncome', 'ROE', 'PERatio', 'DebtToEquity', 'EPS', 'CurrentRatio']:
@@ -144,9 +147,15 @@ if __name__ == '__main__':
     print()
 
     try:
+        # Use recent dates (last 3 months) to match available data
+        end_date = pd.Timestamp.now(tz='UTC').normalize()
+        start_date = (end_date - pd.DateOffset(months=3)).normalize()
+
+        print(f"Using date range: {start_date.date()} to {end_date.date()}")
+
         result = run_algorithm(
-            start=pd.Timestamp('2023-06-01'),
-            end=pd.Timestamp('2023-06-30'),
+            start=start_date,
+            end=end_date,
             initialize=initialize,
             handle_data=handle_data,
             before_trading_start=before_trading_start,

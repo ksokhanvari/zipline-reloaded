@@ -2,7 +2,7 @@
     "fontFamily": "monospace",
     "fontSize": 13,
     "lineHeight": 1,
-    "theme": "inherit",
+    "theme": "dark",
     "screenReaderMode": false,
     "shutdownOnClose": false,
     "closeOnExit": true,

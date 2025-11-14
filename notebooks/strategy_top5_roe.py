@@ -52,7 +52,7 @@ print("✓ Sharadar bundle registered")
 class CustomFundamentals(Database):
     """Custom Fundamentals database."""
 
-    CODE = "refe-fundamentals"
+    CODE = "fundamentals"  # Must match DATABASE_NAME in load_csv_fundamentals.ipynb
     LOOKBACK_WINDOW = 252
 
     # Key columns for strategy

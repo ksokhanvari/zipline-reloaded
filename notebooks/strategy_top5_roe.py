@@ -297,7 +297,7 @@ if __name__ == '__main__':
     # Run backtest
     # Database contains: 525,972 rows, 3,305 symbols, 2025-03-03 to 2025-11-11
     # NOTE: Adjust these dates to match your actual database coverage
-    start = pd.Timestamp('2020-03-10')  # Start after min date to allow lookback
+    start = pd.Timestamp('2012-03-10')  # Start after min date to allow lookback
     end = pd.Timestamp('2025-11-11')
 
     print("\n" + "=" * 60)

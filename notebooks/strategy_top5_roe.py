@@ -52,7 +52,7 @@ print("✓ Sharadar bundle registered")
 class CustomFundamentals(Database):
     """Custom Fundamentals database."""
 
-    CODE = "fundamentals"
+    CODE = "refe-fundamentals"
     LOOKBACK_WINDOW = 252
 
     # Key columns for strategy

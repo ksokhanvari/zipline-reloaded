@@ -379,6 +379,12 @@ class CustomSQLiteLoader(PipelineLoader):
             # Reindex to match exactly the requested dates and sids
             reindexed = pivot.reindex(index=dates, columns=sids)
 
+            # For object/text columns, replace NaN with empty string BEFORE converting to array
+            # (prevents str/float mixing which breaks Zipline's LabelArray/Categorical)
+            if col_dtype == object:
+                reindexed = reindexed.fillna('')
+                log.warning(f"DEBUG: Filled NaN with '' for text column '{col_name}'")
+
             # Convert to numpy array
             arr = reindexed.values
 
@@ -390,24 +396,10 @@ class CustomSQLiteLoader(PipelineLoader):
                 num_count = sum(1 for x in flat if isinstance(x, (int, float)) and not pd.isna(x))
                 nan_count = sum(1 for x in flat if pd.isna(x))
                 log.warning(
-                    f"DEBUG: Column '{col_name}' array dtype: {arr.dtype}, shape: {arr.shape}\n"
+                    f"DEBUG: Column '{col_name}' after conversion to array:\n"
+                    f"  Array dtype: {arr.dtype}, shape: {arr.shape}\n"
                     f"  Object array contains types: {types}\n"
                     f"  Breakdown: {str_count} strings, {num_count} numbers, {nan_count} NaN/None"
-                )
-
-            # For object/text columns, replace NaN with empty string to avoid mixed types
-            # (prevents str/float mixing which breaks Zipline's LabelArray/Categorical)
-            if col_dtype == object and arr.dtype == object:
-                # Use the same simple, direct approach: DataFrame.fillna('')
-                arr = pd.DataFrame(arr).fillna('').values
-
-                # Debug: Verify NaN replacement worked
-                flat_after = arr.flatten()
-                nan_count_after = sum(1 for x in flat_after if pd.isna(x))
-                str_count_after = sum(1 for x in flat_after if isinstance(x, str))
-                log.warning(
-                    f"DEBUG: After fillna for '{col_name}':\n"
-                    f"  {str_count_after} strings, {nan_count_after} NaN/None remaining"
                 )
 
             # Final safety check: if we got an object array but need numeric, convert it

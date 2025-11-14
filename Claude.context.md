@@ -220,32 +220,53 @@ zipline-reloaded/
        # ... more columns
    ```
 
-2. **Loader Factory Pattern** (Lines 67-95)
+2. **Build Pipeline Loader Map** (Lines 72-120) - **CLEAN APPROACH**
    ```python
-   _loader_cache = {}
+   def build_pipeline_loaders():
+       """
+       Build a proper PipelineLoader map.
+       This is the clean approach - no monkey-patching required!
+       """
+       # Load bundle data
+       bundle_data = load_bundle('sharadar')
 
-   def get_pipeline_loader(column):
-       """Route columns to appropriate loaders."""
-       dataset = column.dataset
+       # Create loaders
+       pricing_loader = USEquityPricingLoader(
+           bundle_data.equity_daily_bar_reader,
+           bundle_data.adjustment_reader
+       )
 
-       # Route custom fundamentals
-       if 'REFEFundamentals' in str(dataset):
-           if cache_key not in _loader_cache:
-               _loader_cache[cache_key] = CustomSQLiteLoader(
-                   db_code=REFEFundamentals.CODE,
-                   db_dir=Path.home() / '.zipline' / 'data' / 'custom'
-               )
-           return _loader_cache[cache_key]
+       db_dir = Path.home() / '.zipline' / 'data' / 'custom'
+       fundamentals_loader = CustomSQLiteLoader(
+           db_code=REFEFundamentals.CODE,
+           db_dir=db_dir
+       )
 
-       # Route pricing data to bundle loader
-       if column in USEquityPricing.columns:
-           if 'pricing' not in _loader_cache:
-               bundle_data = load_bundle('sharadar')
-               _loader_cache['pricing'] = USEquityPricingLoader(...)
-           return _loader_cache['pricing']
+       # Build the loader map
+       custom_loader = {}
+
+       # Map all pricing columns to pricing loader
+       custom_loader[USEquityPricing.close] = pricing_loader
+       custom_loader[USEquityPricing.high] = pricing_loader
+       custom_loader[USEquityPricing.low] = pricing_loader
+       custom_loader[USEquityPricing.open] = pricing_loader
+       custom_loader[USEquityPricing.volume] = pricing_loader
+
+       # Map all fundamental columns to fundamentals loader
+       fundamental_columns = [
+           REFEFundamentals.ReturnOnEquity_SmartEstimat,
+           REFEFundamentals.CompanyMarketCap,
+           REFEFundamentals.GICSSectorName,
+           # ... more columns
+       ]
+
+       for column in fundamental_columns:
+           custom_loader[column] = fundamentals_loader
+
+       return custom_loader
    ```
 
-   **Why this pattern**: Allows mixing custom fundamentals with bundle price data in same pipeline.
+   **Why this pattern**: Maps each column explicitly to its loader. Clean, maintainable, and works across the repo.
 
 3. **Pipeline Definition** (Lines 98-120)
    ```python
@@ -271,21 +292,12 @@ zipline-reloaded/
    - `rebalance()`: Equal-weight top 5 stocks
    - `handle_data()`: Record daily metrics
 
-5. **⭐ Monkey-Patch Pattern** (Lines 213-258)
+5. **⭐ Run Algorithm with Custom Loaders** (Lines 254-280) - **THE CLEAN WAY**
    ```python
-   # Create custom engine with our loader
-   engine = SimplePipelineEngine(
-       get_loader=get_pipeline_loader,
-       asset_finder=bundle_data.asset_finder,
-       default_domain=US_EQUITIES,
-   )
+   # Build pipeline loader map
+   custom_loader = build_pipeline_loaders()
 
-   # Inject into run_algorithm()
-   import zipline.algorithm
-   original_make_engine = zipline.algorithm.SimplePipelineEngine
-   zipline.algorithm.SimplePipelineEngine = lambda *args, **kwargs: engine
-
-   # Run backtest
+   # Run backtest - pass custom_loader parameter!
    results = run_algorithm(
        start=pd.Timestamp('2025-10-01'),  # NO tz parameter!
        end=pd.Timestamp('2025-11-05'),
@@ -295,15 +307,17 @@ zipline-reloaded/
        capital_base=100000,
        data_frequency='daily',
        bundle='sharadar',
+       custom_loader=custom_loader,  # ← THE KEY! No monkey-patching needed!
+       cwd='/notebooks',
    )
-
-   # Restore original
-   zipline.algorithm.SimplePipelineEngine = original_make_engine
    ```
 
-   **Why monkey-patching**: `run_algorithm()` creates its own SimplePipelineEngine internally,
-   which doesn't know about our custom loaders. Monkey-patching is the cleanest way to inject
-   our pre-configured engine without modifying Zipline core code.
+   **Why this is the proper approach**:
+   - `run_algorithm()` accepts a `custom_loader` parameter for exactly this purpose
+   - No monkey-patching of Zipline internals
+   - Clean, maintainable, and follows Zipline best practices
+   - Works consistently across the entire repository
+   - Can be used for any custom data source (not just fundamentals)
 
 **Key Fixes**:
 - **Commit b120aec**: Removed `tz='UTC'` from timestamps (breaks backtests)
@@ -836,26 +850,38 @@ results = run_algorithm(...)  # ✓ Handles setup automatically
 
 ### Issue 6: "KeyError: 'roe_strategy'" (Pipeline Cache)
 
-**Symptoms**: `pipeline_output('roe_strategy')` fails with KeyError.
+**Symptoms**: `pipeline_output('roe_strategy')` fails with KeyError when using custom fundamentals.
 
-**Root Cause**: `run_algorithm()` creates its own SimplePipelineEngine, doesn't know about custom loaders.
+**Root Cause**: `run_algorithm()` creates its own SimplePipelineEngine, doesn't know about custom loaders by default.
 
-**Solution**: Monkey-patch pattern (see `strategy_top5_roe.py`):
+**Solution**: Use the `custom_loader` parameter (see `strategy_top5_roe.py`):
 ```python
-# Create custom engine
-engine = SimplePipelineEngine(get_loader=get_pipeline_loader, ...)
+# Build proper loader map
+def build_pipeline_loaders():
+    bundle_data = load_bundle('sharadar')
 
-# Inject into run_algorithm
-import zipline.algorithm
-zipline.algorithm.SimplePipelineEngine = lambda *args, **kwargs: engine
+    pricing_loader = USEquityPricingLoader(...)
+    fundamentals_loader = CustomSQLiteLoader(...)
 
-results = run_algorithm(...)
+    custom_loader = {}
+    custom_loader[USEquityPricing.close] = pricing_loader
+    # ... map all columns
+    custom_loader[REFEFundamentals.ReturnOnEquity_SmartEstimat] = fundamentals_loader
+    # ... map all fundamentals
 
-# Restore
-zipline.algorithm.SimplePipelineEngine = original_make_engine
+    return custom_loader
+
+# Pass to run_algorithm
+custom_loader = build_pipeline_loaders()
+results = run_algorithm(
+    ...,
+    custom_loader=custom_loader  # ← Clean solution!
+)
 ```
 
-**Commit**: 9b5de06
+**Commits**:
+- 9b5de06: Initial monkey-patch solution
+- 5235d38: Refactored to use clean custom_loader approach
 
 ---
 
@@ -904,13 +930,34 @@ zipline.algorithm.SimplePipelineEngine = original_make_engine
 - Removed `tz='UTC'` from timestamps in strategy file
 - Updated date range to 2025-10-01 → 2025-11-05
 
+**11. 21b7b6a** - `docs: Add comprehensive architecture documentation for LLM assistants`
+- Created `Claude.context.md` (1,141 lines)
+- Complete architecture, file structure, and data flow documentation
+- All fixes, issues, and solutions documented
+
+**12. bd93b2e** - `feat: Add Sharadar bundle registration for Jupyter notebook compatibility`
+- Added bundle registration to strategy file
+- Ensures bundle availability in notebook environments
+
+**13. 71b556e** - `fix: Set working directory to /notebooks for strategy execution`
+- Added `cwd='/notebooks'` parameter to run_algorithm()
+- Ensures correct path context during backtest execution
+
+**14. 5235d38** - `refactor: Replace monkey-patching with clean custom_loader approach`
+- Build proper PipelineLoader map in `build_pipeline_loaders()`
+- Map each column (pricing + fundamentals) to appropriate loader
+- Pass `custom_loader` parameter to `run_algorithm()`
+- **This is the PROPER, clean solution - no monkey-patching!**
+- Follows Zipline best practices and works across the repo
+
 ### Key Learnings from Development
 
 1. **Text columns require special handling**: Empty string ('') not NaN or None
 2. **Simplicity wins**: User suggestions (e.g., `reset_index(names=[...])`) often cleaner than complex solutions
-3. **Monkey-patching is acceptable**: For injecting custom engines into run_algorithm()
+3. **Use custom_loader parameter**: `run_algorithm()` has built-in support for custom loaders - no monkey-patching needed!
 4. **Timezone handling is subtle**: Let Zipline handle TZ internally
 5. **Logging cleanup matters**: Verbose debug output is helpful during development, noise in production
+6. **Follow Zipline patterns**: Check existing notebooks for proper implementation patterns before reinventing
 
 ---
 
@@ -1080,30 +1127,50 @@ class MyFundamentals(Database):
     Sector = Column(str)
 ```
 
-**Loader Factory**:
+**Build Custom Loader Map** (PROPER APPROACH):
 ```python
-def get_pipeline_loader(column):
-    if 'MyFundamentals' in str(column.dataset):
-        return CustomSQLiteLoader(
-            db_code=MyFundamentals.CODE,
-            db_dir=Path.home() / '.zipline' / 'data' / 'custom'
-        )
-    if column in USEquityPricing.columns:
-        bundle_data = load_bundle('sharadar')
-        return USEquityPricingLoader(
-            bundle_data.equity_daily_bar_reader,
-            bundle_data.adjustment_reader
-        )
-    raise ValueError(f"No loader for {column}")
+def build_pipeline_loaders():
+    """Build proper PipelineLoader map - no monkey-patching needed!"""
+    bundle_data = load_bundle('sharadar')
+
+    # Create loaders
+    pricing_loader = USEquityPricingLoader(
+        bundle_data.equity_daily_bar_reader,
+        bundle_data.adjustment_reader
+    )
+    fundamentals_loader = CustomSQLiteLoader(
+        db_code=MyFundamentals.CODE,
+        db_dir=Path.home() / '.zipline' / 'data' / 'custom'
+    )
+
+    # Map columns to loaders
+    custom_loader = {}
+    custom_loader[USEquityPricing.close] = pricing_loader
+    custom_loader[USEquityPricing.volume] = pricing_loader
+    # ... map all pricing columns
+
+    custom_loader[MyFundamentals.Revenue] = fundamentals_loader
+    custom_loader[MyFundamentals.Sector] = fundamentals_loader
+    # ... map all fundamental columns
+
+    return custom_loader
 ```
 
-**Engine Creation**:
+**Run Algorithm with Custom Loaders**:
 ```python
-bundle_data = load_bundle('sharadar')
-engine = SimplePipelineEngine(
-    get_loader=get_pipeline_loader,
-    asset_finder=bundle_data.asset_finder,
-    default_domain=US_EQUITIES,
+# Build loader map
+custom_loader = build_pipeline_loaders()
+
+# Run backtest
+results = run_algorithm(
+    start=start,
+    end=end,
+    initialize=initialize,
+    before_trading_start=before_trading_start,
+    handle_data=handle_data,
+    capital_base=100000,
+    bundle='sharadar',
+    custom_loader=custom_loader,  # ← Pass the loader map!
 )
 ```
 
@@ -1121,10 +1188,11 @@ This custom fundamentals system enables seamless integration of third-party fund
 
 **Key Success Factors**:
 1. Proper text column handling (empty string for missing)
-2. Loader factory pattern for mixing custom + bundle data
-3. Monkey-patch pattern for run_algorithm integration
+2. Custom loader map building (explicit column → loader mapping)
+3. Using `custom_loader` parameter in run_algorithm() (no monkey-patching!)
 4. Timezone-naive timestamps
 5. Clean logging for production use
+6. Following Zipline best practices and existing patterns
 
 **Next Steps for New Sessions**:
 - Review this document for full context
@@ -1135,7 +1203,10 @@ This custom fundamentals system enables seamless integration of third-party fund
 
 ---
 
-**Document Version**: 1.0
-**Last Updated**: 2025-11-14
+**Document Version**: 2.0
+**Last Updated**: 2025-11-14 (Updated with clean custom_loader approach)
 **Maintainer**: Auto-generated from session context
 **Related**: CLAUDE.md, notebooks/load_csv_fundamentals.ipynb, notebooks/strategy_top5_roe.py
+
+**Important**: This documentation now reflects the PROPER approach using `custom_loader` parameter,
+not the previous monkey-patching approach. See commit 5235d38 for the clean implementation.

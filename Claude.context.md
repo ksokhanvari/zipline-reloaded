@@ -2,9 +2,11 @@
 
 ## Overview
 
-This document provides comprehensive documentation of the custom fundamentals data integration system in Zipline Reloaded. This system enables users to load custom fundamental data (e.g., REFE fundamentals) into SQLite databases and use them seamlessly in Zipline Pipeline for algorithmic trading strategies.
+This document provides comprehensive documentation of the custom fundamentals data integration system in Zipline Reloaded. This system enables users to load custom fundamental data into SQLite databases and use them seamlessly in Zipline Pipeline for algorithmic trading strategies.
 
 **Target Audience**: LLM coding assistants, new developers, and maintainers who need to understand the complete architecture and implementation details.
+
+**Docker Environment**: This setup is designed to run in Docker containers with paths configured for `/root/.zipline/data/custom` and `/notebooks`.
 
 ---
 
@@ -40,7 +42,7 @@ This document provides comprehensive documentation of the custom fundamentals da
            │
            ▼
 ┌─────────────────────┐
-│  SQLite Database    │  ← ~/.zipline/data/custom/refe-fundamentals.db
+│  SQLite Database    │  ← /root/.zipline/data/custom/refe-fundamentals.sqlite
 │  (Custom Schema)    │     Schema: Price table with Sid, Date, columns
 └──────────┬──────────┘
            │
@@ -58,7 +60,7 @@ This document provides comprehensive documentation of the custom fundamentals da
            │
            ▼
 ┌─────────────────────┐
-│  Database Class     │  ← User-defined (e.g., REFEFundamentals)
+│  Database Class     │  ← User-defined (e.g., CustomFundamentals)
 │  (Dataset)          │     Defines columns with dtype, missing_value
 └──────────┬──────────┘
            │
@@ -176,7 +178,7 @@ zipline-reloaded/
    - Sample queries
 
 7. **Pipeline Setup** (Cells 21-25)
-   - Define `REFEFundamentals` Database class
+   - Define `CustomFundamentals` Database class
    - Implement `get_pipeline_loader()` factory
    - Create SimplePipelineEngine with custom loader
 
@@ -207,10 +209,12 @@ zipline-reloaded/
 
 **Architecture**:
 
-1. **Database Definition** (Lines 44-58)
+1. **Database Definition** (Lines 52-66)
    ```python
-   class REFEFundamentals(Database):
-       CODE = "refe-fundamentals"
+   class CustomFundamentals(Database):
+       """Custom Fundamentals database."""
+
+       CODE = "refe-fundamentals"  # Matches existing database file
        LOOKBACK_WINDOW = 252  # One year of trading days
 
        # Column definitions with proper dtypes
@@ -220,13 +224,43 @@ zipline-reloaded/
        # ... more columns
    ```
 
-2. **Build Pipeline Loader Map** (Lines 72-120) - **CLEAN APPROACH**
+   **Note**: Class renamed to `CustomFundamentals` for clarity, but CODE remains `"refe-fundamentals"` to match existing database file.
+
+2. **Build Pipeline Loader Map with LoaderDict** (Lines 72-156) - **CLEAN APPROACH**
    ```python
    def build_pipeline_loaders():
        """
        Build a proper PipelineLoader map.
        This is the clean approach - no monkey-patching required!
        """
+       # Custom dict that handles domain-aware columns
+       class LoaderDict(dict):
+           """Matches columns by dataset and column name, ignoring domain."""
+           def get(self, key, default=None):
+               # First try exact match
+               if key in self:
+                   return super().__getitem__(key)
+
+               # Fuzzy match by dataset name and column name
+               if hasattr(key, 'dataset') and hasattr(key, 'name'):
+                   key_dataset_name = str(key.dataset).split('<')[0]
+                   key_col_name = key.name
+
+                   for registered_col, loader in self.items():
+                       if hasattr(registered_col, 'dataset') and hasattr(registered_col, 'name'):
+                           reg_dataset_name = str(registered_col.dataset).split('<')[0]
+                           reg_col_name = registered_col.name
+
+                           if key_dataset_name == reg_dataset_name and key_col_name == reg_col_name:
+                               return loader
+               return default
+
+           def __getitem__(self, key):
+               result = self.get(key)
+               if result is None:
+                   raise KeyError(key)
+               return result
+
        # Load bundle data
        bundle_data = load_bundle('sharadar')
 
@@ -236,14 +270,14 @@ zipline-reloaded/
            bundle_data.adjustment_reader
        )
 
-       db_dir = Path.home() / '.zipline' / 'data' / 'custom'
+       db_dir = Path('/root/.zipline/data/custom')  # Docker path
        fundamentals_loader = CustomSQLiteLoader(
-           db_code=REFEFundamentals.CODE,
+           db_code=CustomFundamentals.CODE,
            db_dir=db_dir
        )
 
-       # Build the loader map
-       custom_loader = {}
+       # Build the loader map using LoaderDict
+       custom_loader = LoaderDict()
 
        # Map all pricing columns to pricing loader
        custom_loader[USEquityPricing.close] = pricing_loader
@@ -254,9 +288,9 @@ zipline-reloaded/
 
        # Map all fundamental columns to fundamentals loader
        fundamental_columns = [
-           REFEFundamentals.ReturnOnEquity_SmartEstimat,
-           REFEFundamentals.CompanyMarketCap,
-           REFEFundamentals.GICSSectorName,
+           CustomFundamentals.ReturnOnEquity_SmartEstimat,
+           CustomFundamentals.CompanyMarketCap,
+           CustomFundamentals.GICSSectorName,
            # ... more columns
        ]
 
@@ -266,13 +300,14 @@ zipline-reloaded/
        return custom_loader
    ```
 
-   **Why this pattern**: Maps each column explicitly to its loader. Clean, maintainable, and works across the repo.
+   **Why LoaderDict**: The pipeline engine looks up domain-aware columns (e.g., `USEquityPricing<US_EQUITIES>.close`) but we register non-domain versions (`USEquityPricing.close`). LoaderDict matches by dataset name and column name, ignoring domain suffixes. The `get()` method is critical because the pipeline engine calls `custom_loader.get(column)`, not `custom_loader[column]`.
 
-3. **Pipeline Definition** (Lines 98-120)
+3. **Pipeline Definition** (Lines 166-190)
    ```python
    def make_pipeline():
-       roe = REFEFundamentals.ReturnOnEquity_SmartEstimat.latest
-       market_cap = REFEFundamentals.CompanyMarketCap.latest
+       roe = CustomFundamentals.ReturnOnEquity_SmartEstimat.latest
+       market_cap = CustomFundamentals.CompanyMarketCap.latest
+       sector = CustomFundamentals.GICSSectorName.latest
 
        # Screen: top 100 by market cap
        top_100_by_mcap = market_cap.top(100)
@@ -292,7 +327,7 @@ zipline-reloaded/
    - `rebalance()`: Equal-weight top 5 stocks
    - `handle_data()`: Record daily metrics
 
-5. **⭐ Run Algorithm with Custom Loaders** (Lines 254-280) - **THE CLEAN WAY**
+5. **⭐ Run Algorithm with Custom Loaders** (Lines 293-318) - **THE CLEAN WAY**
    ```python
    # Build pipeline loader map
    custom_loader = build_pipeline_loaders()
@@ -308,7 +343,6 @@ zipline-reloaded/
        data_frequency='daily',
        bundle='sharadar',
        custom_loader=custom_loader,  # ← THE KEY! No monkey-patching needed!
-       cwd='/notebooks',
    )
    ```
 
@@ -319,9 +353,14 @@ zipline-reloaded/
    - Works consistently across the entire repository
    - Can be used for any custom data source (not just fundamentals)
 
+   **Note**: The `cwd` parameter was removed as it's not a valid parameter for `run_algorithm()`
+
 **Key Fixes**:
-- **Commit b120aec**: Removed `tz='UTC'` from timestamps (breaks backtests)
-- **Commit b120aec**: Updated date range to 2025-10-01 → 2025-11-05 (matches available data)
+- **Commit 3ca7ecb2**: Removed invalid `cwd` parameter from `run_algorithm()`
+- **Commit 7fa907e1 & cc80898d**: Added `LoaderDict` class with `get()` method for domain-aware column matching
+- **Commit acabe317**: Renamed `REFEFundamentals` to `CustomFundamentals`, updated paths for Docker
+- **Commit ca183b29**: Changed CODE back to `"refe-fundamentals"` to match existing database file
+- **Commit 0e71f999**: Updated paths from `/home/user/zipline-reloaded/notebooks` to `/notebooks`
 
 ---
 
@@ -446,7 +485,7 @@ df.to_sql('Price', conn, if_exists='replace', index=False)
 
 **Step 2: Database Storage**
 ```
-~/.zipline/data/custom/refe-fundamentals.db
+/root/.zipline/data/custom/refe-fundamentals.db
 │
 └── Price table
     ├── (2025-10-01, sid=1234) → {ROE: 15.5, MarketCap: 1.2e9, Sector: 'Technology'}
@@ -457,8 +496,8 @@ df.to_sql('Price', conn, if_exists='replace', index=False)
 **Step 3: Pipeline Query (strategy)**
 ```python
 # Define pipeline
-roe = REFEFundamentals.ReturnOnEquity_SmartEstimat.latest
-market_cap = REFEFundamentals.CompanyMarketCap.latest
+roe = CustomFundamentals.ReturnOnEquity_SmartEstimat.latest
+market_cap = CustomFundamentals.CompanyMarketCap.latest
 
 top_100 = market_cap.top(100)
 top_5_roe = roe.top(5, mask=top_100)
@@ -624,11 +663,11 @@ _loader_cache = {}
 def get_pipeline_loader(column):
     dataset = column.dataset
 
-    if 'REFEFundamentals' in str(dataset):
-        cache_key = REFEFundamentals.CODE
+    if 'CustomFundamentals' in str(dataset):
+        cache_key = CustomFundamentals.CODE
         if cache_key not in _loader_cache:
             _loader_cache[cache_key] = CustomSQLiteLoader(
-                db_code=REFEFundamentals.CODE,
+                db_code=CustomFundamentals.CODE,
                 db_dir=db_dir
             )
         return _loader_cache[cache_key]
@@ -802,7 +841,7 @@ start = pd.Timestamp('2025-10-01')  # ✓
 1. **Check data exists in database**:
    ```python
    import sqlite3
-   conn = sqlite3.connect('~/.zipline/data/custom/refe-fundamentals.db')
+   conn = sqlite3.connect('/root/.zipline/data/custom/refe-fundamentals.db')
    df = pd.read_sql('SELECT COUNT(*) FROM Price', conn)
    print(df)  # Should show row count
    ```
@@ -866,7 +905,7 @@ def build_pipeline_loaders():
     custom_loader = {}
     custom_loader[USEquityPricing.close] = pricing_loader
     # ... map all columns
-    custom_loader[REFEFundamentals.ReturnOnEquity_SmartEstimat] = fundamentals_loader
+    custom_loader[CustomFundamentals.ReturnOnEquity_SmartEstimat] = fundamentals_loader
     # ... map all fundamentals
 
     return custom_loader
@@ -987,7 +1026,7 @@ pytest tests/zipline/data/test_custom_pipeline.py::test_object_dtype_handling -v
 
 **Example 1: Top N by Single Factor**
 ```python
-roe = REFEFundamentals.ReturnOnEquity_SmartEstimat.latest
+roe = CustomFundamentals.ReturnOnEquity_SmartEstimat.latest
 top_10 = roe.top(10)
 
 pipeline = Pipeline(
@@ -998,7 +1037,7 @@ pipeline = Pipeline(
 
 **Example 2: Sector Filter**
 ```python
-sector = REFEFundamentals.GICSSectorName.latest
+sector = CustomFundamentals.GICSSectorName.latest
 tech_stocks = (sector == 'Technology')
 
 pipeline = Pipeline(
@@ -1009,9 +1048,9 @@ pipeline = Pipeline(
 
 **Example 3: Combined Filters**
 ```python
-roe = REFEFundamentals.ReturnOnEquity_SmartEstimat.latest
-roa = REFEFundamentals.ReturnOnAssets_SmartEstimate.latest
-market_cap = REFEFundamentals.CompanyMarketCap.latest
+roe = CustomFundamentals.ReturnOnEquity_SmartEstimat.latest
+roa = CustomFundamentals.ReturnOnAssets_SmartEstimate.latest
+market_cap = CustomFundamentals.CompanyMarketCap.latest
 
 # Universe: Large caps
 large_cap = market_cap.top(200)
@@ -1030,8 +1069,8 @@ pipeline = Pipeline(
 
 **Example 4: Ranking**
 ```python
-roe = REFEFundamentals.ReturnOnEquity_SmartEstimat.latest
-market_cap = REFEFundamentals.CompanyMarketCap.latest
+roe = CustomFundamentals.ReturnOnEquity_SmartEstimat.latest
+market_cap = CustomFundamentals.CompanyMarketCap.latest
 
 # Rank stocks by ROE within top 500 market cap
 universe = market_cap.top(500)
@@ -1051,7 +1090,7 @@ pipeline = Pipeline(
 **Check Data Loaded Correctly**:
 ```python
 import sqlite3
-conn = sqlite3.connect('~/.zipline/data/custom/refe-fundamentals.db')
+conn = sqlite3.connect('/root/.zipline/data/custom/refe-fundamentals.db')
 
 # Count rows
 pd.read_sql('SELECT COUNT(*) FROM Price', conn)
@@ -1090,20 +1129,20 @@ print(results.head())
 
 ### File Paths
 ```
-~/.zipline/data/custom/                    # Custom database directory
-~/.zipline/data/custom/refe-fundamentals.db  # Database file
+/root/.zipline/data/custom/                    # Custom database directory
+/root/.zipline/data/custom/refe-fundamentals.db  # Database file
 ```
 
 ### Common Commands
 ```bash
 # List databases
-ls ~/.zipline/data/custom/*.db
+ls /root/.zipline/data/custom/*.db
 
 # Check database size
-du -h ~/.zipline/data/custom/refe-fundamentals.db
+du -h /root/.zipline/data/custom/refe-fundamentals.db
 
 # SQLite CLI
-sqlite3 ~/.zipline/data/custom/refe-fundamentals.db
+sqlite3 /root/.zipline/data/custom/refe-fundamentals.db
 ```
 
 ### Import Snippets
@@ -1187,26 +1226,38 @@ This custom fundamentals system enables seamless integration of third-party fund
 - **Production-ready**: Validated through unit tests and example strategies
 
 **Key Success Factors**:
-1. Proper text column handling (empty string for missing)
-2. Custom loader map building (explicit column → loader mapping)
-3. Using `custom_loader` parameter in run_algorithm() (no monkey-patching!)
-4. Timezone-naive timestamps
-5. Clean logging for production use
-6. Following Zipline best practices and existing patterns
+1. **LoaderDict implementation**: Custom dict class with `get()` method for domain-aware column matching
+2. **Proper text column handling**: Empty string for missing values (not NaN or None)
+3. **Custom loader map building**: Explicit column → loader mapping with LoaderDict
+4. **Using `custom_loader` parameter**: Pass to run_algorithm() (no monkey-patching!)
+5. **Docker-compatible paths**: Use `/root/.zipline/data/custom` and `/notebooks` for container environment
+6. **Timezone-naive timestamps**: Let Zipline handle timezone conversion internally
+7. **Following Zipline best practices**: Clean, maintainable code that works consistently
 
 **Next Steps for New Sessions**:
 - Review this document for full context
 - Check recent commits for latest fixes
-- Run notebook cells 1-34 to verify setup
-- Test strategy file with `python notebooks/strategy_top5_roe.py`
+- Ensure database exists at `/root/.zipline/data/custom/refe-fundamentals.sqlite`
+- Run notebook cells to verify setup
+- Test strategy file with `python /notebooks/strategy_top5_roe.py`
 - Extend with your own Database classes and strategies
+
+**Docker Environment Notes**:
+- Database path: `/root/.zipline/data/custom/refe-fundamentals.sqlite`
+- Notebooks directory: `/notebooks/`
+- Class name: `CustomFundamentals` (generic, cleaner than REFEFundamentals)
+- Database CODE: `"refe-fundamentals"` (matches existing database file)
 
 ---
 
-**Document Version**: 2.0
-**Last Updated**: 2025-11-14 (Updated with clean custom_loader approach)
+**Document Version**: 3.0
+**Last Updated**: 2025-11-14 (Updated with LoaderDict, Docker paths, and class renaming)
 **Maintainer**: Auto-generated from session context
 **Related**: CLAUDE.md, notebooks/load_csv_fundamentals.ipynb, notebooks/strategy_top5_roe.py
 
-**Important**: This documentation now reflects the PROPER approach using `custom_loader` parameter,
-not the previous monkey-patching approach. See commit 5235d38 for the clean implementation.
+**Recent Updates**:
+- Renamed `REFEFundamentals` to `CustomFundamentals` for clarity
+- Added `LoaderDict` class with `get()` method for proper domain-aware column matching
+- Updated all paths for Docker container environment (`/root/.zipline`, `/notebooks`)
+- Removed invalid `cwd` parameter from `run_algorithm()`
+- All examples now use clean, maintainable approach with no monkey-patching

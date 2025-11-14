@@ -382,6 +382,19 @@ class CustomSQLiteLoader(PipelineLoader):
             # Convert to numpy array
             arr = reindexed.values
 
+            # Debug: Check what we're dealing with for object arrays
+            if col_dtype == object and arr.dtype == object:
+                flat = arr.flatten()
+                types = set(type(x).__name__ for x in flat)
+                str_count = sum(1 for x in flat if isinstance(x, str))
+                num_count = sum(1 for x in flat if isinstance(x, (int, float)) and not pd.isna(x))
+                nan_count = sum(1 for x in flat if pd.isna(x))
+                log.warning(
+                    f"DEBUG: Column '{col_name}' array dtype: {arr.dtype}, shape: {arr.shape}\n"
+                    f"  Object array contains types: {types}\n"
+                    f"  Breakdown: {str_count} strings, {num_count} numbers, {nan_count} NaN/None"
+                )
+
             # For object/text columns, replace NaN with empty string to avoid mixed types
             # (prevents str/float mixing which breaks Zipline's LabelArray/Categorical)
             if col_dtype == object and arr.dtype == object:
@@ -390,6 +403,15 @@ class CustomSQLiteLoader(PipelineLoader):
                 series = pd.Series(flat)
                 series = series.fillna('')  # Replace all NaN/None with empty string
                 arr = series.values.reshape(arr.shape)
+
+                # Debug: Verify NaN replacement worked
+                flat_after = arr.flatten()
+                nan_count_after = sum(1 for x in flat_after if pd.isna(x))
+                str_count_after = sum(1 for x in flat_after if isinstance(x, str))
+                log.warning(
+                    f"DEBUG: After fillna for '{col_name}':\n"
+                    f"  {str_count_after} strings, {nan_count_after} NaN/None remaining"
+                )
 
             # Final safety check: if we got an object array but need numeric, convert it
             # This handles edge cases where pivot/reindex creates object dtype despite conversion

@@ -295,14 +295,16 @@ if __name__ == '__main__':
     custom_loader = build_pipeline_loaders()
 
     # Run backtest
-    start = pd.Timestamp('2025-10-01')
+    # Database contains: 8.6M rows, 3,978 symbols, 2009-12-24 to 2025-11-11
+    start = pd.Timestamp('2020-10-01')
     end = pd.Timestamp('2025-11-05')
 
     print("\n" + "=" * 60)
     print("RUNNING BACKTEST")
     print("=" * 60)
-    print(f"Period: {start.date()} to {end.date()}")
+    print(f"Period: {start.date()} to {end.date()} (~5 years)")
     print(f"Capital: $100,000")
+    print(f"Database: 8.6M rows, 3,978 symbols")
     print("=" * 60 + "\n")
 
     results = run_algorithm(

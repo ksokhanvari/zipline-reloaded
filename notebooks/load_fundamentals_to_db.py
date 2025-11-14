@@ -22,6 +22,12 @@ import sqlite3
 from pathlib import Path
 from zipline.data.bundles import load as load_bundle
 
+# Register Sharadar bundle (required)
+from zipline.data.bundles import register
+from zipline.data.bundles.sharadar_bundle import sharadar_bundle
+
+register('sharadar', sharadar_bundle(tickers=None, incremental=True, include_funds=True))
+
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
@@ -31,8 +37,8 @@ DATABASE_NAME = "refe-fundamentals"
 DB_DIR = Path('/root/.zipline/data/custom')
 DB_PATH = DB_DIR / f"{DATABASE_NAME}.sqlite"
 
-# Data source
-CSV_PATH = '/data/csv/REFE_fundamentals_updated.csv'
+# Data source (update this to match your CSV file)
+CSV_PATH = '/data/csv/sample_20091231_20251111.csv'
 
 # Processing configuration
 BATCH_SIZE = 10000  # Rows per batch

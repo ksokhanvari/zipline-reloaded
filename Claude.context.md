@@ -832,7 +832,37 @@ start = pd.Timestamp('2025-10-01')  # ✓
 
 ---
 
-### Issue 4: Empty Pipeline Results
+### Issue 4: Database Loading - UNIQUE Constraint Failed
+
+**Error Message**:
+```
+IntegrityError: UNIQUE constraint failed: Price.Sid, Price.Date
+```
+
+**Root Cause**: Duplicate (Sid, Date) combinations in source data or database.
+
+**Common Scenarios**:
+1. Multiple symbols map to same Sid (ticker changes, share classes)
+2. Source data has multiple rows per (Symbol, Date)
+3. Trying to insert records that already exist in database
+
+**Solution**:
+```python
+# 1. Deduplicate AFTER mapping symbols to sids
+df['Sid'] = df['Symbol'].map(ticker_to_sid)
+df = df.drop_duplicates(subset=['Sid', 'Date'], keep='last')
+
+# 2. Use INSERT OR REPLACE in batch inserts
+insert_sql = "INSERT OR REPLACE INTO Price VALUES (?, ?, ...)"
+```
+
+**Complete Script**: Use `load_fundamentals_to_db.py` which handles all these cases automatically.
+
+**Commits**: Added `load_fundamentals_to_db.py`, `check_duplicates.py`, `DATABASE_LOADING_GUIDE.md`
+
+---
+
+### Issue 5: Empty Pipeline Results
 
 **Symptoms**: `pipeline_output()` returns empty DataFrame.
 
@@ -868,7 +898,7 @@ start = pd.Timestamp('2025-10-01')  # ✓
 
 ---
 
-### Issue 5: "TradingAlgorithm missing sim_params"
+### Issue 6: "TradingAlgorithm missing sim_params"
 
 **Symptoms**: Direct use of `TradingAlgorithm()` fails.
 
@@ -887,7 +917,7 @@ results = run_algorithm(...)  # ✓ Handles setup automatically
 
 ---
 
-### Issue 6: "KeyError: 'roe_strategy'" (Pipeline Cache)
+### Issue 7: "KeyError: 'roe_strategy'" (Pipeline Cache)
 
 **Symptoms**: `pipeline_output('roe_strategy')` fails with KeyError when using custom fundamentals.
 

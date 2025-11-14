@@ -26,13 +26,10 @@ from zipline.api import (
 )
 from zipline.pipeline import Pipeline
 from zipline.pipeline.data.db import Database, Column
-from zipline.pipeline.engine import SimplePipelineEngine
 from zipline.pipeline.loaders import USEquityPricingLoader
 from zipline.pipeline.data import USEquityPricing
-from zipline.pipeline.domain import US_EQUITIES
 from zipline.data.bundles import load as load_bundle
 from zipline.data.custom import CustomSQLiteLoader
-from zipline.utils.calendar_utils import get_calendar
 
 # Enable logging
 logging.basicConfig(level=logging.INFO)
@@ -69,48 +66,71 @@ class REFEFundamentals(Database):
 
 
 # ============================================================================
-# Pipeline Setup
+# Build Pipeline Loader Map (Clean Approach)
 # ============================================================================
 
-# Global cache for loaders
-_loader_cache = {}
-
-def get_pipeline_loader(column):
+def build_pipeline_loaders():
     """
-    Pipeline loader factory that routes columns to appropriate loaders.
+    Build a proper PipelineLoader map.
+
+    This is the clean approach - map each column/term to its appropriate loader.
+    No monkey-patching required!
     """
-    dataset = column.dataset
-    dataset_name = getattr(dataset, '__name__', '')
+    # Load bundle data
+    bundle_data = load_bundle('sharadar')
 
-    # Route custom fundamentals
-    if 'REFEFundamentals' in dataset_name or 'REFEFundamentals' in str(dataset):
-        cache_key = REFEFundamentals.CODE
-        if cache_key not in _loader_cache:
-            db_dir = Path.home() / '.zipline' / 'data' / 'custom'
-            _loader_cache[cache_key] = CustomSQLiteLoader(
-                db_code=REFEFundamentals.CODE,
-                db_dir=db_dir
-            )
-        return _loader_cache[cache_key]
+    # Create loaders
+    pricing_loader = USEquityPricingLoader(
+        bundle_data.equity_daily_bar_reader,
+        bundle_data.adjustment_reader
+    )
 
-    # Route pricing data
-    if column in USEquityPricing.columns:
-        if 'pricing' not in _loader_cache:
-            bundle_data = load_bundle('sharadar')
-            _loader_cache['pricing'] = USEquityPricingLoader(
-                bundle_data.equity_daily_bar_reader,
-                bundle_data.adjustment_reader
-            )
-        return _loader_cache['pricing']
+    db_dir = Path.home() / '.zipline' / 'data' / 'custom'
+    fundamentals_loader = CustomSQLiteLoader(
+        db_code=REFEFundamentals.CODE,
+        db_dir=db_dir
+    )
 
-    raise ValueError(f"No loader for {column}")
+    # Build the loader map
+    custom_loader = {}
 
+    # Map all pricing columns to pricing loader
+    custom_loader[USEquityPricing.close] = pricing_loader
+    custom_loader[USEquityPricing.high] = pricing_loader
+    custom_loader[USEquityPricing.low] = pricing_loader
+    custom_loader[USEquityPricing.open] = pricing_loader
+    custom_loader[USEquityPricing.volume] = pricing_loader
+
+    # Map all fundamental columns to fundamentals loader
+    fundamental_columns = [
+        REFEFundamentals.ReturnOnEquity_SmartEstimat,
+        REFEFundamentals.ReturnOnAssets_SmartEstimate,
+        REFEFundamentals.CompanyMarketCap,
+        REFEFundamentals.RefPriceClose,
+        REFEFundamentals.GICSSectorName,
+        REFEFundamentals.LongTermGrowth_Mean,
+        REFEFundamentals.EnterpriseValueToEBITDA_DailyTimeSeriesRatio_,
+    ]
+
+    for column in fundamental_columns:
+        custom_loader[column] = fundamentals_loader
+
+    print(f"✓ Pipeline loader map built ({len(custom_loader)} columns mapped)")
+
+    return custom_loader
+
+
+# ============================================================================
+# Pipeline Definition
+# ============================================================================
 
 def make_pipeline():
     """
-    Create pipeline: Top 5 ROE stocks from top 100 by market cap.
+    Create a pipeline that:
+    1. Filters to top 100 stocks by market cap
+    2. Selects top 5 by ROE
     """
-    # Get fundamentals
+    # Get factors
     roe = REFEFundamentals.ReturnOnEquity_SmartEstimat.latest
     market_cap = REFEFundamentals.CompanyMarketCap.latest
     sector = REFEFundamentals.GICSSectorName.latest
@@ -136,79 +156,90 @@ def make_pipeline():
 # ============================================================================
 
 def initialize(context):
-    """Initialize strategy."""
+    """
+    Initialize strategy and attach pipeline.
+    """
     # Attach pipeline
-    attach_pipeline(make_pipeline(), 'roe_strategy')
+    pipe = make_pipeline()
+    attach_pipeline(pipe, 'roe_strategy')
 
-    # Schedule weekly rebalancing (every Monday)
+    # Schedule weekly rebalancing
     schedule_function(
         rebalance,
         date_rules.week_start(),
-        time_rules.market_open(hours=1),
+        time_rules.market_open(hours=1)
     )
 
     context.rebalance_count = 0
 
-    logging.info("=" * 60)
-    logging.info("TOP 5 ROE STRATEGY")
-    logging.info("=" * 60)
-    logging.info("Universe: Top 100 stocks by market cap")
-    logging.info("Selection: Top 5 by ROE")
-    logging.info("Rebalance: Weekly (Mondays)")
-    logging.info("=" * 60)
+    logging.info("ROE Strategy initialized")
+    logging.info("  Rebalancing: Weekly")
+    logging.info("  Universe: Top 100 by market cap")
+    logging.info("  Selection: Top 5 by ROE")
 
 
 def before_trading_start(context, data):
-    """Get pipeline output before market opens."""
+    """
+    Called daily before market opens.
+    Get pipeline output.
+    """
     context.pipeline_data = pipeline_output('roe_strategy')
 
 
 def rebalance(context, data):
-    """Execute weekly rebalancing."""
+    """
+    Weekly rebalance based on pipeline output.
+    """
     context.rebalance_count += 1
 
-    # Get pipeline output
-    pipeline_data = context.pipeline_data
-
-    if pipeline_data is None or pipeline_data.empty:
+    # Get current pipeline output
+    if context.pipeline_data is None or context.pipeline_data.empty:
         logging.warning("No stocks in pipeline output")
         return
 
-    # Filter for tradeable stocks
-    all_selected = pipeline_data.index
+    # Get selected stocks - filter out untradeable assets
+    all_selected = context.pipeline_data.index
     selected_stocks = [stock for stock in all_selected if data.can_trade(stock)]
 
     if len(selected_stocks) == 0:
-        logging.warning("No tradeable stocks")
+        logging.warning("No tradeable stocks in pipeline output")
         return
+
+    # Log if any stocks were filtered out
+    if len(selected_stocks) < len(all_selected):
+        filtered_out = [s.symbol for s in all_selected if s not in selected_stocks]
+        logging.info(f"  Filtered out untradeable: {', '.join(filtered_out)}")
 
     # Equal weight
     target_weight = 1.0 / len(selected_stocks)
 
-    # Current positions
+    # Get current positions
     current_positions = set(context.portfolio.positions.keys())
 
-    # Sell positions no longer in target
-    for stock in current_positions - set(selected_stocks):
-        if data.can_trade(stock):
+    # Sell stocks no longer in selection (only if tradeable)
+    for stock in current_positions:
+        if stock not in selected_stocks and data.can_trade(stock):
             order_target_percent(stock, 0.0)
 
-    # Buy/rebalance target positions
+    # Buy/rebalance selected stocks
     for stock in selected_stocks:
         order_target_percent(stock, target_weight)
 
     # Log holdings
     holdings = [s.symbol for s in selected_stocks]
-    tradeable_data = pipeline_data.loc[selected_stocks]
-    avg_roe = tradeable_data['ROE'].mean()
+    logging.info(f"Rebalance #{context.rebalance_count}: {', '.join(holdings)}")
 
-    logging.info(f"Rebalance #{context.rebalance_count}:")
-    logging.info(f"  Holdings: {', '.join(holdings)}")
-    logging.info(f"  Avg ROE: {avg_roe:.2f}%")
+    # Log factor values
+    tradeable_output = context.pipeline_data.loc[selected_stocks]
+    if not tradeable_output.empty:
+        logging.info(f"  Avg ROE: {tradeable_output['ROE'].mean():.2%}")
+        logging.info(f"  Avg Market Cap: ${tradeable_output['Market_Cap'].mean()/1e9:.2f}B")
 
 
 def handle_data(context, data):
-    """Record daily metrics."""
+    """
+    Record daily metrics.
+    """
     record(
         portfolio_value=context.portfolio.portfolio_value,
         num_positions=len(context.portfolio.positions),
@@ -217,31 +248,12 @@ def handle_data(context, data):
 
 
 # ============================================================================
-# Run Backtest
+# Main Execution
 # ============================================================================
 
 if __name__ == '__main__':
-    # Load bundle for asset finder
-    bundle_data = load_bundle('sharadar')
-
-    # Create pipeline engine with custom loader
-    trading_calendar = get_calendar('NYSE')
-    engine = SimplePipelineEngine(
-        get_loader=get_pipeline_loader,
-        asset_finder=bundle_data.asset_finder,
-        default_domain=US_EQUITIES,
-    )
-
-    # Monkey-patch run_algorithm to use our custom engine
-    # This is the key to making custom fundamentals work!
-    import zipline.algorithm
-    original_make_engine = zipline.algorithm.SimplePipelineEngine
-
-    def patched_engine(*args, **kwargs):
-        # Return our pre-configured engine
-        return engine
-
-    zipline.algorithm.SimplePipelineEngine = lambda *args, **kwargs: engine
+    # Build pipeline loader map (CLEAN APPROACH - NO MONKEY-PATCHING!)
+    custom_loader = build_pipeline_loaders()
 
     # Run backtest
     start = pd.Timestamp('2025-10-01')
@@ -263,31 +275,23 @@ if __name__ == '__main__':
         capital_base=100000,
         data_frequency='daily',
         bundle='sharadar',
+        custom_loader=custom_loader,  # ← THE KEY - No monkey-patching needed!
         cwd='/notebooks',
     )
-
-    # Restore original
-    zipline.algorithm.SimplePipelineEngine = original_make_engine
 
     # Print results
     print("\n" + "=" * 60)
     print("BACKTEST RESULTS")
     print("=" * 60)
-    print(f"Final Portfolio Value: ${results.portfolio_value.iloc[-1]:,.2f}")
 
-    total_return = (results.portfolio_value.iloc[-1] / 100000 - 1) * 100
+    total_return = ((results['portfolio_value'].iloc[-1] / results['portfolio_value'].iloc[0]) - 1) * 100
+    daily_returns = results['portfolio_value'].pct_change().dropna()
+    sharpe_ratio = (daily_returns.mean() / daily_returns.std()) * np.sqrt(252)
+    max_drawdown = ((results['portfolio_value'] / results['portfolio_value'].cummax()) - 1).min() * 100
+
     print(f"Total Return: {total_return:.2f}%")
-
-    daily_returns = results.returns.dropna()
-    if len(daily_returns) > 0 and daily_returns.std() > 0:
-        sharpe = np.sqrt(252) * daily_returns.mean() / daily_returns.std()
-        print(f"Sharpe Ratio: {sharpe:.2f}")
-
-    max_dd = ((results.portfolio_value / results.portfolio_value.cummax()) - 1).min() * 100
-    print(f"Max Drawdown: {max_dd:.2f}%")
+    print(f"Sharpe Ratio: {sharpe_ratio:.2f}")
+    print(f"Max Drawdown: {max_drawdown:.2f}%")
+    print(f"Final Portfolio Value: ${results['portfolio_value'].iloc[-1]:,.2f}")
+    print(f"Total Rebalances: {results['num_positions'].count()}")
     print("=" * 60)
-
-    # Save results
-    results.to_pickle('backtest_results.pkl')
-    print("\n✓ Results saved to backtest_results.pkl")
-    print("  Load with: results = pd.read_pickle('backtest_results.pkl')")

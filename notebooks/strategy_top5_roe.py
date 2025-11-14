@@ -3,7 +3,7 @@
 Top 5 ROE Strategy using Custom Fundamentals
 
 This strategy:
-- Uses custom REFE fundamentals database
+- Uses custom fundamentals database
 - Filters to top 100 stocks by market cap
 - Selects top 5 stocks by ROE
 - Rebalances weekly with equal weights
@@ -49,10 +49,10 @@ print("✓ Sharadar bundle registered")
 # Define Custom Fundamentals Database
 # ============================================================================
 
-class REFEFundamentals(Database):
-    """Custom REFE Fundamentals database."""
+class CustomFundamentals(Database):
+    """Custom Fundamentals database."""
 
-    CODE = "refe-fundamentals"
+    CODE = "fundamentals"
     LOOKBACK_WINDOW = 252
 
     # Key columns for strategy
@@ -124,9 +124,9 @@ def build_pipeline_loaders():
         bundle_data.adjustment_reader
     )
 
-    db_dir = Path.home() / '.zipline' / 'data' / 'custom'
+    db_dir = Path('/root/.zipline/data/custom')
     fundamentals_loader = CustomSQLiteLoader(
-        db_code=REFEFundamentals.CODE,
+        db_code=CustomFundamentals.CODE,
         db_dir=db_dir
     )
 
@@ -142,13 +142,13 @@ def build_pipeline_loaders():
 
     # Map all fundamental columns to fundamentals loader
     fundamental_columns = [
-        REFEFundamentals.ReturnOnEquity_SmartEstimat,
-        REFEFundamentals.ReturnOnAssets_SmartEstimate,
-        REFEFundamentals.CompanyMarketCap,
-        REFEFundamentals.RefPriceClose,
-        REFEFundamentals.GICSSectorName,
-        REFEFundamentals.LongTermGrowth_Mean,
-        REFEFundamentals.EnterpriseValueToEBITDA_DailyTimeSeriesRatio_,
+        CustomFundamentals.ReturnOnEquity_SmartEstimat,
+        CustomFundamentals.ReturnOnAssets_SmartEstimate,
+        CustomFundamentals.CompanyMarketCap,
+        CustomFundamentals.RefPriceClose,
+        CustomFundamentals.GICSSectorName,
+        CustomFundamentals.LongTermGrowth_Mean,
+        CustomFundamentals.EnterpriseValueToEBITDA_DailyTimeSeriesRatio_,
     ]
 
     for column in fundamental_columns:
@@ -170,9 +170,9 @@ def make_pipeline():
     2. Selects top 5 by ROE
     """
     # Get factors
-    roe = REFEFundamentals.ReturnOnEquity_SmartEstimat.latest
-    market_cap = REFEFundamentals.CompanyMarketCap.latest
-    sector = REFEFundamentals.GICSSectorName.latest
+    roe = CustomFundamentals.ReturnOnEquity_SmartEstimat.latest
+    market_cap = CustomFundamentals.CompanyMarketCap.latest
+    sector = CustomFundamentals.GICSSectorName.latest
 
     # Screen: top 100 by market cap
     top_100_by_mcap = market_cap.top(100)

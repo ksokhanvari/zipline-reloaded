@@ -276,7 +276,6 @@ if __name__ == '__main__':
         data_frequency='daily',
         bundle='sharadar',
         custom_loader=custom_loader,  # ← THE KEY - No monkey-patching needed!
-        cwd='/notebooks',
     )
 
     # Print results

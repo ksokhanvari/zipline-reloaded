@@ -233,8 +233,8 @@ if __name__ == '__main__':
     zipline.algorithm.SimplePipelineEngine = lambda *args, **kwargs: engine
 
     # Run backtest
-    start = pd.Timestamp('2024-05-01', tz='UTC')
-    end = pd.Timestamp('2024-11-14', tz='UTC')
+    start = pd.Timestamp('2025-10-01')
+    end = pd.Timestamp('2025-11-05')
 
     print("\n" + "=" * 60)
     print("RUNNING BACKTEST")

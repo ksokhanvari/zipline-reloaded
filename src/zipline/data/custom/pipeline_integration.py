@@ -228,11 +228,6 @@ class CustomSQLiteLoader(PipelineLoader):
                     )
 
             # Final verification before creating AdjustedArray
-            log.warning(
-                f"Creating AdjustedArray for {column.name}: "
-                f"dtype={col_data.dtype}, shape={col_data.shape}, "
-                f"expected_dtype={column.dtype}"
-            )
             if col_data.dtype != column.dtype:
                 log.error(
                     f"DTYPE MISMATCH: {column.name} has {col_data.dtype} but expected {column.dtype}!"
@@ -307,20 +302,6 @@ class CustomSQLiteLoader(PipelineLoader):
         try:
             df = pd.read_sql_query(sql, conn, params=params)
 
-            log.warning(
-                f"SQL query returned {len(df)} rows for {len(column_names)} columns "
-                f"from {self.db_code} database"
-            )
-
-            # Log the dtypes that pandas assigned when reading from SQLite
-            if len(df) > 0:
-                log.warning(f"Raw DataFrame dtypes from SQLite:")
-                for col in column_names:
-                    if col in df.columns:
-                        sample_vals = df[col].head(3).tolist()
-                        sample_types = [type(v).__name__ for v in sample_vals]
-                        log.warning(f"  {col}: dtype={df[col].dtype}, sample={sample_vals}, types={sample_types}")
-
             if len(df) == 0:
                 log.warning(
                     f"No data found in {self.db_code} database for "
@@ -350,7 +331,6 @@ class CustomSQLiteLoader(PipelineLoader):
                 # Create empty array with proper dtype
                 arr = np.full((len(dates), len(sids)), np.nan, dtype=col_dtype)
                 result[col_name] = arr
-                log.warning(f"DEBUG: Column '{col_name}' created empty array with dtype: {arr.dtype}")
             return result
 
         for col_name in column_names:
@@ -365,12 +345,7 @@ class CustomSQLiteLoader(PipelineLoader):
             if col_dtype in (np.float64, np.float32, np.int64, np.int32):
                 # This column should be numeric, force conversion
                 try:
-                    original_dtype = df[col_name].dtype
                     df[col_name] = pd.to_numeric(df[col_name], errors='coerce')
-                    log.warning(
-                        f"DEBUG: Converted column '{col_name}' from {original_dtype} to {df[col_name].dtype}. "
-                        f"Sample values: {df[col_name].head(3).tolist()}"
-                    )
                 except Exception as e:
                     log.error(f"Could not convert column '{col_name}' to numeric: {e}")
             # else: keep as-is for text/object columns
@@ -385,24 +360,10 @@ class CustomSQLiteLoader(PipelineLoader):
             # (prevents str/float mixing which breaks Zipline's LabelArray/Categorical)
             if col_dtype == object:
                 reindexed = reindexed.fillna('')
-                log.warning(f"DEBUG: Filled NaN with '' for text column '{col_name}'")
 
             # Convert to numpy array
             arr = reindexed.values
 
-            # Debug: Check what we're dealing with for object arrays
-            if col_dtype == object and arr.dtype == object:
-                flat = arr.flatten()
-                types = set(type(x).__name__ for x in flat)
-                str_count = sum(1 for x in flat if isinstance(x, str))
-                num_count = sum(1 for x in flat if isinstance(x, (int, float)) and not pd.isna(x))
-                nan_count = sum(1 for x in flat if pd.isna(x))
-                log.warning(
-                    f"DEBUG: Column '{col_name}' after conversion to array:\n"
-                    f"  Array dtype: {arr.dtype}, shape: {arr.shape}\n"
-                    f"  Object array contains types: {types}\n"
-                    f"  Breakdown: {str_count} strings, {num_count} numbers, {nan_count} NaN/None"
-                )
 
             # Final safety check: if we got an object array but need numeric, convert it
             # This handles edge cases where pivot/reindex creates object dtype despite conversion
@@ -418,34 +379,6 @@ class CustomSQLiteLoader(PipelineLoader):
                     # Create array of NaN with correct dtype as fallback
                     arr = np.full(arr.shape, np.nan, dtype=col_dtype)
 
-            # Comprehensive type checking for debugging
-            flat = arr.flatten()
-            log.warning(f"DEBUG: Column '{col_name}' array dtype: {arr.dtype}, shape: {arr.shape}")
-
-            # Check if we have mixed types (the root cause of string/float comparison errors)
-            if arr.dtype == object:
-                types_found = set(type(x).__name__ for x in flat[:100])  # Sample first 100 elements
-                log.warning(f"  Object array contains types: {types_found}")
-
-                # Count strings vs numbers
-                str_count = sum(1 for x in flat if isinstance(x, str))
-                num_count = sum(1 for x in flat if isinstance(x, (int, float)) and not isinstance(x, bool))
-                none_count = sum(1 for x in flat if x is None or (isinstance(x, float) and np.isnan(x)))
-                log.warning(f"  Breakdown: {str_count} strings, {num_count} numbers, {none_count} NaN/None")
-
-                # If this is supposed to be numeric, we have a problem!
-                if col_dtype in (np.float64, np.float32, np.int64, np.int32):
-                    log.error(f"  ERROR: Numeric column '{col_name}' has object dtype with mixed types!")
-                    log.error(f"  Sample values: {flat[:10].tolist()}")
-            else:
-                # For numeric arrays, show non-NaN values
-                if arr.dtype in (np.float64, np.float32):
-                    non_nan_mask = ~np.isnan(flat)
-                    non_nan_count = non_nan_mask.sum()
-                    non_nan_sample = flat[non_nan_mask][:5].tolist() if non_nan_count > 0 else []
-                    log.warning(f"  Non-NaN count: {non_nan_count}, sample: {non_nan_sample}")
-                else:
-                    log.warning(f"  Sample values: {flat[:5].tolist()}")
 
             result[col_name] = arr
 

@@ -377,8 +377,15 @@ class CustomSQLiteLoader(PipelineLoader):
             pivot = df.pivot(index='Date', columns='Sid', values=col_name)
 
             # Reindex to match exactly the requested dates and sids
-            # This ensures we have the right shape and fills missing values with NaN
-            reindexed = pivot.reindex(index=dates, columns=sids)
+            # Use appropriate fill value based on column type:
+            # - Empty string for text/object columns
+            # - NaN for numeric columns
+            if col_dtype == object:
+                fill_value = ''
+            else:
+                fill_value = np.nan
+
+            reindexed = pivot.reindex(index=dates, columns=sids, fill_value=fill_value)
 
             # Convert to numpy array
             arr = reindexed.values

@@ -263,6 +263,7 @@ if __name__ == '__main__':
         capital_base=100000,
         data_frequency='daily',
         bundle='sharadar',
+        cwd='/notebooks',
     )
 
     # Restore original

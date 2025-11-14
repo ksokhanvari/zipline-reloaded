@@ -231,7 +231,7 @@ zipline-reloaded/
        bundle_data = load_bundle('sharadar')
 
        # Create loaders
-       pricing_loader = USEquityPricingLoader(
+       pricing_loader = USEquityPricingLoader.without_fx(
            bundle_data.equity_daily_bar_reader,
            bundle_data.adjustment_reader
        )
@@ -1134,7 +1134,7 @@ def build_pipeline_loaders():
     bundle_data = load_bundle('sharadar')
 
     # Create loaders
-    pricing_loader = USEquityPricingLoader(
+    pricing_loader = USEquityPricingLoader.without_fx(
         bundle_data.equity_daily_bar_reader,
         bundle_data.adjustment_reader
     )

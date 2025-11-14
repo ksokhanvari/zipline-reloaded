@@ -38,6 +38,17 @@ from zipline.utils.calendar_utils import get_calendar
 logging.basicConfig(level=logging.INFO)
 
 # ============================================================================
+# Register Bundle (Required for Jupyter Notebooks)
+# ============================================================================
+
+# Register Sharadar bundle (required for Jupyter notebooks)
+from zipline.data.bundles import register
+from zipline.data.bundles.sharadar_bundle import sharadar_bundle
+
+register('sharadar', sharadar_bundle(tickers=None, incremental=True, include_funds=True))
+print("✓ Sharadar bundle registered")
+
+# ============================================================================
 # Define Custom Fundamentals Database
 # ============================================================================
 

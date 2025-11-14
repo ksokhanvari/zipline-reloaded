@@ -336,3 +336,24 @@ if __name__ == '__main__':
     print(f"Final Portfolio Value: ${results['portfolio_value'].iloc[-1]:,.2f}")
     print(f"Total Rebalances: {results['num_positions'].count()}")
     print("=" * 60)
+
+    # Save results
+    print("\n" + "=" * 60)
+    print("SAVING RESULTS")
+    print("=" * 60)
+
+    results_dir = Path('/notebooks')
+
+    # Save as CSV
+    csv_path = results_dir / 'backtest_results.csv'
+    results.to_csv(csv_path)
+    print(f"✓ Saved CSV: {csv_path}")
+    print(f"  Size: {csv_path.stat().st_size / 1024:.2f} KB")
+
+    # Save as pickle (preserves full state)
+    pickle_path = results_dir / 'backtest_results.pkl'
+    results.to_pickle(pickle_path)
+    print(f"✓ Saved pickle: {pickle_path}")
+    print(f"  Size: {pickle_path.stat().st_size / 1024:.2f} KB")
+
+    print("=" * 60)

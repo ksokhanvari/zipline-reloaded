@@ -76,6 +76,41 @@ def build_pipeline_loaders():
     This is the clean approach - map each column/term to its appropriate loader.
     No monkey-patching required!
     """
+    # Custom dict that handles domain-aware columns (e.g., USEquityPricing<US>.close)
+    class LoaderDict(dict):
+        """
+        Dict that matches BoundColumns by dataset and column name.
+
+        This handles the case where columns are registered without a domain
+        (USEquityPricing.close) but looked up with a domain
+        (USEquityPricing<US_EQUITIES>.close).
+        """
+        def __getitem__(self, key):
+            # First try exact match
+            try:
+                return super().__getitem__(key)
+            except KeyError:
+                pass
+
+            # If key is a BoundColumn, try matching by dataset name and column name
+            if hasattr(key, 'dataset') and hasattr(key, 'name'):
+                # Extract dataset name without domain (remove <DOMAIN> part)
+                key_dataset_name = str(key.dataset).split('<')[0]
+                key_col_name = key.name
+
+                # Search for a matching column in our registered columns
+                for registered_col, loader in self.items():
+                    if hasattr(registered_col, 'dataset') and hasattr(registered_col, 'name'):
+                        reg_dataset_name = str(registered_col.dataset).split('<')[0]
+                        reg_col_name = registered_col.name
+
+                        # Match by dataset name and column name
+                        if key_dataset_name == reg_dataset_name and key_col_name == reg_col_name:
+                            return loader
+
+            # No match found
+            raise KeyError(key)
+
     # Load bundle data
     bundle_data = load_bundle('sharadar')
 
@@ -91,8 +126,8 @@ def build_pipeline_loaders():
         db_dir=db_dir
     )
 
-    # Build the loader map
-    custom_loader = {}
+    # Build the loader map using LoaderDict
+    custom_loader = LoaderDict()
 
     # Map all pricing columns to pricing loader
     custom_loader[USEquityPricing.close] = pricing_loader

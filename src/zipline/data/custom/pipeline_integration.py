@@ -385,10 +385,11 @@ class CustomSQLiteLoader(PipelineLoader):
             # For object/text columns, replace NaN with empty string to avoid mixed types
             # (prevents str/float mixing which breaks Zipline's LabelArray/Categorical)
             if col_dtype == object and arr.dtype == object:
-                # Replace NaN with empty string
-                mask = pd.isna(arr)
-                arr = arr.copy()
-                arr[mask] = ''
+                # Use pandas fillna for robust NaN handling (catches all NaN types)
+                flat = arr.flatten()
+                series = pd.Series(flat)
+                series = series.fillna('')  # Replace all NaN/None with empty string
+                arr = series.values.reshape(arr.shape)
 
             # Final safety check: if we got an object array but need numeric, convert it
             # This handles edge cases where pivot/reindex creates object dtype despite conversion

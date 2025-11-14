@@ -377,16 +377,18 @@ class CustomSQLiteLoader(PipelineLoader):
             pivot = df.pivot(index='Date', columns='Sid', values=col_name)
 
             # Reindex to match exactly the requested dates and sids
-            # For object/text columns, don't specify fill_value - let pandas use NaN
-            # This will be handled properly by Zipline's LabelArray
-            # For numeric columns, explicitly use NaN
-            if col_dtype == object:
-                reindexed = pivot.reindex(index=dates, columns=sids)
-            else:
-                reindexed = pivot.reindex(index=dates, columns=sids, fill_value=np.nan)
+            reindexed = pivot.reindex(index=dates, columns=sids)
 
             # Convert to numpy array
             arr = reindexed.values
+
+            # For object/text columns, replace NaN with empty string to avoid mixed types
+            # (prevents str/float mixing which breaks Zipline's LabelArray/Categorical)
+            if col_dtype == object and arr.dtype == object:
+                # Replace NaN with empty string
+                mask = pd.isna(arr)
+                arr = arr.copy()
+                arr[mask] = ''
 
             # Final safety check: if we got an object array but need numeric, convert it
             # This handles edge cases where pivot/reindex creates object dtype despite conversion

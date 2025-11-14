@@ -241,10 +241,12 @@ class CustomSQLiteLoader(PipelineLoader):
             # Create AdjustedArray
             # AdjustedArrays allow for point-in-time adjustments (splits, etc.)
             # For custom data, we typically don't have adjustments
+            # For object/text columns, use empty string as missing_value (matches our fillna)
+            missing_val = '' if column.dtype == object else column.missing_value
             arrays[column] = AdjustedArray(
                 data=col_data,
                 adjustments={},  # No adjustments for custom data
-                missing_value=column.missing_value,
+                missing_value=missing_val,
             )
 
         return arrays

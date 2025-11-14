@@ -10,6 +10,13 @@ tmp/*
 .DS_Store
 *.py[co]
 
+# Environment and backtest results
+.env
+backtest_results/
+backtest_results.csv
+backtest_results.pkl
+*.pkl
+
 # Installer logs
 pip-log.txt
 

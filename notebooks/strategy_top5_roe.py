@@ -85,12 +85,10 @@ def build_pipeline_loaders():
         (USEquityPricing.close) but looked up with a domain
         (USEquityPricing<US_EQUITIES>.close).
         """
-        def __getitem__(self, key):
+        def get(self, key, default=None):
             # First try exact match
-            try:
+            if key in self:
                 return super().__getitem__(key)
-            except KeyError:
-                pass
 
             # If key is a BoundColumn, try matching by dataset name and column name
             if hasattr(key, 'dataset') and hasattr(key, 'name'):
@@ -108,8 +106,14 @@ def build_pipeline_loaders():
                         if key_dataset_name == reg_dataset_name and key_col_name == reg_col_name:
                             return loader
 
-            # No match found
-            raise KeyError(key)
+            # No match found, return default
+            return default
+
+        def __getitem__(self, key):
+            result = self.get(key)
+            if result is None:
+                raise KeyError(key)
+            return result
 
     # Load bundle data
     bundle_data = load_bundle('sharadar')

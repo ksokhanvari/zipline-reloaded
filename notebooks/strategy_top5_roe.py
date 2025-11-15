@@ -694,6 +694,7 @@ if __name__ == '__main__':
         data_frequency='daily',
         bundle=BUNDLE_NAME,
         custom_loader=custom_loader,
+        progress=PROGRESS_BAR,  # Built-in Zipline progress bar
     )
 
     end_time = datetime.now()

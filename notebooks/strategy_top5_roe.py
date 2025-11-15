@@ -46,12 +46,23 @@ OUTPUT
 CUSTOMIZATION
 =============
 Modify the configuration section below to adjust:
-- Backtest date range
-- Starting capital
+- Backtest date range and starting capital
 - Universe size (top N by market cap)
 - Selection size (top M by ROE)
-- Rebalancing frequency
-- Database location
+- Rebalancing frequency (daily/weekly/monthly)
+- Database location and bundle name
+- Output options (CSV, pickle, metadata)
+- Logging verbosity (progress bar, pipeline stats, rebalance details)
+
+PROGRESS LOGGING
+================
+The strategy includes comprehensive progress logging:
+- Progress bar: Daily ('D'), weekly ('W'), monthly ('M'), or none
+- Pipeline stats: Daily universe statistics (optional)
+- Rebalance details: Detailed BUY/SELL logging with metrics (optional)
+- Timestamps: Start/end times and execution duration
+- Performance summary: Return, Sharpe, drawdown, win rate, trades
+- Metadata export: JSON file with configuration and results
 """
 
 import pandas as pd
@@ -84,7 +95,14 @@ BUNDLE_NAME = 'sharadar'
 RESULTS_DIR = Path('/notebooks')
 SAVE_CSV = True
 SAVE_PICKLE = True
+SAVE_METADATA = True
 
+# Logging Configuration
+PROGRESS_BAR = 'D'  # 'D' (daily), 'W' (weekly), 'M' (monthly), or None
+LOG_PIPELINE_STATS = True  # Log daily pipeline stats
+LOG_REBALANCE_DETAILS = True  # Log detailed trade information
+
+from datetime import datetime
 from zipline import run_algorithm
 from zipline.api import (
     attach_pipeline,
@@ -477,6 +495,16 @@ def before_trading_start(context, data):
     """
     context.pipeline_data = pipeline_output('roe_strategy')
 
+    # Log daily pipeline statistics
+    if LOG_PIPELINE_STATS and context.pipeline_data is not None and not context.pipeline_data.empty:
+        current_date = context.get_datetime().date()
+        universe_size = len(context.pipeline_data)
+        avg_roe = context.pipeline_data['ROE'].mean()
+        avg_mcap = context.pipeline_data['Market_Cap'].mean()
+
+        logging.info(f"{current_date} | Universe: {universe_size:2d} stocks | "
+                    f"Avg ROE: {avg_roe:.2%} | Avg MCap: ${avg_mcap/1e9:.1f}B")
+
 
 def rebalance(context, data):
     """
@@ -527,25 +555,51 @@ def rebalance(context, data):
 
     # Get current positions
     current_positions = set(context.portfolio.positions.keys())
+    target_positions = set(selected_stocks)
+
+    # Calculate position changes
+    to_sell = current_positions - target_positions
+    to_buy = target_positions - current_positions
+    to_rebalance = current_positions & target_positions
+
+    # Log rebalance header
+    if LOG_REBALANCE_DETAILS:
+        logging.info("")
+        logging.info("=" * 70)
+        logging.info(f"REBALANCE #{context.rebalance_count}")
+        logging.info("=" * 70)
+        logging.info(f"  Sell: {len(to_sell)} | Buy: {len(to_buy)} | "
+                    f"Rebalance: {len(to_rebalance)} | Weight: {target_weight:.2%}")
 
     # Sell stocks no longer in selection (only if tradeable)
-    for stock in current_positions:
-        if stock not in selected_stocks and data.can_trade(stock):
+    for stock in to_sell:
+        if data.can_trade(stock):
             order_target_percent(stock, 0.0)
+            if LOG_REBALANCE_DETAILS:
+                logging.info(f"    SELL: {stock.symbol}")
 
     # Buy/rebalance selected stocks
-    for stock in selected_stocks:
-        order_target_percent(stock, target_weight)
-
-    # Log holdings
-    holdings = [s.symbol for s in selected_stocks]
-    logging.info(f"Rebalance #{context.rebalance_count}: {', '.join(holdings)}")
-
-    # Log factor values
     tradeable_output = context.pipeline_data.loc[selected_stocks]
-    if not tradeable_output.empty:
-        logging.info(f"  Avg ROE: {tradeable_output['ROE'].mean():.2%}")
-        logging.info(f"  Avg Market Cap: ${tradeable_output['Market_Cap'].mean()/1e9:.2f}B")
+    for stock in selected_stocks:
+        if data.can_trade(stock):
+            order_target_percent(stock, target_weight)
+            if LOG_REBALANCE_DETAILS and stock in to_buy:
+                stock_data = tradeable_output.loc[stock]
+                logging.info(f"    BUY:  {stock.symbol} "
+                           f"(ROE: {stock_data['ROE']:.2%}, "
+                           f"MCap: ${stock_data['Market_Cap']/1e9:.1f}B)")
+
+    # Log summary statistics
+    if LOG_REBALANCE_DETAILS and not tradeable_output.empty:
+        logging.info(f"  Portfolio Summary:")
+        logging.info(f"    Holdings: {', '.join([s.symbol for s in selected_stocks])}")
+        logging.info(f"    Avg ROE: {tradeable_output['ROE'].mean():.2%}")
+        logging.info(f"    Avg Market Cap: ${tradeable_output['Market_Cap'].mean()/1e9:.2f}B")
+        logging.info("=" * 70)
+    elif not LOG_REBALANCE_DETAILS:
+        # Minimal logging
+        holdings = [s.symbol for s in selected_stocks]
+        logging.info(f"Rebalance #{context.rebalance_count}: {', '.join(holdings)}")
 
 
 def handle_data(context, data):
@@ -592,10 +646,11 @@ if __name__ == '__main__':
     """
 
     # Build pipeline loader map (CLEAN APPROACH - NO MONKEY-PATCHING!)
-    print("\n" + "=" * 60)
+    print("\n" + "=" * 80)
     print("BUILDING PIPELINE LOADERS")
-    print("=" * 60)
+    print("=" * 80)
     custom_loader = build_pipeline_loaders()
+    print()
 
     # Parse dates
     start = pd.Timestamp(START_DATE)
@@ -606,18 +661,29 @@ if __name__ == '__main__':
     years = len(trading_days) / 252
 
     # Display backtest configuration
-    print("\n" + "=" * 60)
+    print("=" * 80)
     print("BACKTEST CONFIGURATION")
-    print("=" * 60)
+    print("=" * 80)
     print(f"Strategy: Top {SELECTION_SIZE} ROE from Top {UNIVERSE_SIZE} by Market Cap")
     print(f"Period: {start.date()} to {end.date()} ({years:.1f} years)")
     print(f"Capital: ${CAPITAL_BASE:,}")
     print(f"Rebalancing: {REBALANCE_FREQ.capitalize()}")
     print(f"Bundle: {BUNDLE_NAME}")
     print(f"Database: {DB_DIR / (DB_NAME + '.sqlite')}")
-    print("=" * 60 + "\n")
+    print(f"Progress: {PROGRESS_BAR if PROGRESS_BAR else 'None'}")
+    print(f"Pipeline logging: {'Enabled' if LOG_PIPELINE_STATS else 'Disabled'}")
+    print(f"Rebalance logging: {'Detailed' if LOG_REBALANCE_DETAILS else 'Minimal'}")
+    print("=" * 80)
+    print()
 
     # Run backtest
+    print("=" * 80)
+    print("RUNNING BACKTEST")
+    print("=" * 80)
+    start_time = datetime.now()
+    print(f"Start time: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+    print()
+
     results = run_algorithm(
         start=start,
         end=end,
@@ -627,48 +693,114 @@ if __name__ == '__main__':
         capital_base=CAPITAL_BASE,
         data_frequency='daily',
         bundle=BUNDLE_NAME,
-        custom_loader=custom_loader,  # ← THE KEY - No monkey-patching needed!
+        custom_loader=custom_loader,
     )
 
-    # Print results
-    print("\n" + "=" * 60)
-    print("BACKTEST RESULTS")
-    print("=" * 60)
+    end_time = datetime.now()
+    duration = end_time - start_time
 
-    total_return = ((results['portfolio_value'].iloc[-1] / results['portfolio_value'].iloc[0]) - 1) * 100
+    # Display completion
+    print()
+    print("=" * 80)
+    print("BACKTEST COMPLETE")
+    print("=" * 80)
+    print(f"End time: {end_time.strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"Duration: {duration}")
+    print()
+
+    # Calculate performance metrics
+    print("=" * 80)
+    print("PERFORMANCE SUMMARY")
+    print("=" * 80)
+
+    initial_value = results['portfolio_value'].iloc[0]
+    final_value = results['portfolio_value'].iloc[-1]
+    total_return = ((final_value / initial_value) - 1) * 100
+
     daily_returns = results['portfolio_value'].pct_change().dropna()
     sharpe_ratio = (daily_returns.mean() / daily_returns.std()) * np.sqrt(252)
     max_drawdown = ((results['portfolio_value'] / results['portfolio_value'].cummax()) - 1).min() * 100
 
-    print(f"Total Return: {total_return:.2f}%")
-    print(f"Sharpe Ratio: {sharpe_ratio:.2f}")
-    print(f"Max Drawdown: {max_drawdown:.2f}%")
-    print(f"Final Portfolio Value: ${results['portfolio_value'].iloc[-1]:,.2f}")
-    print(f"Total Rebalances: {results['num_positions'].count()}")
-    print("=" * 60)
+    # Win rate
+    winning_days = (daily_returns > 0).sum()
+    total_days = len(daily_returns)
+    win_rate = (winning_days / total_days) * 100 if total_days > 0 else 0
+
+    # Count trades
+    num_trades = results['orders'].apply(lambda x: len(x) if isinstance(x, list) else 0).sum()
+
+    print(f"Initial Capital:     ${initial_value:,.2f}")
+    print(f"Final Value:         ${final_value:,.2f}")
+    print(f"Total Return:        {total_return:.2f}%")
+    print(f"Sharpe Ratio:        {sharpe_ratio:.2f}")
+    print(f"Max Drawdown:        {max_drawdown:.2f}%")
+    print(f"Win Rate:            {win_rate:.1f}%")
+    print(f"Total Trades:        {num_trades}")
+    print(f"Trading Days:        {len(results):,}")
+    print("=" * 80)
 
     # Save results to disk
-    if SAVE_CSV or SAVE_PICKLE:
-        print("\n" + "=" * 60)
+    if SAVE_CSV or SAVE_PICKLE or SAVE_METADATA:
+        print()
+        print("=" * 80)
         print("SAVING RESULTS")
-        print("=" * 60)
+        print("=" * 80)
 
         # Ensure results directory exists
         RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
+        csv_path = RESULTS_DIR / 'backtest_results.csv'
+        pickle_path = RESULTS_DIR / 'backtest_results.pkl'
+        metadata_path = RESULTS_DIR / 'backtest_results.json'
+
         if SAVE_CSV:
-            csv_path = RESULTS_DIR / 'backtest_results.csv'
             results.to_csv(csv_path)
             print(f"✓ CSV: {csv_path}")
             print(f"  Size: {csv_path.stat().st_size / 1024:.1f} KB")
             print(f"  Rows: {len(results):,}")
 
         if SAVE_PICKLE:
-            pickle_path = RESULTS_DIR / 'backtest_results.pkl'
             results.to_pickle(pickle_path)
             print(f"✓ Pickle: {pickle_path}")
             print(f"  Size: {pickle_path.stat().st_size / 1024:.1f} KB")
 
-        print("=" * 60)
+        if SAVE_METADATA:
+            import json
+            metadata = {
+                'strategy_name': 'Top 5 ROE Strategy',
+                'start_date': start.isoformat(),
+                'end_date': end.isoformat(),
+                'capital_base': CAPITAL_BASE,
+                'universe_size': UNIVERSE_SIZE,
+                'selection_size': SELECTION_SIZE,
+                'rebalance_frequency': REBALANCE_FREQ,
+                'bundle': BUNDLE_NAME,
+                'database': str(DB_DIR / (DB_NAME + '.sqlite')),
+                'run_timestamp': start_time.isoformat(),
+                'duration_seconds': duration.total_seconds(),
+                'performance': {
+                    'initial_value': float(initial_value),
+                    'final_value': float(final_value),
+                    'total_return_pct': float(total_return),
+                    'sharpe_ratio': float(sharpe_ratio),
+                    'max_drawdown_pct': float(max_drawdown),
+                    'win_rate_pct': float(win_rate),
+                    'num_trades': int(num_trades),
+                    'trading_days': len(results),
+                },
+                'files': {
+                    'csv': str(csv_path) if SAVE_CSV else None,
+                    'pickle': str(pickle_path) if SAVE_PICKLE else None,
+                }
+            }
+
+            with open(metadata_path, 'w') as f:
+                json.dump(metadata, f, indent=2)
+
+            print(f"✓ Metadata: {metadata_path}")
+            print(f"  Size: {metadata_path.stat().st_size / 1024:.1f} KB")
+
+        print("=" * 80)
 
     print("\n✓ Backtest complete!")
+    print(f"✓ Execution time: {duration}\n")

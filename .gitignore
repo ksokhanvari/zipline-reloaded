@@ -15,7 +15,9 @@ tmp/*
 backtest_results/
 backtest_results.csv
 backtest_results.pkl
+backtest_results.json
 *.pkl
+*.json
 
 # Installer logs
 pip-log.txt

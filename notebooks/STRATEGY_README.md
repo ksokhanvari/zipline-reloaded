@@ -136,6 +136,17 @@ results = run_algorithm(
 - `RESULTS_DIR`: Directory to save results
 - `SAVE_CSV`: Save results as CSV (boolean)
 - `SAVE_PICKLE`: Save results as pickle (boolean)
+- `SAVE_METADATA`: Save metadata as JSON (boolean)
+
+### Logging Configuration
+
+- `PROGRESS_BAR`: Progress bar frequency
+  - `'D'`: Daily updates
+  - `'W'`: Weekly updates
+  - `'M'`: Monthly updates
+  - `None`: No progress bar
+- `LOG_PIPELINE_STATS`: Log daily pipeline statistics (boolean)
+- `LOG_REBALANCE_DETAILS`: Detailed trade logging (boolean)
 
 ## Adding New Fundamental Columns
 
@@ -199,44 +210,134 @@ This solves the common issue where Zipline adds domain suffixes during pipeline 
 
 ### Console Output
 
+The strategy provides comprehensive progress logging during execution:
+
 ```
-============================================================
+================================================================================
 BUILDING PIPELINE LOADERS
-============================================================
+================================================================================
 ✓ Pipeline loader map built (12 columns mapped)
   - Pricing columns: 5
   - Fundamental columns: 7 (auto-discovered)
 
-============================================================
+================================================================================
 BACKTEST CONFIGURATION
-============================================================
+================================================================================
 Strategy: Top 5 ROE from Top 100 by Market Cap
 Period: 2012-03-10 to 2025-11-11 (13.7 years)
 Capital: $100,000
 Rebalancing: Weekly
-...
+Bundle: sharadar
+Database: /root/.zipline/data/custom/fundamentals.sqlite
+Progress: D
+Pipeline logging: Enabled
+Rebalance logging: Detailed
+================================================================================
+
+================================================================================
+RUNNING BACKTEST
+================================================================================
+Start time: 2025-01-15 14:32:10
 
 ============================================================
-BACKTEST RESULTS
+ROE STRATEGY INITIALIZED
 ============================================================
-Total Return: 145.23%
-Sharpe Ratio: 0.87
-Max Drawdown: -23.45%
-Final Portfolio Value: $245,230.00
-Total Rebalances: 720
+Rebalancing: Weekly
+Universe: Top 100 by market cap
+Selection: Top 5 by ROE
+Weighting: Equal weight
 ============================================================
+
+2012-03-12 | Universe:  5 stocks | Avg ROE: 15.23% | Avg MCap: $250.3B
+2012-03-13 | Universe:  5 stocks | Avg ROE: 15.41% | Avg MCap: $248.7B
+
+======================================================================
+REBALANCE #1
+======================================================================
+  Sell: 0 | Buy: 5 | Rebalance: 0 | Weight: 20.00%
+    BUY:  AAPL (ROE: 18.45%, MCap: $500.2B)
+    BUY:  MSFT (ROE: 16.23%, MCap: $420.1B)
+    BUY:  GOOGL (ROE: 14.87%, MCap: $380.5B)
+    BUY:  JPM (ROE: 13.92%, MCap: $310.3B)
+    BUY:  WMT (ROE: 12.56%, MCap: $290.8B)
+  Portfolio Summary:
+    Holdings: AAPL, MSFT, GOOGL, JPM, WMT
+    Avg ROE: 15.21%
+    Avg Market Cap: $380.4B
+======================================================================
+
+...
+
+================================================================================
+BACKTEST COMPLETE
+================================================================================
+End time: 2025-01-15 14:45:23
+Duration: 0:13:13
+
+================================================================================
+PERFORMANCE SUMMARY
+================================================================================
+Initial Capital:     $100,000.00
+Final Value:         $245,230.00
+Total Return:        145.23%
+Sharpe Ratio:        0.87
+Max Drawdown:        -23.45%
+Win Rate:            54.2%
+Total Trades:        720
+Trading Days:        3,450
+================================================================================
+
+================================================================================
+SAVING RESULTS
+================================================================================
+✓ CSV: /notebooks/backtest_results.csv
+  Size: 1245.3 KB
+  Rows: 3,450
+✓ Pickle: /notebooks/backtest_results.pkl
+  Size: 892.1 KB
+✓ Metadata: /notebooks/backtest_results.json
+  Size: 1.2 KB
+================================================================================
+
+✓ Backtest complete!
+✓ Execution time: 0:13:13
 ```
+
+### Logging Levels
+
+**Minimal Logging** (`LOG_PIPELINE_STATS=False`, `LOG_REBALANCE_DETAILS=False`):
+- Configuration summary only
+- Simple rebalance notifications
+- Performance summary
+
+**Standard Logging** (`LOG_PIPELINE_STATS=True`, `LOG_REBALANCE_DETAILS=False`):
+- Daily pipeline statistics
+- Simple rebalance notifications
+- Performance summary
+
+**Detailed Logging** (`LOG_PIPELINE_STATS=True`, `LOG_REBALANCE_DETAILS=True`):
+- Daily pipeline statistics
+- Detailed BUY/SELL trade information with metrics
+- Portfolio composition after each rebalance
+- Full performance summary
 
 ### Saved Files
 
 - **CSV**: `backtest_results.csv` - Portable, human-readable
-- **Pickle**: `backtest_results.pkl` - Preserves full DataFrame state
+  - Daily performance metrics
+  - Portfolio value, positions, leverage
+  - All custom `record()` metrics
 
-Both files contain daily performance metrics:
-- `portfolio_value`: Total portfolio value
-- `num_positions`: Number of stocks held
-- `leverage`: Portfolio leverage
-- All custom `record()` metrics
+- **Pickle**: `backtest_results.pkl` - Preserves full DataFrame state
+  - Complete results with all data types
+  - Faster to load for analysis
+
+- **Metadata**: `backtest_results.json` - Configuration and performance summary
+  - Strategy configuration
+  - Date range and parameters
+  - Performance metrics (return, Sharpe, drawdown)
+  - Execution timestamp and duration
+  - File paths
 
 ## Requirements
 

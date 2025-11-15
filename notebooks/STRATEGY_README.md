@@ -140,19 +140,16 @@ results = run_algorithm(
 
 ### Logging Configuration
 
-- `PROGRESS_BAR`: Zipline progress bar frequency
-  - `'D'`: Daily updates
-  - `'W'`: Weekly updates
-  - `'M'`: Monthly updates
-  - `None`: No progress bar
 - `LOG_PIPELINE_STATS`: Log daily pipeline statistics (boolean)
 - `LOG_REBALANCE_DETAILS`: Detailed trade logging (boolean)
 - `PROGRESS_UPDATE_INTERVAL`: Days between progress log updates (integer)
   - Recommended: 1 for short backtests, 10 for medium, 20+ for long
+  - Updates show: Day progress, percentage, portfolio value
 - `ENABLE_FLIGHTLOG`: Enable FlightLog server integration (boolean)
   - Requires FlightLog server running
-- `FLIGHTLOG_HOST`: FlightLog server hostname (string)
-- `FLIGHTLOG_PORT`: FlightLog server port (integer)
+  - Provides real-time monitoring and visualization
+- `FLIGHTLOG_HOST`: FlightLog server hostname (string, default: 'flightlog')
+- `FLIGHTLOG_PORT`: FlightLog server port (integer, default: 9020)
 
 ## Adding New Fundamental Columns
 
@@ -235,7 +232,7 @@ Capital: $100,000
 Rebalancing: Weekly
 Bundle: sharadar
 Database: /root/.zipline/data/custom/fundamentals.sqlite
-Progress: D
+Progress updates: Every 10 days
 Pipeline logging: Enabled
 Rebalance logging: Detailed
 ================================================================================

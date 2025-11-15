@@ -60,10 +60,10 @@ The strategy includes Zipline's built-in progress logging system:
 - enable_progress_logging(): Real-time backtest progress updates
   - Algorithm name: 'Top5-ROE-Strategy'
   - Update interval: Configurable (default: 10 days)
+  - Shows day progress, percentage, and portfolio value
 - enable_flightlog(): Optional integration with FlightLog server
   - Real-time monitoring and visualization
   - Requires FlightLog server running
-- Progress bar: Daily ('D'), weekly ('W'), monthly ('M'), or none
 - Pipeline stats: Daily universe statistics (optional)
 - Rebalance details: Detailed BUY/SELL logging with metrics (optional)
 - Timestamps: Start/end times and execution duration
@@ -71,8 +71,8 @@ The strategy includes Zipline's built-in progress logging system:
 - Metadata export: JSON file with configuration and results
 
 Example output during execution:
-  [2024-01-15 14:32:10] Top5-ROE-Strategy | Day 100/3450 (2.9%) | Portfolio: $102,345
-  [2024-01-15 14:32:20] Top5-ROE-Strategy | Day 200/3450 (5.8%) | Portfolio: $105,678
+  [2025-01-15 14:32:10] Top5-ROE-Strategy | Day 100/3450 (2.9%) | Portfolio: $102,345
+  [2025-01-15 14:32:20] Top5-ROE-Strategy | Day 200/3450 (5.8%) | Portfolio: $105,678
 """
 
 import pandas as pd
@@ -108,9 +108,8 @@ SAVE_PICKLE = True
 SAVE_METADATA = True
 
 # Logging Configuration
-PROGRESS_BAR = 'D'  # 'D' (daily), 'W' (weekly), 'M' (monthly), or None
 LOG_PIPELINE_STATS = True  # Log daily pipeline stats
-LOG_REBALANCE_DETAILS = True  # Log detailed trade information
+LOG_REBALANCE_DETAILS = True  # Log detailed trade logging
 PROGRESS_UPDATE_INTERVAL = 10  # Days between progress updates
 ENABLE_FLIGHTLOG = False  # Enable FlightLog integration (requires server)
 FLIGHTLOG_HOST = 'flightlog'  # FlightLog server host
@@ -686,7 +685,7 @@ if __name__ == '__main__':
     print(f"Rebalancing: {REBALANCE_FREQ.capitalize()}")
     print(f"Bundle: {BUNDLE_NAME}")
     print(f"Database: {DB_DIR / (DB_NAME + '.sqlite')}")
-    print(f"Progress: {PROGRESS_BAR if PROGRESS_BAR else 'None'}")
+    print(f"Progress updates: Every {PROGRESS_UPDATE_INTERVAL} days")
     print(f"Pipeline logging: {'Enabled' if LOG_PIPELINE_STATS else 'Disabled'}")
     print(f"Rebalance logging: {'Detailed' if LOG_REBALANCE_DETAILS else 'Minimal'}")
     print("=" * 80)
@@ -730,7 +729,6 @@ if __name__ == '__main__':
         data_frequency='daily',
         bundle=BUNDLE_NAME,
         custom_loader=custom_loader,
-        progress=PROGRESS_BAR,  # Built-in Zipline progress bar
     )
 
     end_time = datetime.now()

@@ -1,9 +1,25 @@
 #!/usr/bin/env python3
 """
-Top 5 ROE Strategy using Custom Fundamentals
+Top 5 ROE Strategy using Custom Fundamentals - Full Version
 
 A quantitative trading strategy that selects high-quality stocks based on
 Return on Equity (ROE) from a universe of large-cap companies.
+
+VERSIONS AVAILABLE
+==================
+- strategy_top5_roe_simple.py: Minimal version with clean run_algorithm() interface
+  Use for: Quick backtests, prototyping, learning
+
+- strategy_top5_roe.py (this file): Full-featured version
+  Use for: Production backtests, long runs, detailed analysis
+
+This full version includes:
+- Progress logging with enable_progress_logging()
+- Real-time portfolio value updates
+- Metadata export to JSON
+- Optional detailed trade logging
+- FlightLog integration support
+- Configurable via constants at top of file
 
 STRATEGY OVERVIEW
 =================
@@ -85,7 +101,7 @@ import logging
 # ============================================================================
 
 # Backtest Parameters
-START_DATE = '2012-03-10'  # Backtest start date (allow lookback window)
+START_DATE = '2021-03-10'  # Backtest start date (allow lookback window)
 END_DATE = '2025-11-11'    # Backtest end date
 CAPITAL_BASE = 100000      # Starting capital ($)
 

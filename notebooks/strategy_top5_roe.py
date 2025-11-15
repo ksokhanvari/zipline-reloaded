@@ -2,17 +2,88 @@
 """
 Top 5 ROE Strategy using Custom Fundamentals
 
-This strategy:
-- Uses custom fundamentals database
-- Filters to top 100 stocks by market cap
-- Selects top 5 stocks by ROE
-- Rebalances weekly with equal weights
+A quantitative trading strategy that selects high-quality stocks based on
+Return on Equity (ROE) from a universe of large-cap companies.
+
+STRATEGY OVERVIEW
+=================
+This strategy implements a fundamental factor-based approach:
+1. Universe Selection: Top 100 stocks by market capitalization
+2. Factor Ranking: Select top 5 stocks by Return on Equity (ROE)
+3. Rebalancing: Weekly rebalancing at market open + 1 hour
+4. Weighting: Equal weight allocation across selected stocks
+
+CUSTOM DATA INTEGRATION
+========================
+This strategy demonstrates Zipline's clean custom data loader approach:
+- Custom fundamentals loaded from SQLite database
+- Auto-discovery of fundamental columns (no manual mapping)
+- Domain-aware column matching via LoaderDict
+- No monkey-patching required
+
+USAGE
+=====
+Run from command line:
+    python strategy_top5_roe.py
+
+Or import and use programmatically:
+    from strategy_top5_roe import build_pipeline_loaders, make_pipeline
+    custom_loader = build_pipeline_loaders()
+    results = run_algorithm(..., custom_loader=custom_loader)
+
+REQUIREMENTS
+============
+- Zipline Reloaded with custom data support
+- Custom fundamentals database at /root/.zipline/data/custom/fundamentals.sqlite
+- Sharadar bundle data
+- See load_csv_fundamentals.ipynb for database creation
+
+OUTPUT
+======
+- Console: Backtest statistics and rebalance logs
+- Files: Results saved to /notebooks/backtest_results.{csv,pkl}
+
+CUSTOMIZATION
+=============
+Modify the configuration section below to adjust:
+- Backtest date range
+- Starting capital
+- Universe size (top N by market cap)
+- Selection size (top M by ROE)
+- Rebalancing frequency
+- Database location
 """
 
 import pandas as pd
 import numpy as np
 from pathlib import Path
 import logging
+
+# ============================================================================
+# CONFIGURATION
+# ============================================================================
+
+# Backtest Parameters
+START_DATE = '2012-03-10'  # Backtest start date (allow lookback window)
+END_DATE = '2025-11-11'    # Backtest end date
+CAPITAL_BASE = 100000      # Starting capital ($)
+
+# Strategy Parameters
+UNIVERSE_SIZE = 100        # Top N stocks by market cap
+SELECTION_SIZE = 5         # Top M stocks by ROE to hold
+REBALANCE_FREQ = 'weekly'  # weekly, monthly, or daily
+
+# Database Configuration
+DB_NAME = "fundamentals"   # Must match load_csv_fundamentals.ipynb
+DB_DIR = Path('/root/.zipline/data/custom')
+
+# Bundle Configuration
+BUNDLE_NAME = 'sharadar'
+
+# Output Configuration
+RESULTS_DIR = Path('/notebooks')
+SAVE_CSV = True
+SAVE_PICKLE = True
 
 from zipline import run_algorithm
 from zipline.api import (
@@ -42,25 +113,71 @@ logging.basicConfig(level=logging.INFO)
 from zipline.data.bundles import register
 from zipline.data.bundles.sharadar_bundle import sharadar_bundle
 
-register('sharadar', sharadar_bundle(tickers=None, incremental=True, include_funds=True))
-print("✓ Sharadar bundle registered")
+register(BUNDLE_NAME, sharadar_bundle(tickers=None, incremental=True, include_funds=True))
+print(f"✓ {BUNDLE_NAME} bundle registered")
 
 # ============================================================================
 # Define Custom Fundamentals Database
 # ============================================================================
 
 class CustomFundamentals(Database):
-    """Custom Fundamentals database."""
+    """
+    Custom Fundamentals Database Schema.
 
-    CODE = "fundamentals"  # Must match DATABASE_NAME in load_csv_fundamentals.ipynb
-    LOOKBACK_WINDOW = 252
+    This class defines the schema for custom fundamental data loaded from
+    SQLite. Add columns here to make them available in your pipeline.
 
-    # Key columns for strategy
+    AUTO-DISCOVERY: All Column attributes defined here are automatically
+    discovered and mapped to the CustomSQLiteLoader by build_pipeline_loaders().
+    No manual mapping required!
+
+    Attributes
+    ----------
+    CODE : str
+        Database identifier (must match database filename without .sqlite)
+    LOOKBACK_WINDOW : int
+        Number of days to look back for data (252 = ~1 year)
+
+    Columns
+    -------
+    ReturnOnEquity_SmartEstimat : Column(float)
+        Return on equity - key profitability metric
+    ReturnOnAssets_SmartEstimate : Column(float)
+        Return on assets - efficiency metric
+    CompanyMarketCap : Column(float)
+        Market capitalization in USD
+    RefPriceClose : Column(float)
+        Reference closing price
+    GICSSectorName : Column(str)
+        GICS sector classification
+    LongTermGrowth_Mean : Column(float)
+        Analyst consensus long-term growth rate
+    EnterpriseValueToEBITDA_DailyTimeSeriesRatio_ : Column(float)
+        EV/EBITDA valuation ratio
+
+    Notes
+    -----
+    To add new columns:
+    1. Add column definition here: `NewColumn = Column(dtype)`
+    2. Ensure column exists in SQLite database
+    3. Run strategy - column is auto-discovered and mapped
+    """
+
+    CODE = DB_NAME           # Database identifier
+    LOOKBACK_WINDOW = 252    # Days to look back (~1 year)
+
+    # Profitability Metrics
     ReturnOnEquity_SmartEstimat = Column(float)
     ReturnOnAssets_SmartEstimate = Column(float)
+
+    # Size and Price Metrics
     CompanyMarketCap = Column(float)
     RefPriceClose = Column(float)
+
+    # Classification
     GICSSectorName = Column(str)
+
+    # Growth and Valuation
     LongTermGrowth_Mean = Column(float)
     EnterpriseValueToEBITDA_DailyTimeSeriesRatio_ = Column(float)
 
@@ -69,13 +186,58 @@ class CustomFundamentals(Database):
 # Build Pipeline Loader Map (Clean Approach)
 # ============================================================================
 
-def build_pipeline_loaders():
+def build_pipeline_loaders(db_dir=DB_DIR, db_code=None, bundle_name=BUNDLE_NAME):
     """
-    Build a proper PipelineLoader map.
+    Build a PipelineLoader map with auto-discovery of fundamental columns.
 
-    This is the clean approach - map each column/term to its appropriate loader.
-    No monkey-patching required!
+    This function creates a mapping between pipeline columns and their data loaders.
+    It uses introspection to automatically discover all columns defined in
+    CustomFundamentals, eliminating manual column listing.
+
+    KEY FEATURES
+    ------------
+    - Auto-discovers fundamental columns via introspection
+    - Domain-aware column matching (handles USEquityPricing<US>.close)
+    - No monkey-patching required
+    - Single source of truth (columns defined once in Database class)
+
+    Parameters
+    ----------
+    db_dir : Path, optional
+        Directory containing custom SQLite databases (default: DB_DIR)
+    db_code : str, optional
+        Database identifier/filename without .sqlite extension
+        (default: CustomFundamentals.CODE)
+    bundle_name : str, optional
+        Name of the bundle to load for pricing data (default: BUNDLE_NAME)
+
+    Returns
+    -------
+    LoaderDict
+        Dictionary mapping pipeline columns to their loaders
+        - Pricing columns → USEquityPricingLoader
+        - Fundamental columns → CustomSQLiteLoader
+
+    Examples
+    --------
+    >>> custom_loader = build_pipeline_loaders()
+    >>> results = run_algorithm(..., custom_loader=custom_loader)
+
+    >>> # Use custom database location
+    >>> custom_loader = build_pipeline_loaders(
+    ...     db_dir=Path('/custom/path'),
+    ...     db_code='my_fundamentals'
+    ... )
+
+    Notes
+    -----
+    The LoaderDict class handles domain-aware column matching, so columns
+    registered as USEquityPricing.close will match lookups for
+    USEquityPricing<US_EQUITIES>.close.
     """
+    if db_code is None:
+        db_code = CustomFundamentals.CODE
+
     # Custom dict that handles domain-aware columns (e.g., USEquityPricing<US>.close)
     class LoaderDict(dict):
         """
@@ -116,7 +278,7 @@ def build_pipeline_loaders():
             return result
 
     # Load bundle data
-    bundle_data = load_bundle('sharadar')
+    bundle_data = load_bundle(bundle_name)
 
     # Create loaders
     pricing_loader = USEquityPricingLoader.without_fx(
@@ -124,9 +286,8 @@ def build_pipeline_loaders():
         bundle_data.adjustment_reader
     )
 
-    db_dir = Path('/root/.zipline/data/custom')
     fundamentals_loader = CustomSQLiteLoader(
-        db_code=CustomFundamentals.CODE,
+        db_code=db_code,
         db_dir=db_dir
     )
 
@@ -163,22 +324,59 @@ def build_pipeline_loaders():
 # Pipeline Definition
 # ============================================================================
 
-def make_pipeline():
+def make_pipeline(universe_size=UNIVERSE_SIZE, selection_size=SELECTION_SIZE):
     """
-    Create a pipeline that:
-    1. Filters to top 100 stocks by market cap
-    2. Selects top 5 by ROE
+    Create a pipeline for ROE-based stock selection.
+
+    This pipeline implements a two-stage filtering process:
+    1. Universe Selection: Filter to top N stocks by market capitalization
+    2. Factor Ranking: Select top M stocks by Return on Equity (ROE)
+
+    The pipeline outputs the selected stocks along with their fundamental metrics
+    for analysis and rebalancing.
+
+    Parameters
+    ----------
+    universe_size : int, optional
+        Number of stocks to include in universe (top N by market cap)
+        Default: UNIVERSE_SIZE (100)
+    selection_size : int, optional
+        Number of stocks to select from universe (top M by ROE)
+        Default: SELECTION_SIZE (5)
+
+    Returns
+    -------
+    Pipeline
+        A Zipline pipeline with the following:
+        - Columns: ROE, Market_Cap, Sector
+        - Screen: Top M stocks by ROE from top N by market cap
+
+    Examples
+    --------
+    >>> # Use default parameters
+    >>> pipe = make_pipeline()
+
+    >>> # Custom universe and selection
+    >>> pipe = make_pipeline(universe_size=200, selection_size=10)
+
+    >>> # Attach to algorithm
+    >>> attach_pipeline(pipe, 'my_strategy')
+
+    Notes
+    -----
+    The .latest attribute accesses the most recent value for each metric.
+    The pipeline automatically handles missing data and lookback windows.
     """
-    # Get factors
+    # Get factors (most recent values)
     roe = CustomFundamentals.ReturnOnEquity_SmartEstimat.latest
     market_cap = CustomFundamentals.CompanyMarketCap.latest
     sector = CustomFundamentals.GICSSectorName.latest
 
-    # Screen: top 100 by market cap
-    top_100_by_mcap = market_cap.top(100)
+    # Stage 1: Universe selection - top N by market cap
+    universe = market_cap.top(universe_size)
 
-    # Select top 5 by ROE from top 100
-    top_5_roe = roe.top(5, mask=top_100_by_mcap)
+    # Stage 2: Factor ranking - top M by ROE from universe
+    selection = roe.top(selection_size, mask=universe)
 
     return Pipeline(
         columns={
@@ -186,7 +384,7 @@ def make_pipeline():
             'Market_Cap': market_cap,
             'Sector': sector,
         },
-        screen=top_5_roe,
+        screen=selection,
     )
 
 
@@ -196,38 +394,113 @@ def make_pipeline():
 
 def initialize(context):
     """
-    Initialize strategy and attach pipeline.
+    Initialize the trading algorithm.
+
+    Called once at the start of the backtest. Sets up the pipeline,
+    schedules rebalancing, and initializes context variables.
+
+    Parameters
+    ----------
+    context : AlgorithmContext
+        Zipline algorithm context object. Used to store state between
+        function calls during the backtest.
+
+    Notes
+    -----
+    This function:
+    1. Creates and attaches the pipeline for stock selection
+    2. Schedules the rebalance function to run periodically
+    3. Initializes context variables for tracking
+    4. Logs configuration for verification
+
+    The rebalancing frequency is determined by REBALANCE_FREQ:
+    - 'weekly': Runs every Monday at market open + 1 hour
+    - 'monthly': Runs first trading day of month
+    - 'daily': Runs every day at market open + 1 hour
     """
     # Attach pipeline
     pipe = make_pipeline()
     attach_pipeline(pipe, 'roe_strategy')
 
-    # Schedule weekly rebalancing
-    schedule_function(
-        rebalance,
-        date_rules.week_start(),
-        time_rules.market_open(hours=1)
-    )
+    # Schedule rebalancing based on configuration
+    if REBALANCE_FREQ == 'weekly':
+        schedule_function(
+            rebalance,
+            date_rules.week_start(),
+            time_rules.market_open(hours=1)
+        )
+    elif REBALANCE_FREQ == 'monthly':
+        schedule_function(
+            rebalance,
+            date_rules.month_start(),
+            time_rules.market_open(hours=1)
+        )
+    elif REBALANCE_FREQ == 'daily':
+        schedule_function(
+            rebalance,
+            date_rules.every_day(),
+            time_rules.market_open(hours=1)
+        )
 
+    # Initialize context variables
     context.rebalance_count = 0
 
-    logging.info("ROE Strategy initialized")
-    logging.info("  Rebalancing: Weekly")
-    logging.info("  Universe: Top 100 by market cap")
-    logging.info("  Selection: Top 5 by ROE")
+    # Log configuration
+    logging.info("=" * 60)
+    logging.info("ROE STRATEGY INITIALIZED")
+    logging.info("=" * 60)
+    logging.info(f"Rebalancing: {REBALANCE_FREQ.capitalize()}")
+    logging.info(f"Universe: Top {UNIVERSE_SIZE} by market cap")
+    logging.info(f"Selection: Top {SELECTION_SIZE} by ROE")
+    logging.info(f"Weighting: Equal weight")
+    logging.info("=" * 60)
 
 
 def before_trading_start(context, data):
     """
     Called daily before market opens.
-    Get pipeline output.
+
+    Fetches the latest pipeline output containing stock selections and
+    fundamental metrics. This data is used by the rebalance function.
+
+    Parameters
+    ----------
+    context : AlgorithmContext
+        Algorithm context object
+    data : BarData
+        Object providing methods to get pricing and volume data
+
+    Notes
+    -----
+    Pipeline output is cached in context.pipeline_data and updated daily.
+    The rebalance function accesses this cached data when it runs.
     """
     context.pipeline_data = pipeline_output('roe_strategy')
 
 
 def rebalance(context, data):
     """
-    Weekly rebalance based on pipeline output.
+    Rebalance portfolio based on pipeline selections.
+
+    This function:
+    1. Gets the latest pipeline output (stock selections)
+    2. Filters to tradeable stocks only
+    3. Sells positions no longer in selection
+    4. Buys/rebalances positions to equal weight
+    5. Logs holdings and metrics
+
+    Parameters
+    ----------
+    context : AlgorithmContext
+        Algorithm context object containing portfolio state
+    data : BarData
+        Object providing methods to check tradeability and get prices
+
+    Notes
+    -----
+    Equal weighting: Each selected stock gets 1/N of portfolio value.
+    Untradeable stocks are filtered out to prevent order errors.
+    All trades use order_target_percent for precise allocation.
     """
     context.rebalance_count += 1
 
@@ -277,7 +550,23 @@ def rebalance(context, data):
 
 def handle_data(context, data):
     """
-    Record daily metrics.
+    Called on every bar (daily in this strategy).
+
+    Records performance metrics for analysis and plotting.
+
+    Parameters
+    ----------
+    context : AlgorithmContext
+        Algorithm context object containing portfolio state
+    data : BarData
+        Object providing methods to get pricing and volume data
+
+    Notes
+    -----
+    Recorded metrics are stored in the backtest results DataFrame:
+    - portfolio_value: Total portfolio value ($)
+    - num_positions: Number of stocks currently held
+    - leverage: Portfolio leverage ratio
     """
     record(
         portfolio_value=context.portfolio.portfolio_value,
@@ -291,32 +580,53 @@ def handle_data(context, data):
 # ============================================================================
 
 if __name__ == '__main__':
+    """
+    Main execution block.
+
+    This runs when the script is executed directly (not imported).
+    It performs the following steps:
+    1. Build pipeline loaders with auto-discovery
+    2. Run the backtest with configured parameters
+    3. Calculate and display performance metrics
+    4. Save results to disk
+    """
+
     # Build pipeline loader map (CLEAN APPROACH - NO MONKEY-PATCHING!)
+    print("\n" + "=" * 60)
+    print("BUILDING PIPELINE LOADERS")
+    print("=" * 60)
     custom_loader = build_pipeline_loaders()
 
-    # Run backtest
-    # Database contains: 525,972 rows, 3,305 symbols, 2025-03-03 to 2025-11-11
-    # NOTE: Adjust these dates to match your actual database coverage
-    start = pd.Timestamp('2012-03-10')  # Start after min date to allow lookback
-    end = pd.Timestamp('2025-11-11')
+    # Parse dates
+    start = pd.Timestamp(START_DATE)
+    end = pd.Timestamp(END_DATE)
 
+    # Calculate period duration
+    trading_days = pd.bdate_range(start, end)
+    years = len(trading_days) / 252
+
+    # Display backtest configuration
     print("\n" + "=" * 60)
-    print("RUNNING BACKTEST")
+    print("BACKTEST CONFIGURATION")
     print("=" * 60)
-    print(f"Period: {start.date()} to {end.date()} (~8 months)")
-    print(f"Capital: $100,000")
-    print(f"Database: 525,972 rows, 3,305 symbols (2025-03-03 to 2025-11-11)")
+    print(f"Strategy: Top {SELECTION_SIZE} ROE from Top {UNIVERSE_SIZE} by Market Cap")
+    print(f"Period: {start.date()} to {end.date()} ({years:.1f} years)")
+    print(f"Capital: ${CAPITAL_BASE:,}")
+    print(f"Rebalancing: {REBALANCE_FREQ.capitalize()}")
+    print(f"Bundle: {BUNDLE_NAME}")
+    print(f"Database: {DB_DIR / (DB_NAME + '.sqlite')}")
     print("=" * 60 + "\n")
 
+    # Run backtest
     results = run_algorithm(
         start=start,
         end=end,
         initialize=initialize,
         before_trading_start=before_trading_start,
         handle_data=handle_data,
-        capital_base=100000,
+        capital_base=CAPITAL_BASE,
         data_frequency='daily',
-        bundle='sharadar',
+        bundle=BUNDLE_NAME,
         custom_loader=custom_loader,  # ← THE KEY - No monkey-patching needed!
     )
 
@@ -337,23 +647,28 @@ if __name__ == '__main__':
     print(f"Total Rebalances: {results['num_positions'].count()}")
     print("=" * 60)
 
-    # Save results
-    print("\n" + "=" * 60)
-    print("SAVING RESULTS")
-    print("=" * 60)
+    # Save results to disk
+    if SAVE_CSV or SAVE_PICKLE:
+        print("\n" + "=" * 60)
+        print("SAVING RESULTS")
+        print("=" * 60)
 
-    results_dir = Path('/notebooks')
+        # Ensure results directory exists
+        RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Save as CSV
-    csv_path = results_dir / 'backtest_results.csv'
-    results.to_csv(csv_path)
-    print(f"✓ Saved CSV: {csv_path}")
-    print(f"  Size: {csv_path.stat().st_size / 1024:.2f} KB")
+        if SAVE_CSV:
+            csv_path = RESULTS_DIR / 'backtest_results.csv'
+            results.to_csv(csv_path)
+            print(f"✓ CSV: {csv_path}")
+            print(f"  Size: {csv_path.stat().st_size / 1024:.1f} KB")
+            print(f"  Rows: {len(results):,}")
 
-    # Save as pickle (preserves full state)
-    pickle_path = results_dir / 'backtest_results.pkl'
-    results.to_pickle(pickle_path)
-    print(f"✓ Saved pickle: {pickle_path}")
-    print(f"  Size: {pickle_path.stat().st_size / 1024:.2f} KB")
+        if SAVE_PICKLE:
+            pickle_path = RESULTS_DIR / 'backtest_results.pkl'
+            results.to_pickle(pickle_path)
+            print(f"✓ Pickle: {pickle_path}")
+            print(f"  Size: {pickle_path.stat().st_size / 1024:.1f} KB")
 
-    print("=" * 60)
+        print("=" * 60)
+
+    print("\n✓ Backtest complete!")

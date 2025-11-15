@@ -6,10 +6,13 @@
 
 # Zipline Reloaded - Enhanced Professional Fork
 
+> **Maintained by [Kamran Sokhanvari](https://github.com/ksokhanvari) at [Hidden Point Capital](https://www.hiddenpointcapital.com)**
+
 > **This is a professional fork of [zipline-reloaded](https://github.com/stefan-jansen/zipline-reloaded) with Sharadar data integration, custom fundamentals support, FlightLog monitoring, and enhanced strategy development tools.**
 
 | Version Info        | [![Python](https://img.shields.io/pypi/pyversions/zipline-reloaded.svg?cacheSeconds=2592000)](https://pypi.python.org/pypi/zipline-reloaded) ![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue) ![Pandas 2.0+](https://img.shields.io/badge/pandas-2.0%2B-blue) ![NumPy 2.0+](https://img.shields.io/badge/numpy-2.0%2B-blue) |
 | ------------------- | ---------- |
+| **Author**          | [Kamran Sokhanvari](https://github.com/ksokhanvari) - [Hidden Point Capital](https://www.hiddenpointcapital.com) |
 | **Upstream**        | [stefan-jansen/zipline-reloaded](https://github.com/stefan-jansen/zipline-reloaded) |
 | **Community**       | [![Discourse](https://img.shields.io/discourse/topics?server=https%3A%2F%2Fexchange.ml4trading.io%2F)](https://exchange.ml4trading.io) [![ML4T](https://img.shields.io/badge/Powered%20by-ML4Trading-blue)](https://ml4trading.io) |
 
@@ -592,7 +595,7 @@ docker exec -it zipline-reloaded-jupyter python /notebooks/strategy_top5_roe_sim
 
 ## Contributing
 
-This fork is maintained by [Kamran Sokhanvari](https://github.com/ksokhanvari). Contributions are welcome!
+This fork is maintained by [Kamran Sokhanvari](https://github.com/ksokhanvari) at [Hidden Point Capital](https://www.hiddenpointcapital.com). Contributions are welcome!
 
 For issues or feature requests related to:
 - **Sharadar integration**: Open an issue in this repository
@@ -612,6 +615,11 @@ This project is licensed under the Apache 2.0 License - see the upstream [LICENS
 
 ## Acknowledgments
 
+### Fork Development
+- **[Kamran Sokhanvari](https://github.com/ksokhanvari)** - Author and maintainer of this enhanced fork
+- **[Hidden Point Capital](https://www.hiddenpointcapital.com)** - Supporting quantitative research and development
+
+### Upstream & Community
 - **Stefan Jansen** - For maintaining zipline-reloaded and keeping it alive for the community
 - **Quantopian Team** - For creating the original Zipline library
 - **NASDAQ Data Link** - For providing the Sharadar dataset

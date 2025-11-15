@@ -140,13 +140,19 @@ results = run_algorithm(
 
 ### Logging Configuration
 
-- `PROGRESS_BAR`: Progress bar frequency
+- `PROGRESS_BAR`: Zipline progress bar frequency
   - `'D'`: Daily updates
   - `'W'`: Weekly updates
   - `'M'`: Monthly updates
   - `None`: No progress bar
 - `LOG_PIPELINE_STATS`: Log daily pipeline statistics (boolean)
 - `LOG_REBALANCE_DETAILS`: Detailed trade logging (boolean)
+- `PROGRESS_UPDATE_INTERVAL`: Days between progress log updates (integer)
+  - Recommended: 1 for short backtests, 10 for medium, 20+ for long
+- `ENABLE_FLIGHTLOG`: Enable FlightLog server integration (boolean)
+  - Requires FlightLog server running
+- `FLIGHTLOG_HOST`: FlightLog server hostname (string)
+- `FLIGHTLOG_PORT`: FlightLog server port (integer)
 
 ## Adding New Fundamental Columns
 
@@ -235,9 +241,21 @@ Rebalance logging: Detailed
 ================================================================================
 
 ================================================================================
+ENABLING PROGRESS LOGGING
+================================================================================
+✓ Progress logging enabled
+  Algorithm: Top5-ROE-Strategy
+  Update interval: 10 days
+
+================================================================================
 RUNNING BACKTEST
 ================================================================================
 Start time: 2025-01-15 14:32:10
+
+[2025-01-15 14:32:12] Top5-ROE-Strategy | Day 10/3450 (0.3%) | Portfolio: $100,234
+[2025-01-15 14:32:14] Top5-ROE-Strategy | Day 20/3450 (0.6%) | Portfolio: $101,456
+[2025-01-15 14:32:16] Top5-ROE-Strategy | Day 30/3450 (0.9%) | Portfolio: $102,789
+...
 
 ============================================================
 ROE STRATEGY INITIALIZED

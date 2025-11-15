@@ -56,13 +56,23 @@ Modify the configuration section below to adjust:
 
 PROGRESS LOGGING
 ================
-The strategy includes comprehensive progress logging:
+The strategy includes Zipline's built-in progress logging system:
+- enable_progress_logging(): Real-time backtest progress updates
+  - Algorithm name: 'Top5-ROE-Strategy'
+  - Update interval: Configurable (default: 10 days)
+- enable_flightlog(): Optional integration with FlightLog server
+  - Real-time monitoring and visualization
+  - Requires FlightLog server running
 - Progress bar: Daily ('D'), weekly ('W'), monthly ('M'), or none
 - Pipeline stats: Daily universe statistics (optional)
 - Rebalance details: Detailed BUY/SELL logging with metrics (optional)
 - Timestamps: Start/end times and execution duration
 - Performance summary: Return, Sharpe, drawdown, win rate, trades
 - Metadata export: JSON file with configuration and results
+
+Example output during execution:
+  [2024-01-15 14:32:10] Top5-ROE-Strategy | Day 100/3450 (2.9%) | Portfolio: $102,345
+  [2024-01-15 14:32:20] Top5-ROE-Strategy | Day 200/3450 (5.8%) | Portfolio: $105,678
 """
 
 import pandas as pd
@@ -101,6 +111,10 @@ SAVE_METADATA = True
 PROGRESS_BAR = 'D'  # 'D' (daily), 'W' (weekly), 'M' (monthly), or None
 LOG_PIPELINE_STATS = True  # Log daily pipeline stats
 LOG_REBALANCE_DETAILS = True  # Log detailed trade information
+PROGRESS_UPDATE_INTERVAL = 10  # Days between progress updates
+ENABLE_FLIGHTLOG = False  # Enable FlightLog integration (requires server)
+FLIGHTLOG_HOST = 'flightlog'  # FlightLog server host
+FLIGHTLOG_PORT = 9020  # FlightLog server port
 
 from datetime import datetime
 from zipline import run_algorithm
@@ -119,6 +133,8 @@ from zipline.pipeline.loaders import USEquityPricingLoader
 from zipline.pipeline.data import USEquityPricing
 from zipline.data.bundles import load as load_bundle
 from zipline.data.custom import CustomSQLiteLoader
+from zipline.utils.progress import enable_progress_logging
+from zipline.utils.flightlog_client import enable_flightlog
 
 # Enable logging
 logging.basicConfig(level=logging.INFO)
@@ -674,6 +690,26 @@ if __name__ == '__main__':
     print(f"Pipeline logging: {'Enabled' if LOG_PIPELINE_STATS else 'Disabled'}")
     print(f"Rebalance logging: {'Detailed' if LOG_REBALANCE_DETAILS else 'Minimal'}")
     print("=" * 80)
+    print()
+
+    # Enable progress logging
+    print("=" * 80)
+    print("ENABLING PROGRESS LOGGING")
+    print("=" * 80)
+
+    # Enable FlightLog if configured
+    if ENABLE_FLIGHTLOG:
+        enable_flightlog(host=FLIGHTLOG_HOST, port=FLIGHTLOG_PORT)
+        print(f"✓ FlightLog enabled: {FLIGHTLOG_HOST}:{FLIGHTLOG_PORT}")
+
+    # Enable progress tracking
+    enable_progress_logging(
+        algo_name='Top5-ROE-Strategy',
+        update_interval=PROGRESS_UPDATE_INTERVAL
+    )
+    print(f"✓ Progress logging enabled")
+    print(f"  Algorithm: Top5-ROE-Strategy")
+    print(f"  Update interval: {PROGRESS_UPDATE_INTERVAL} days")
     print()
 
     # Run backtest

@@ -108,8 +108,8 @@ SAVE_PICKLE = True
 SAVE_METADATA = True
 
 # Logging Configuration
-LOG_PIPELINE_STATS = True  # Log daily pipeline stats
-LOG_REBALANCE_DETAILS = True  # Log detailed trade logging
+LOG_PIPELINE_STATS = False  # Log daily pipeline stats
+LOG_REBALANCE_DETAILS = False  # Log detailed trade logging
 PROGRESS_UPDATE_INTERVAL = 10  # Days between progress updates
 ENABLE_FLIGHTLOG = False  # Enable FlightLog integration (requires server)
 FLIGHTLOG_HOST = 'flightlog'  # FlightLog server host

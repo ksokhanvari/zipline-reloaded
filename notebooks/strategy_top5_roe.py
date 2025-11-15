@@ -134,27 +134,27 @@ def build_pipeline_loaders():
     custom_loader = LoaderDict()
 
     # Map all pricing columns to pricing loader
-    custom_loader[USEquityPricing.close] = pricing_loader
-    custom_loader[USEquityPricing.high] = pricing_loader
-    custom_loader[USEquityPricing.low] = pricing_loader
-    custom_loader[USEquityPricing.open] = pricing_loader
-    custom_loader[USEquityPricing.volume] = pricing_loader
+    for attr_name in ['close', 'high', 'low', 'open', 'volume']:
+        custom_loader[getattr(USEquityPricing, attr_name)] = pricing_loader
 
-    # Map all fundamental columns to fundamentals loader
-    fundamental_columns = [
-        CustomFundamentals.ReturnOnEquity_SmartEstimat,
-        CustomFundamentals.ReturnOnAssets_SmartEstimate,
-        CustomFundamentals.CompanyMarketCap,
-        CustomFundamentals.RefPriceClose,
-        CustomFundamentals.GICSSectorName,
-        CustomFundamentals.LongTermGrowth_Mean,
-        CustomFundamentals.EnterpriseValueToEBITDA_DailyTimeSeriesRatio_,
-    ]
+    # Automatically map ALL fundamental columns to fundamentals loader
+    # This uses introspection to avoid manual column listing
+    fundamental_count = 0
+    for attr_name in dir(CustomFundamentals):
+        # Skip private/magic attributes and class metadata
+        if attr_name.startswith('_') or attr_name in ['CODE', 'LOOKBACK_WINDOW']:
+            continue
 
-    for column in fundamental_columns:
-        custom_loader[column] = fundamentals_loader
+        attr = getattr(CustomFundamentals, attr_name)
+
+        # Map if it's a Column (has dataset attribute, indicating it's a BoundColumn)
+        if hasattr(attr, 'dataset'):
+            custom_loader[attr] = fundamentals_loader
+            fundamental_count += 1
 
     print(f"✓ Pipeline loader map built ({len(custom_loader)} columns mapped)")
+    print(f"  - Pricing columns: 5")
+    print(f"  - Fundamental columns: {fundamental_count} (auto-discovered)")
 
     return custom_loader
 

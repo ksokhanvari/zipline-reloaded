@@ -46,6 +46,15 @@ from .pipeline_integration import (
     register_custom_loader,
 )
 
+# Import auto_loader if available (may not be in older installations)
+try:
+    from zipline.pipeline.loaders.auto_loader import setup_auto_loader, AutoLoader
+    _HAS_AUTO_LOADER = True
+except ImportError:
+    _HAS_AUTO_LOADER = False
+    setup_auto_loader = None
+    AutoLoader = None
+
 __all__ = [
     # Config
     'DEFAULT_DB_DIR',
@@ -67,3 +76,7 @@ __all__ = [
     'CustomSQLiteLoader',
     'register_custom_loader',
 ]
+
+# Add auto_loader to exports if available
+if _HAS_AUTO_LOADER:
+    __all__.extend(['setup_auto_loader', 'AutoLoader'])

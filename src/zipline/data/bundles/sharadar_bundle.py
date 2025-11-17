@@ -1017,6 +1017,7 @@ def download_sharadar_table(
         # SF1 (Sharadar Fundamentals) - get all columns (150+ metrics)
         # Don't specify columns to get all fundamental data
         # We'll filter to ARQ dimension in download_sharadar_fundamentals()
+        # NOTE: SF1 uses 'calendardate' not 'date' for filtering
         qopts = None
     else:
         # For other tables, don't specify columns (get all)
@@ -1030,10 +1031,24 @@ def download_sharadar_table(
         filters = {}
         if tickers:
             filters['ticker'] = tickers
-        if start_date:
-            filters['date.gte'] = start_date
-        if end_date:
-            filters['date.lte'] = end_date
+
+        # Determine date column name based on table
+        # SF1 uses 'calendardate', TICKERS has no date filter, others use 'date'
+        if table == 'TICKERS':
+            # TICKERS table has no date filter - it's a snapshot table
+            pass  # Don't add date filters
+        elif table == 'SF1':
+            # SF1 uses 'calendardate' for filtering (quarter end date)
+            if start_date:
+                filters['calendardate.gte'] = start_date
+            if end_date:
+                filters['calendardate.lte'] = end_date
+        else:
+            # SEP, SFP, ACTIONS use 'date'
+            if start_date:
+                filters['date.gte'] = start_date
+            if end_date:
+                filters['date.lte'] = end_date
 
         # Download data using nasdaqdatalink
         if qopts:
@@ -1050,8 +1065,15 @@ def download_sharadar_table(
                 paginate=True
             )
 
-        # Ensure date column is datetime
-        if 'date' in df.columns:
+        # Ensure date columns are datetime
+        if table == 'SF1':
+            # SF1 has calendardate and datekey
+            if 'calendardate' in df.columns:
+                df['calendardate'] = pd.to_datetime(df['calendardate'])
+            if 'datekey' in df.columns:
+                df['datekey'] = pd.to_datetime(df['datekey'])
+        elif 'date' in df.columns:
+            # SEP, SFP, ACTIONS have 'date' column
             df['date'] = pd.to_datetime(df['date'])
 
         print(f"  ✓ Downloaded {len(df):,} records from {table}")
@@ -1208,10 +1230,23 @@ def download_sharadar_bulk_export(
     # Add filters if provided
     if tickers:
         params['ticker'] = ','.join(tickers)
-    if start_date:
-        params['date.gte'] = start_date
-    if end_date:
-        params['date.lte'] = end_date
+
+    # Determine date column name based on table
+    if table == 'TICKERS':
+        # TICKERS table has no date filter
+        pass
+    elif table == 'SF1':
+        # SF1 uses 'calendardate' for filtering
+        if start_date:
+            params['calendardate.gte'] = start_date
+        if end_date:
+            params['calendardate.lte'] = end_date
+    else:
+        # SEP, SFP, ACTIONS use 'date'
+        if start_date:
+            params['date.gte'] = start_date
+        if end_date:
+            params['date.lte'] = end_date
 
     # Request bulk download
     print(f"  Requesting bulk export...")
@@ -1287,7 +1322,16 @@ def download_sharadar_bulk_export(
     with ZipFile(BytesIO(download_response.content)) as zf:
         csv_filename = zf.namelist()[0]
         with zf.open(csv_filename) as csv_file:
-            df = pd.read_csv(csv_file, parse_dates=['date'])
+            # Determine which date columns to parse based on table
+            if table == 'SF1':
+                # SF1 has calendardate and datekey
+                df = pd.read_csv(csv_file, parse_dates=['calendardate', 'datekey'])
+            elif table == 'TICKERS':
+                # TICKERS has no date columns
+                df = pd.read_csv(csv_file)
+            else:
+                # SEP, SFP, ACTIONS have 'date' column
+                df = pd.read_csv(csv_file, parse_dates=['date'])
 
     print(f"  ✓ Downloaded {len(df):,} records from {table}")
 

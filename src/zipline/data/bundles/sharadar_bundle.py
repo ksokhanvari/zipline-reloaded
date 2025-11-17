@@ -171,6 +171,7 @@ def sharadar_bundle(
     incremental: bool = True,
     use_chunks: bool = False,
     include_funds: bool = True,
+    include_fundamentals: bool = True,
 ):
     """
     Create a zipline data bundle from Sharadar Equity and Fund Prices.
@@ -201,6 +202,11 @@ def sharadar_bundle(
     include_funds : bool, default True
         Include fund pricing data (SFP table) in addition to equity prices (SEP table).
         Funds include ETFs, mutual funds, and other investment vehicles.
+    include_fundamentals : bool, default True
+        Download and store Sharadar fundamentals data (SF1 table) alongside pricing data.
+        Fundamentals include 150+ quarterly metrics (revenue, earnings, ratios, etc.).
+        Data is stored in the bundle directory for later use with Pipeline.
+        Does NOT affect pricing or backtest execution - purely for factor analysis.
 
     Returns
     -------
@@ -822,6 +828,45 @@ def sharadar_bundle(
         adjustments = prepare_adjustments(actions_data, symbol_to_sid)
         adjustment_writer.write(**adjustments)
 
+        # Download and store fundamentals data (SF1 table) - NEW FEATURE
+        if include_fundamentals:
+            print(f"\n{'='*60}")
+            print("📊 Sharadar Fundamentals (SF1) - Optional Data")
+            print(f"{'='*60}")
+            print("Downloading fundamentals for use with Pipeline...")
+            print("(This does NOT affect pricing or backtest execution)")
+            print("")
+
+            try:
+                # Download SF1 fundamentals
+                sf1_data = download_sharadar_fundamentals(
+                    api_key=api_key,
+                    tickers=tickers,
+                    start_date=start_date,  # Use original start_date, not incremental
+                    end_date=end_date,
+                )
+
+                if not sf1_data.empty:
+                    # Add SIDs to fundamentals data for consistency
+                    sf1_data['sid'] = sf1_data['ticker'].map(symbol_to_sid)
+
+                    # Remove any unmapped tickers
+                    sf1_data = sf1_data[sf1_data['sid'].notna()].copy()
+
+                    # Store fundamentals in bundle directory
+                    store_fundamentals(sf1_data, output_dir, symbol_to_sid)
+
+                    print(f"✓ Downloaded {len(sf1_data):,} fundamental records")
+                    print(f"  Tickers: {sf1_data['ticker'].nunique()}")
+                    print(f"  Date range: {sf1_data['datekey'].min()} to {sf1_data['datekey'].max()}")
+                    print(f"  Stored in: {output_dir}/fundamentals/")
+                else:
+                    print("⚠️  No fundamentals data available (continuing without fundamentals)")
+
+            except Exception as e:
+                print(f"⚠️  Failed to download fundamentals: {e}")
+                print("   Continuing without fundamentals data (pricing/backtests unaffected)")
+
         print(f"\n{'='*60}")
         print("✓ Sharadar bundle ingestion complete!")
         print(f"{'='*60}\n")
@@ -897,6 +942,11 @@ def download_sharadar_table(
         # ACTIONS table - corporate actions (splits, dividends)
         columns = ['ticker', 'date', 'action', 'value']
         qopts = {"columns": columns}
+    elif table == 'SF1':
+        # SF1 (Sharadar Fundamentals) - get all columns (150+ metrics)
+        # Don't specify columns to get all fundamental data
+        # We'll filter to ARQ dimension in download_sharadar_fundamentals()
+        qopts = None
     else:
         # For other tables, don't specify columns (get all)
         qopts = None
@@ -1175,6 +1225,126 @@ def download_sharadar_bulk_export(
         df['closeunadj'] = df['close']
 
     return df
+
+
+def download_sharadar_fundamentals(
+    api_key: str,
+    tickers: Optional[List[str]] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> pd.DataFrame:
+    """
+    Download Sharadar SF1 fundamentals table.
+
+    SF1 contains 150+ quarterly fundamental metrics including:
+    - Income statement: revenue, netinc, ebitda, etc.
+    - Balance sheet: assets, equity, debt, etc.
+    - Cash flow: ncf, capex, fcf, etc.
+    - Ratios: roe, roa, pe, pb, etc.
+    - Per-share: eps, bvps, sps, etc.
+
+    IMPORTANT: We use dimension='ARQ' (As-Reported Quarterly) for point-in-time correctness.
+    This ensures we only access data that was actually available on each historical date,
+    preventing look-ahead bias.
+
+    Parameters
+    ----------
+    api_key : str
+        NASDAQ Data Link API key
+    tickers : list of str, optional
+        Filter by tickers. If None, downloads all available tickers.
+    start_date : str, optional
+        Start date in 'YYYY-MM-DD' format
+    end_date : str, optional
+        End date in 'YYYY-MM-DD' format
+
+    Returns
+    -------
+    pd.DataFrame
+        Fundamentals data with columns including:
+        - ticker: Stock symbol
+        - datekey: Date when data became available (for point-in-time)
+        - calendardate: Calendar date of the quarter end
+        - dimension: ARQ (As-Reported Quarterly)
+        - revenue, netinc, eps, roe, pe, pb, etc. (150+ metrics)
+    """
+    print("  Downloading SF1 (fundamentals) table...")
+
+    # Download using existing download_sharadar_table function
+    # This handles API key, pagination, chunking, etc.
+    sf1_data = download_sharadar_table(
+        table='SF1',
+        api_key=api_key,
+        tickers=tickers,
+        start_date=start_date,
+        end_date=end_date,
+        use_chunks=False,  # SF1 is smaller than pricing data
+    )
+
+    if sf1_data.empty:
+        return sf1_data
+
+    # Filter to ARQ dimension (As-Reported Quarterly) for point-in-time correctness
+    if 'dimension' in sf1_data.columns:
+        original_count = len(sf1_data)
+        sf1_data = sf1_data[sf1_data['dimension'] == 'ARQ'].copy()
+        print(f"  Filtered to ARQ dimension: {len(sf1_data):,} records (from {original_count:,})")
+    else:
+        print("  ⚠️  No 'dimension' column found - using all data")
+
+    # Ensure critical columns exist
+    required_cols = ['ticker', 'datekey', 'calendardate']
+    missing_cols = [col for col in required_cols if col not in sf1_data.columns]
+    if missing_cols:
+        raise ValueError(f"SF1 data missing required columns: {missing_cols}")
+
+    # Convert date columns
+    sf1_data['datekey'] = pd.to_datetime(sf1_data['datekey'])
+    sf1_data['calendardate'] = pd.to_datetime(sf1_data['calendardate'])
+
+    return sf1_data
+
+
+def store_fundamentals(
+    sf1_data: pd.DataFrame,
+    output_dir: str,
+    symbol_to_sid: dict,
+) -> None:
+    """
+    Store fundamentals data in bundle directory for Pipeline access.
+
+    The fundamentals are stored in HDF5 format (efficient compression and fast reads)
+    in the bundle's fundamentals/ subdirectory. This allows Pipeline loaders to
+    access the data later.
+
+    Directory structure:
+        {output_dir}/fundamentals/sf1.h5
+
+    Parameters
+    ----------
+    sf1_data : pd.DataFrame
+        Fundamentals data from download_sharadar_fundamentals()
+    output_dir : str
+        Bundle output directory path
+    symbol_to_sid : dict
+        Mapping of ticker symbols to SIDs (for validation)
+    """
+    import os
+    from pathlib import Path
+
+    # Create fundamentals directory
+    fundamentals_dir = Path(output_dir) / 'fundamentals'
+    fundamentals_dir.mkdir(parents=True, exist_ok=True)
+
+    # Sort by ticker and datekey for efficient access
+    sf1_data = sf1_data.sort_values(['ticker', 'datekey']).copy()
+
+    # Store as HDF5 (efficient compression, preserves dtypes, already a dependency)
+    output_path = fundamentals_dir / 'sf1.h5'
+    sf1_data.to_hdf(output_path, key='sf1', mode='w', format='table', complevel=9)
+
+    print(f"  Stored fundamentals: {output_path}")
+    print(f"  File size: {output_path.stat().st_size / 1024 / 1024:.1f} MB")
 
 
 def prepare_asset_metadata(

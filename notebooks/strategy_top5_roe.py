@@ -101,8 +101,8 @@ import logging
 # ============================================================================
 
 # Backtest Parameters
-START_DATE = '2021-03-10'  # Backtest start date (allow lookback window)
-END_DATE = '2025-11-11'    # Backtest end date
+START_DATE = '2021-01-01'  # Backtest start date (allow lookback window)
+END_DATE = '2025-11-15'    # Backtest end date
 CAPITAL_BASE = 100000      # Starting capital ($)
 
 # Strategy Parameters
@@ -126,7 +126,7 @@ SAVE_METADATA = True
 # Logging Configuration
 LOG_PIPELINE_STATS = False  # Log daily pipeline stats
 LOG_REBALANCE_DETAILS = False  # Log detailed trade logging
-PROGRESS_UPDATE_INTERVAL = 10  # Days between progress updates
+PROGRESS_UPDATE_INTERVAL = 1  # Days between progress updates
 ENABLE_FLIGHTLOG = False  # Enable FlightLog integration (requires server)
 FLIGHTLOG_HOST = 'flightlog'  # FlightLog server host
 FLIGHTLOG_PORT = 9020  # FlightLog server port

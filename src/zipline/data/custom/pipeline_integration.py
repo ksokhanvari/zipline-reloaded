@@ -115,20 +115,36 @@ class CustomSQLiteLoader(PipelineLoader):
     This loader reads data from a custom SQLite database and provides it
     to Zipline Pipeline in the expected format.
 
+    **SID Translation**: When used with run_algorithm(), the backtest engine
+    assigns internal simulation SIDs that differ from bundle SIDs. If an
+    asset_finder is provided, this loader automatically translates between
+    simulation SIDs and bundle SIDs using asset symbols, allowing the database
+    to use bundle SIDs while the simulation uses different SIDs.
+
     Parameters
     ----------
     db_code : str
         Database code/identifier
     db_dir : str or Path, optional
         Directory containing database
+    asset_finder : AssetFinder, optional
+        Asset finder for SID translation. If provided, enables automatic
+        translation between simulation SIDs and bundle SIDs.
 
     Examples
     --------
+    >>> # Basic usage (no SID translation)
     >>> loader = CustomSQLiteLoader('fundamentals')
     >>> engine = SimplePipelineEngine(
     ...     get_loader=lambda column: loader,
     ...     asset_finder=asset_finder,
     ...     default_domain=US_EQUITIES,
+    ... )
+    >>>
+    >>> # With SID translation (for run_algorithm compatibility)
+    >>> loader = CustomSQLiteLoader(
+    ...     'fundamentals',
+    ...     asset_finder=bundle_data.asset_finder
     ... )
     """
 
@@ -136,10 +152,13 @@ class CustomSQLiteLoader(PipelineLoader):
         self,
         db_code: str,
         db_dir: Union[str, Path] = None,
+        asset_finder=None,
     ):
         self.db_code = db_code
         self.db_dir = db_dir
+        self.asset_finder = asset_finder
         self._cache = {}
+        self._sid_translation_cache = {}  # Cache for SID translations
 
     def load_adjusted_array(self, domain, columns, dates, sids, mask):
         """
@@ -246,6 +265,66 @@ class CustomSQLiteLoader(PipelineLoader):
 
         return arrays
 
+    def _translate_sids(self, sids: pd.Index) -> Dict[int, int]:
+        """
+        Translate simulation SIDs to bundle SIDs using asset symbols.
+
+        When run_algorithm() creates a simulation, it assigns internal SIDs
+        that differ from bundle SIDs. This method translates between them
+        using the asset_finder's symbol lookup.
+
+        Parameters
+        ----------
+        sids : pd.Index
+            Simulation SIDs from Pipeline engine
+
+        Returns
+        -------
+        dict
+            Mapping from simulation SID to bundle SID
+        """
+        if not self.asset_finder:
+            # No translation available - assume SIDs match
+            return {sid: sid for sid in sids}
+
+        sid_map = {}
+
+        for sim_sid in sids:
+            # Check cache first
+            if sim_sid in self._sid_translation_cache:
+                sid_map[sim_sid] = self._sid_translation_cache[sim_sid]
+                continue
+
+            try:
+                # Look up the asset by simulation SID
+                asset = self.asset_finder.retrieve_asset(sim_sid)
+
+                if asset and hasattr(asset, 'symbol'):
+                    # Look up the same symbol in bundle to get bundle SID
+                    # This uses the symbol as the common identifier
+                    bundle_asset = self.asset_finder.lookup_symbol(
+                        asset.symbol,
+                        as_of_date=None
+                    )
+
+                    if bundle_asset:
+                        bundle_sid = bundle_asset.sid
+                        sid_map[sim_sid] = bundle_sid
+                        self._sid_translation_cache[sim_sid] = bundle_sid
+                    else:
+                        # Symbol not found in bundle - use simulation SID
+                        sid_map[sim_sid] = sim_sid
+                else:
+                    # No symbol available - use simulation SID
+                    sid_map[sim_sid] = sim_sid
+
+            except Exception as e:
+                log.debug(f"Could not translate SID {sim_sid}: {e}")
+                # Translation failed - use simulation SID as-is
+                sid_map[sim_sid] = sim_sid
+
+        return sid_map
+
     def _query_database(
         self,
         dates: pd.DatetimeIndex,
@@ -280,12 +359,28 @@ class CustomSQLiteLoader(PipelineLoader):
         start_date = dates.min().strftime('%Y-%m-%d')
         end_date = dates.max().strftime('%Y-%m-%d')
 
-        # Convert sids to strings
-        sids_str = [str(sid) for sid in sids]
+        # Translate simulation SIDs to bundle SIDs for database query
+        sid_translation = self._translate_sids(sids)
 
-        # Build SQL query
+        # Get the bundle SIDs to query (values from translation map)
+        bundle_sids = list(set(sid_translation.values()))
+        bundle_sids_str = [str(sid) for sid in bundle_sids]
+
+        # Create reverse mapping (bundle_sid -> list of sim_sids) for result mapping
+        bundle_to_sim = {}
+        for sim_sid, bundle_sid in sid_translation.items():
+            if bundle_sid not in bundle_to_sim:
+                bundle_to_sim[bundle_sid] = []
+            bundle_to_sim[bundle_sid].append(sim_sid)
+
+        log.debug(
+            f"SID translation: {len(sids)} simulation SIDs -> "
+            f"{len(bundle_sids)} bundle SIDs for database query"
+        )
+
+        # Build SQL query using bundle SIDs
         field_list = ', '.join(column_names)
-        placeholders = ','.join(['?' for _ in sids_str])
+        placeholders = ','.join(['?' for _ in bundle_sids_str])
 
         sql = f"""
             SELECT Sid, Date, {field_list}
@@ -295,7 +390,7 @@ class CustomSQLiteLoader(PipelineLoader):
             ORDER BY Date, Sid
         """
 
-        params = [start_date, end_date] + sids_str
+        params = [start_date, end_date] + bundle_sids_str
 
         # Execute query
         conn = connect_db(self.db_code, self.db_dir)
@@ -350,11 +445,25 @@ class CustomSQLiteLoader(PipelineLoader):
                     log.error(f"Could not convert column '{col_name}' to numeric: {e}")
             # else: keep as-is for text/object columns
 
-            # Create a pivot table
+            # Create a pivot table with bundle SIDs
             pivot = df.pivot(index='Date', columns='Sid', values=col_name)
 
+            # Map bundle SIDs back to simulation SIDs
+            # For each sim_sid, use the data from its corresponding bundle_sid
+            sim_sid_data = {}
+            for sim_sid in sids:
+                bundle_sid = sid_translation[sim_sid]
+                if bundle_sid in pivot.columns:
+                    sim_sid_data[sim_sid] = pivot[bundle_sid]
+                else:
+                    # No data for this bundle_sid - will be filled with NaN during reindex
+                    sim_sid_data[sim_sid] = pd.Series(index=pivot.index, dtype=col_dtype)
+
+            # Create new DataFrame with simulation SIDs
+            remapped_pivot = pd.DataFrame(sim_sid_data)
+
             # Reindex to match exactly the requested dates and sids
-            reindexed = pivot.reindex(index=dates, columns=sids)
+            reindexed = remapped_pivot.reindex(index=dates, columns=sids)
 
             # For object/text columns, replace NaN with empty string BEFORE converting to array
             # (prevents str/float mixing which breaks Zipline's LabelArray/Categorical)

@@ -19,12 +19,9 @@ from zipline.api import (
     date_rules,
     time_rules,
 )
-from zipline.pipeline import Pipeline
-from zipline.pipeline.data import sharadar
-from zipline.pipeline.data.db import Database, Column
 
-# Import the auto loader - this handles everything!
-from zipline.pipeline.loaders.auto_loader import setup_auto_loader
+# Import multi-source module - simple, centralized imports!
+from zipline.pipeline import multi_source as ms
 
 # Enable logging
 logging.basicConfig(level=logging.INFO)
@@ -33,17 +30,17 @@ logging.basicConfig(level=logging.INFO)
 # Define Custom Fundamentals Database
 # ============================================================================
 
-class CustomFundamentals(Database):
+class CustomFundamentals(ms.Database):
     """Custom LSEG fundamentals."""
 
     CODE = "fundamentals"  # Must match your database name
     LOOKBACK_WINDOW = 252
 
     # Metrics from your LSEG database
-    ReturnOnEquity_SmartEstimat = Column(float)
-    ForwardPEG_DailyTimeSeriesRatio_ = Column(float)
-    CompanyMarketCap = Column(float)
-    Debt_Total = Column(float)
+    ReturnOnEquity_SmartEstimat = ms.Column(float)
+    ForwardPEG_DailyTimeSeriesRatio_ = ms.Column(float)
+    CompanyMarketCap = ms.Column(float)
+    Debt_Total = ms.Column(float)
 
 
 # ============================================================================
@@ -57,10 +54,9 @@ def make_pipeline(universe_size=100, selection_size=5):
     This is as simple as using either source alone!
     """
     # Sharadar fundamentals
-    s_fundamentals = sharadar.Fundamentals.slice('MRQ', period_offset=0)
-    s_roe = s_fundamentals.ROE.latest
-    s_fcf = s_fundamentals.FCF.latest
-    s_marketcap = s_fundamentals.MARKETCAP.latest
+    s_roe = ms.SharadarFundamentals.roe.latest
+    s_fcf = ms.SharadarFundamentals.fcf.latest
+    s_marketcap = ms.SharadarFundamentals.marketcap.latest
 
     # Custom LSEG fundamentals
     l_roe = CustomFundamentals.ReturnOnEquity_SmartEstimat.latest
@@ -78,7 +74,7 @@ def make_pipeline(universe_size=100, selection_size=5):
     # Selection: top M by Sharadar ROE, with LSEG confirmation
     selection = s_roe.top(selection_size, mask=universe & both_confirm_quality)
 
-    return Pipeline(
+    return ms.Pipeline(
         columns={
             # Sharadar
             's_roe': s_roe,
@@ -208,7 +204,7 @@ if __name__ == '__main__':
         analyze=analyze,
         capital_base=CAPITAL,
         bundle='sharadar',
-        custom_loader=setup_auto_loader(),  # That's it! Auto-detects everything
+        custom_loader=ms.setup_auto_loader(),  # That's it! Auto-detects everything
     )
 
     print("\n✓ Backtest complete!")

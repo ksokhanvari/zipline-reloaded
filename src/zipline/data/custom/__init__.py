@@ -11,7 +11,26 @@ Main components:
 - query: Query custom data
 - pipeline_integration: Integrate custom data with Zipline Pipeline
 
-Example:
+Quick Start (Recommended):
+    For easy multi-source integration with Sharadar and custom data, use the
+    high-level multi_source module:
+
+    >>> from zipline.pipeline import multi_source as ms
+    >>>
+    >>> class CustomFundamentals(ms.Database):
+    ...     CODE = "fundamentals"
+    ...     LOOKBACK_WINDOW = 252
+    ...     ROE = ms.Column(float)
+    >>>
+    >>> # Run backtest - auto-detects all sources!
+    >>> results = run_algorithm(
+    ...     ...,
+    ...     custom_loader=ms.setup_auto_loader(),
+    ... )
+
+    See docs/MULTI_SOURCE_DATA.md for complete documentation.
+
+Advanced Usage (Low-level API):
     >>> from zipline.data.custom import create_custom_db, load_csv_to_db
     >>> from zipline.data.custom import make_custom_dataset_class, CustomSQLiteLoader
     >>>

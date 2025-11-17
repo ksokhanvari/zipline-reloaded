@@ -93,6 +93,9 @@ def make_custom_dataset_class(
             doc=f"{col_name} from {db_code} custom data"
         )
 
+    # Add CODE attribute for auto_loader detection
+    column_defs['CODE'] = db_code
+
     # Create DataSet class dynamically
     dataset_class = type(
         class_name,

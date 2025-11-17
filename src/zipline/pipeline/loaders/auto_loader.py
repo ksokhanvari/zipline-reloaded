@@ -178,6 +178,17 @@ class AutoLoader(dict):
             db_code = key.dataset.CODE
             return self._get_custom_loader(db_code)
 
+        # Check if dataset name contains "DataSet" suffix from Database classes
+        # Database classes create datasets with names like "LSEGFundamentalsDataSet"
+        # We need to extract the CODE from the parent Database class
+        if 'DataSet' in dataset_name:
+            # Try to find the CODE by checking the dataset's attributes
+            for attr_name in dir(key.dataset):
+                if attr_name == 'CODE':
+                    db_code = getattr(key.dataset, attr_name)
+                    if db_code:
+                        return self._get_custom_loader(db_code)
+
         # Try to match by column name in registered loaders
         if hasattr(key, 'name'):
             for registered_col, loader in self.items():

@@ -167,6 +167,13 @@ class SharadarFundamentalsLoader(PipelineLoader):
         # Ensure index is sorted
         pivoted = pivoted.sort_index()
 
+        # Ensure timezone consistency
+        # Pipeline dates are always UTC, but pivoted index might be naive
+        if pivoted.index.tz is None:
+            pivoted.index = pivoted.index.tz_localize('UTC')
+        elif str(pivoted.index.tz) != 'UTC':
+            pivoted.index = pivoted.index.tz_convert('UTC')
+
         # Create complete index combining:
         # 1. All datekeys from the data
         # 2. All requested dates

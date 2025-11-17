@@ -142,6 +142,14 @@ If you only need pricing data and want to save download time:
 register('sharadar', sharadar_bundle(include_fundamentals=False))
 ```
 
+**Note**: You can add fundamentals later without re-ingesting pricing:
+
+```bash
+./scripts/download_fundamentals_only.sh sharadar
+```
+
+See [Downloading Fundamentals Only](#downloading-fundamentals-only) for details.
+
 ### Bundle Storage
 
 Fundamentals are stored in the bundle directory:
@@ -158,6 +166,39 @@ Fundamentals are stored in the bundle directory:
 
 **File Size**: ~10-50 MB for typical bundles (e.g., tech stocks, SP500 sample)
 **Compression**: HDF5 format with level-9 compression
+
+### Re-Ingestion Behavior
+
+When you re-ingest a bundle (e.g., for daily updates):
+
+**Pricing Data** (SEP/SFP):
+- ✅ **Incremental**: Downloads only new data since last ingestion
+- ⚡ Fast: ~30-60 seconds for daily update
+
+**Fundamentals** (SF1):
+- ⚠️ **Full Download**: Re-downloads all fundamentals from `start_date`
+- 🐌 Slower: ~1-5 minutes (downloads 25+ years of data)
+
+**Why?**: Fundamentals incremental logic not yet implemented.
+
+**Workaround**: If you only need updated pricing, use the standalone script to refresh fundamentals separately when needed:
+
+```bash
+# Daily: Just ingest pricing (fast)
+docker exec zipline-reloaded-jupyter zipline ingest -b sharadar
+
+# Weekly/Monthly: Update fundamentals separately
+./scripts/download_fundamentals_only.sh sharadar
+```
+
+Or skip fundamentals during daily ingestions:
+
+```python
+# In extension.py - skip fundamentals for daily updates
+register('sharadar', sharadar_bundle(include_fundamentals=False))
+```
+
+Then add fundamentals manually when needed.
 
 ---
 
@@ -568,6 +609,101 @@ def initialize(context):
 
 ## Advanced Usage
 
+### Downloading Fundamentals Only
+
+If you already have pricing data and need to add or retry fundamentals download:
+
+#### Use Case 1: Fundamentals Failed During Ingestion
+
+```bash
+# Pricing completed but fundamentals failed
+# ⚠️  Failed to download fundamentals: ...
+# ✓ Sharadar bundle ingestion complete!
+
+# Just retry fundamentals (fast - no pricing re-download)
+./scripts/download_fundamentals_only.sh sharadar
+```
+
+#### Use Case 2: Add Fundamentals to Existing Bundle
+
+```bash
+# Bundle was ingested with include_fundamentals=False
+# Now you want fundamentals
+
+./scripts/download_fundamentals_only.sh sharadar
+```
+
+#### Use Case 3: Different Bundles
+
+```bash
+./scripts/download_fundamentals_only.sh sharadar-tech
+./scripts/download_fundamentals_only.sh sharadar-sp500
+```
+
+#### Advanced Options (Inside Docker)
+
+```bash
+# Custom date range (only recent years)
+docker exec zipline-reloaded-jupyter python /app/scripts/download_fundamentals_only.py \
+    --bundle sharadar \
+    --start-date 2020-01-01
+
+# Specific tickers only
+docker exec zipline-reloaded-jupyter python /app/scripts/download_fundamentals_only.py \
+    --bundle sharadar-tech \
+    --tickers AAPL MSFT GOOGL AMZN
+
+# Custom date range AND tickers
+docker exec zipline-reloaded-jupyter python /app/scripts/download_fundamentals_only.py \
+    --bundle sharadar \
+    --start-date 2020-01-01 \
+    --end-date 2023-12-31 \
+    --tickers AAPL MSFT
+```
+
+#### What It Does
+
+The script:
+1. Finds your latest bundle ingestion automatically
+2. Loads symbol → SID mapping from assets database
+3. Downloads SF1 fundamentals with proper filters
+4. Matches fundamentals to pricing SIDs (permatickers)
+5. Stores in `{bundle}/fundamentals/sf1.h5`
+
+**Time**: 30 seconds - 2 minutes (vs. 10-30 minutes for full re-ingestion)
+
+#### Example Output
+
+```
+==============================================================
+Sharadar Fundamentals Download (Standalone)
+==============================================================
+Bundle: sharadar
+Date range: 1998-01-01 to today
+
+Step 1/4: Finding latest bundle ingestion...
+  ✓ Found: 2025-11-16T12;34;56.789012
+
+Step 2/4: Loading symbol → SID mapping from bundle...
+  ✓ Loaded 50 symbols
+
+Step 3/4: Downloading SF1 fundamentals...
+  Downloading SF1 (fundamentals) table...
+  Filtered to ARQ dimension: 2,500 records (from 10,000)
+  SID matching: 50 matched, 0 unmatched
+  ✓ Downloaded 2,500 fundamental records
+    Tickers: 50
+    Date range: 1998-01-01 to 2025-11-15
+
+Step 4/4: Storing fundamentals...
+  Stored fundamentals: .../fundamentals/sf1.h5
+  File size: 2.3 MB
+
+==============================================================
+✓ Fundamentals download complete!
+==============================================================
+```
+
 ### Custom Loader Configuration
 
 If you need to customize the loader (e.g., for a specific bundle):
@@ -624,16 +760,28 @@ sp500_pipeline = Pipeline(
 FileNotFoundError: Fundamentals data not found at /root/.zipline/data/sharadar/.../fundamentals/sf1.h5
 ```
 
-**Solution**:
-Re-ingest the bundle with `include_fundamentals=True` (default):
+**Solution 1: Download Fundamentals Only (Faster)**
+
+If you already have pricing data, just download fundamentals:
+
+```bash
+./scripts/download_fundamentals_only.sh sharadar
+```
+
+This is much faster than re-ingesting the entire bundle.
+
+**Solution 2: Re-ingest Full Bundle**
+
+Re-ingest with `include_fundamentals=True` (default):
 
 ```bash
 docker exec zipline-reloaded-jupyter zipline ingest -b sharadar
 ```
 
-Verify fundamentals were downloaded:
+**Verify**:
 ```bash
 docker exec zipline-reloaded-jupyter find /root/.zipline/data/sharadar -name "sf1.h5"
+# Should show: /root/.zipline/data/sharadar/<timestamp>/fundamentals/sf1.h5
 ```
 
 ### Missing Metrics (NaN Values)

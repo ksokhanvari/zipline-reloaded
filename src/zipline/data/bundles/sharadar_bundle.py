@@ -369,14 +369,38 @@ def sharadar_bundle(
                 print("Tickers: ALL (this may take a while and use significant storage)")
             print(f"{'='*60}\n")
 
+        # Download TICKERS table (for ticker → permaticker mapping)
+        total_steps = 5 if include_funds else 4
+        print(f"\nStep 1/{total_steps}: Downloading Sharadar TICKERS table...")
+        print("   This provides ticker → permaticker mapping for stable SIDs")
+
+        tickers_metadata = download_sharadar_table(
+            table='TICKERS',
+            api_key=api_key,
+            tickers=tickers,  # Filter to same tickers if specified
+            start_date=None,  # TICKERS has no date filter
+            end_date=None,
+            use_chunks=False,  # Small table
+        )
+
+        if tickers_metadata.empty:
+            raise ValueError(
+                "No ticker metadata downloaded from TICKERS table. "
+                "Cannot proceed without permaticker mapping."
+            )
+
+        print(f"   ✓ Downloaded metadata for {len(tickers_metadata):,} tickers")
+
+        # Create ticker → permaticker mapping
+        ticker_to_permaticker = dict(zip(tickers_metadata['ticker'], tickers_metadata['permaticker']))
+
         # Download SEP (equity pricing) data
-        total_steps = 4 if include_funds else 3
         if is_incremental_update:
-            print(f"Step 1/{total_steps}: Downloading NEW Sharadar Equity Prices (incremental)...")
+            print(f"\nStep 2/{total_steps}: Downloading NEW Sharadar Equity Prices (incremental)...")
             print(f"   Downloading only new data from {effective_start_date} to {end_date}")
             print(f"   (Will merge with existing data from {start_date} onwards)")
         else:
-            print(f"Step 1/{total_steps}: Downloading Sharadar Equity Prices (SEP table)...")
+            print(f"\nStep 2/{total_steps}: Downloading Sharadar Equity Prices (SEP table)...")
 
         # For incremental updates: download only new data, then we'll merge with existing
         # For full updates: download all data from start_date
@@ -390,6 +414,16 @@ def sharadar_bundle(
             end_date=end_date,
             use_chunks=use_chunks,
         )
+
+        # Add permaticker to SEP data via join
+        if not sep_data.empty:
+            sep_data['permaticker'] = sep_data['ticker'].map(ticker_to_permaticker)
+            # Warn if any tickers don't have permaticker
+            missing_permaticker = sep_data[sep_data['permaticker'].isna()]['ticker'].unique()
+            if len(missing_permaticker) > 0:
+                print(f"   ⚠️  {len(missing_permaticker)} tickers missing permaticker: {list(missing_permaticker)[:5]}")
+                # Remove rows without permaticker
+                sep_data = sep_data[sep_data['permaticker'].notna()].copy()
 
         if sep_data.empty:
             if is_incremental_update:
@@ -433,9 +467,9 @@ def sharadar_bundle(
         sfp_data = pd.DataFrame()
         if include_funds:
             if is_incremental_update:
-                print(f"\nStep 2/{total_steps}: Downloading NEW Sharadar Fund Prices (incremental)...")
+                print(f"\nStep 3/{total_steps}: Downloading NEW Sharadar Fund Prices (incremental)...")
             else:
-                print(f"\nStep 2/{total_steps}: Downloading Sharadar Fund Prices (SFP table)...")
+                print(f"\nStep 3/{total_steps}: Downloading Sharadar Fund Prices (SFP table)...")
 
             sfp_data = download_sharadar_table(
                 table='SFP',
@@ -446,7 +480,16 @@ def sharadar_bundle(
                 use_chunks=use_chunks,
             )
 
+            # Add permaticker to SFP data via join
             if not sfp_data.empty:
+                sfp_data['permaticker'] = sfp_data['ticker'].map(ticker_to_permaticker)
+                # Warn if any tickers don't have permaticker
+                missing_permaticker = sfp_data[sfp_data['permaticker'].isna()]['ticker'].unique()
+                if len(missing_permaticker) > 0:
+                    print(f"   ⚠️  {len(missing_permaticker)} fund tickers missing permaticker: {list(missing_permaticker)[:5]}")
+                    # Remove rows without permaticker
+                    sfp_data = sfp_data[sfp_data['permaticker'].notna()].copy()
+
                 print(f"Downloaded {len(sfp_data):,} fund price records for {sfp_data['ticker'].nunique()} tickers")
             else:
                 print("No fund pricing data available (this is normal if you only have equity tickers)")
@@ -541,11 +584,14 @@ def sharadar_bundle(
                         sid_to_ticker = dict(zip(assets_df['sid'], assets_df['symbol']))
                         existing_data['ticker'] = existing_data['sid'].map(sid_to_ticker)
 
+                        # Add permaticker using ticker_to_permaticker mapping
+                        existing_data['permaticker'] = existing_data['ticker'].map(ticker_to_permaticker)
+
                         # Get asset_type from metadata if available
                         existing_data['asset_type'] = 'equity'  # Default
 
                         # Keep only necessary columns
-                        existing_data = existing_data[['ticker', 'date', 'open', 'high', 'low', 'close', 'volume', 'asset_type']]
+                        existing_data = existing_data[['ticker', 'date', 'open', 'high', 'low', 'close', 'volume', 'permaticker', 'asset_type']]
 
                         print(f"   Existing data: {len(existing_data):,} records from {existing_data['date'].min().date()} to {existing_data['date'].max().date()}")
 
@@ -574,7 +620,7 @@ def sharadar_bundle(
         print(f"Final data range: {actual_start.date()} to {actual_end.date()}")
 
         # Download ACTIONS (corporate actions) data
-        step_num = 3 if include_funds else 2
+        step_num = 4 if include_funds else 3
         if is_incremental_update:
             print(f"\nStep {step_num}/{total_steps}: Downloading NEW corporate actions (incremental)...")
         else:
@@ -598,7 +644,7 @@ def sharadar_bundle(
             print("No corporate actions data available")
 
         # Process data
-        step_num = 4 if include_funds else 3
+        step_num = 5 if include_funds else 4
         print(f"\nStep {step_num}/{total_steps}: Processing data for zipline...")
         print(f"Using date range: {actual_start.date()} to {actual_end.date()}")
 
@@ -952,13 +998,16 @@ def download_sharadar_table(
     # Define columns based on table type
     if table == 'SEP':
         # SEP (Sharadar Equity Prices) - optimized column selection
-        # IMPORTANT: Include 'permaticker' for stable SID assignment across bundles
-        columns = ['ticker', 'date', 'open', 'high', 'low', 'close', 'volume', 'closeadj', 'closeunadj', 'permaticker']
+        columns = ['ticker', 'date', 'open', 'high', 'low', 'close', 'volume', 'closeadj', 'closeunadj']
         qopts = {"columns": columns}
     elif table == 'SFP':
         # SFP (Sharadar Fund Prices) - same structure as SEP
-        # IMPORTANT: Include 'permaticker' for stable SID assignment across bundles
-        columns = ['ticker', 'date', 'open', 'high', 'low', 'close', 'volume', 'closeadj', 'closeunadj', 'permaticker']
+        columns = ['ticker', 'date', 'open', 'high', 'low', 'close', 'volume', 'closeadj', 'closeunadj']
+        qopts = {"columns": columns}
+    elif table == 'TICKERS':
+        # TICKERS table - ticker metadata including permaticker
+        # This table has the ticker → permaticker mapping we need
+        columns = ['ticker', 'permaticker', 'name', 'exchange', 'isdelisted', 'category']
         qopts = {"columns": columns}
     elif table == 'ACTIONS':
         # ACTIONS table - corporate actions (splits, dividends)

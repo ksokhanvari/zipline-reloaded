@@ -6,6 +6,8 @@ This directory contains interactive Jupyter notebooks demonstrating various feat
 
 ### 1. `test_sharadar_fundamentals.ipynb` - Sharadar Fundamentals Stock Screening
 
+**Level**: Beginner/Intermediate
+
 **Purpose**: Comprehensive demonstration of using Sharadar SF1 fundamentals data in Pipeline API.
 
 **What You'll Learn**:
@@ -48,6 +50,73 @@ jupyter notebook test_sharadar_fundamentals.ipynb
 - ROE vs P/E scatter plot with market cap coloring
 - Multi-strategy picks (stocks appearing in multiple screens)
 - Data quality validation checks
+
+---
+
+### 2. `multi_source_fundamentals_example.ipynb` - Combine Sharadar + Custom LSEG Data
+
+**Level**: Advanced
+
+**Purpose**: Demonstrate using **multiple fundamental data sources** simultaneously - combining Sharadar SF1 with your custom LSEG database.
+
+**What You'll Learn**:
+- Load both Sharadar and custom LSEG fundamentals in Pipeline
+- Compare metrics across sources (data quality validation)
+- Build consensus scores from multiple sources
+- Handle coverage differences between sources
+- Run a complete backtest mixing both datasets
+
+**Key Features**:
+1. **Multi-Source Loading**: Access Sharadar + LSEG simultaneously
+2. **Data Comparison**: Compare ROE, P/E, D/E across sources
+3. **Consensus Scoring**: Higher confidence when both sources agree
+4. **Coverage Analysis**: Understand where each source provides data
+5. **Runnable Backtest**: Complete strategy from start to finish
+6. **Visual Analytics**: Scatter plots, coverage charts, performance graphs
+
+**Strategy**:
+- **Primary Source**: Sharadar (broader coverage, ~5K stocks)
+- **Validation**: Custom LSEG (where available, confirms signals)
+- **Scoring**: Bonus points when both sources agree on quality metrics
+- **Selection**: Top 15 stocks by consensus score
+- **Rebalancing**: Monthly
+
+**Prerequisites**:
+```bash
+# Ingest Sharadar bundle with fundamentals
+zipline ingest -b sharadar
+
+# Create custom fundamentals database
+cd /app/examples/custom_data
+python create_fundamentals_db.py
+
+# Ensure database exists at:
+# /root/.zipline/data/custom/fundamentals_zipline.db
+```
+
+**How to Run**:
+```bash
+# From inside Docker
+cd /notebooks
+jupyter notebook multi_source_fundamentals_example.ipynb
+
+# Or via JupyterLab
+jupyter lab --ip=0.0.0.0 --port=8888
+```
+
+**Output Examples**:
+- Coverage comparison (Sharadar: 5K stocks, LSEG: your universe)
+- ROE correlation scatter plot between sources
+- Consensus score distribution
+- High-conviction picks (both sources confirm)
+- Complete backtest with performance metrics
+- Multi-source strategy results saved to CSV
+
+**Use Cases**:
+- **Data Quality Validation**: Check Sharadar vs LSEG consistency
+- **Alpha Discovery**: Find discrepancies between sources (mispricing)
+- **Consensus Signals**: Only trade when both sources agree
+- **Coverage Expansion**: Use LSEG where Sharadar missing, vice versa
 
 ---
 

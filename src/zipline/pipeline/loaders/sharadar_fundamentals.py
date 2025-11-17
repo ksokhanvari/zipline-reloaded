@@ -185,11 +185,11 @@ class SharadarFundamentalsLoader(PipelineLoader):
 
         # Forward-fill within each column (SID)
         # Quarterly data persists until next quarter is filed
-        pivoted = pivoted.fillna(method='ffill')
+        pivoted = pivoted.ffill()
 
         # Now filter to only the requested dates
-        # Use reindex with method='ffill' to handle dates between filings
-        result_df = pivoted.reindex(dates, method='ffill')
+        # Use reindex with ffill to handle dates between filings
+        result_df = pivoted.reindex(dates).ffill()
 
         # Convert to numpy array
         result = result_df.values.astype(float64_dtype)

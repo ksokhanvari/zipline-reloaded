@@ -14,6 +14,7 @@ The Sharadar Fundamentals feature provides access to 150+ quarterly fundamental 
 ## Table of Contents
 
 1. [Quick Start](#quick-start)
+   - [Interactive Jupyter Notebook](#3-interactive-exploration-jupyter-notebook)
 2. [Permaticker SIDs](#permaticker-sids)
 3. [Bundle Ingestion](#bundle-ingestion)
 4. [Available Metrics](#available-metrics)
@@ -61,6 +62,31 @@ def before_trading_start(context, data):
     context.fundamentals = pipeline_output('fundamentals')
     # Use context.fundamentals DataFrame in your trading logic
 ```
+
+### 3. Interactive Exploration (Jupyter Notebook)
+
+For hands-on exploration and testing, see the **interactive Jupyter notebook**:
+
+📓 **`examples/notebooks/test_sharadar_fundamentals.ipynb`**
+
+This notebook includes:
+- ✅ Complete working examples with real data
+- ✅ 5 different stock screening strategies (Magic Formula, High ROE, Value, Quality, Growth)
+- ✅ Data quality validation and coverage statistics
+- ✅ Visualizations (ROE vs P/E scatter plots)
+- ✅ Export top picks for further research
+- ✅ Ready to run in Docker/JupyterLab
+
+**Quick Start**:
+```bash
+# From inside Docker
+cd /notebooks
+jupyter notebook test_sharadar_fundamentals.ipynb
+
+# Access at http://localhost:8888
+```
+
+See `examples/notebooks/README.md` for full documentation.
 
 ---
 

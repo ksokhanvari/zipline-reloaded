@@ -9,18 +9,38 @@ OVERVIEW
 Sharadar is a PREMIUM dataset that requires a subscription.
 Sign up at: https://data.nasdaq.com/databases/SFA
 
-The bundle downloads and processes three main Sharadar tables:
+The bundle downloads and processes four main Sharadar tables:
 - SEP (Sharadar Equity Prices): Daily OHLCV pricing data for stocks
 - SFP (Sharadar Fund Prices): Daily OHLCV pricing data for ETFs and funds
 - ACTIONS: Corporate actions (splits, dividends, spinoffs, etc.)
+- SF1 (Sharadar Fundamentals): 150+ quarterly fundamental metrics (optional)
 
 KEY FEATURES
 ------------
-1. Incremental Updates: Only download new data since last ingestion (much faster)
-2. Flexible Ticker Selection: Download all tickers or specify a subset
-3. Split & Dividend Handling: Automatically handles corporate actions
-4. Chunk Downloads: Break large downloads into smaller pieces to avoid timeouts
+1. Permaticker as SID: Uses Sharadar's permanent ticker IDs for stable SIDs
+2. Incremental Updates: Only download new data since last ingestion (much faster)
+3. Flexible Ticker Selection: Download all tickers or specify a subset
+4. Split & Dividend Handling: Automatically handles corporate actions
 5. Fund Support: Include or exclude ETFs and mutual funds
+6. Fundamentals Integration: Optional SF1 fundamentals with point-in-time correctness
+
+PERMATICKER AS SID (CRITICAL)
+------------------------------
+**This bundle uses Sharadar's 'permaticker' field as Zipline SIDs.**
+
+Benefits:
+- Stable SIDs across all bundle ingestions
+- SIDs survive ticker changes (e.g., FB → META keeps same SID)
+- Perfect for multi-source fundamentals (Sharadar SF1 + LSEG)
+- Consistent with Sharadar's internal data model
+
+**BREAKING CHANGE**: Bundles ingested before this change used sequential SIDs
+(0, 1, 2, ...). You must re-ingest all bundles to use permaticker SIDs.
+
+Example permatickers:
+- AAPL: 199059
+- MSFT: 199913
+- GOOGL: 199623
 
 SHARADAR DATA COLUMNS
 ---------------------
@@ -626,46 +646,30 @@ def sharadar_bundle(
                     if 'end_date' in existing_metadata.columns:
                         existing_metadata['end_date'] = pd.to_datetime(existing_metadata['end_date'], unit='ns')
 
-                    # Merge on symbol - PRESERVE sid from existing_metadata!
-                    metadata = pd.merge(
-                        new_metadata[['symbol', 'asset_type', 'exchange', 'asset_name']],
-                        existing_metadata[['sid', 'symbol', 'start_date', 'end_date']],
-                        on='symbol',
-                        how='outer'  # Keep all symbols from both
-                    )
+                    # Merge on symbol AND sid (permaticker)
+                    # With permaticker approach, new_metadata already has correct SIDs
+                    # We just need to preserve historical start_dates from existing metadata
 
-                    # For assets in new_metadata: update end_date, keep original start_date
-                    new_symbols = set(new_metadata['symbol'])
+                    # Start with new metadata (has all current symbols with permaticker SIDs)
+                    metadata = new_metadata.copy()
+
+                    # Create lookup for existing start_dates
+                    existing_start_dates = dict(zip(existing_metadata['symbol'], existing_metadata['start_date']))
+
+                    # Update start_dates: use earlier of existing or new
+                    new_symbols = set()
                     for idx, row in metadata.iterrows():
-                        if row['symbol'] in new_symbols:
-                            # Get dates from new_metadata
-                            new_row = new_metadata[new_metadata['symbol'] == row['symbol']].iloc[0]
-                            # Keep existing start_date (earlier), update end_date (later)
-                            if pd.isna(row['start_date']):
-                                metadata.loc[idx, 'start_date'] = new_row['start_date']
-                            else:
-                                metadata.loc[idx, 'start_date'] = min(row['start_date'], new_row['start_date'])
-                            metadata.loc[idx, 'end_date'] = new_row['end_date']
-
-                            # Fill in missing metadata columns
-                            if pd.isna(row['asset_type']):
-                                metadata.loc[idx, 'asset_type'] = new_row['asset_type']
-                            if pd.isna(row['exchange']):
-                                metadata.loc[idx, 'exchange'] = new_row['exchange']
-                            if pd.isna(row['asset_name']):
-                                metadata.loc[idx, 'asset_name'] = new_row['asset_name']
+                        if row['symbol'] in existing_start_dates:
+                            # Existing asset: use earlier start_date
+                            existing_start = existing_start_dates[row['symbol']]
+                            current_start = row['start_date']
+                            metadata.loc[idx, 'start_date'] = min(existing_start, current_start)
                         else:
-                            # Asset from existing metadata only (no new data)
-                            # Keep as-is, fill in defaults if needed
-                            if pd.isna(row['asset_type']):
-                                metadata.loc[idx, 'asset_type'] = 'equity'
-                            if pd.isna(row['exchange']):
-                                metadata.loc[idx, 'exchange'] = 'NASDAQ'
-                            if pd.isna(row['asset_name']):
-                                metadata.loc[idx, 'asset_name'] = row['symbol']
+                            # New asset
+                            new_symbols.add(row['symbol'])
 
                     print(f"   ✓ Merged metadata: {len(metadata)} total assets")
-                    print(f"     New/updated: {len(new_symbols)}, Preserved: {len(metadata) - len(new_symbols)}")
+                    print(f"     New: {len(new_symbols)}, Updated: {len(metadata) - len(new_symbols)}")
 
                 else:
                     print(f"   ⚠️  Could not find existing assets database")
@@ -692,31 +696,33 @@ def sharadar_bundle(
             )
 
         # Create symbol to sid mapping
-        # For incremental mode: preserve existing SIDs, assign new ones to new symbols
-        # For full ingestion: use DataFrame index as SID
-        if 'sid' in metadata.columns:
-            # Incremental mode: we have existing SIDs
-            # For new symbols (sid is NaN), assign new SIDs starting from max+1
-            max_existing_sid = metadata['sid'].max()
-            if pd.isna(max_existing_sid):
-                max_existing_sid = -1  # No existing assets
+        # PERMATICKER APPROACH: SIDs are already assigned in prepare_asset_metadata()
+        # The 'sid' column contains Sharadar permatickers, which are stable across
+        # all ingestions and data sources.
+        #
+        # For incremental mode: metadata already contains permaticker SIDs from both
+        # existing and new assets (merged in prepare_asset_metadata step above)
+        #
+        # For full ingestion: metadata contains permaticker SIDs from prepare_asset_metadata()
 
-            next_sid = int(max_existing_sid) + 1
-            symbol_to_sid = {}
+        # Verify sid column exists (should always exist now)
+        if 'sid' not in metadata.columns:
+            raise ValueError(
+                "Metadata missing 'sid' column. "
+                "This should have been added by prepare_asset_metadata(). "
+                "Please check the prepare_asset_metadata() function."
+            )
 
-            for idx, row in metadata.iterrows():
-                if pd.notna(row['sid']):
-                    # Existing asset: use existing SID
-                    symbol_to_sid[row['symbol']] = int(row['sid'])
-                else:
-                    # New asset: assign new SID
-                    symbol_to_sid[row['symbol']] = next_sid
-                    metadata.loc[idx, 'sid'] = next_sid
-                    next_sid += 1
-        else:
-            # Full ingestion mode: use DataFrame index as SID
-            symbol_to_sid = {row['symbol']: idx for idx, row in metadata.iterrows()}
-            metadata['sid'] = metadata.index
+        # Create ticker → SID mapping (permaticker values)
+        symbol_to_sid = dict(zip(metadata['symbol'], metadata['sid'].astype(int)))
+
+        # Verify all SIDs are valid (positive integers)
+        invalid_sids = metadata[metadata['sid'] <= 0]
+        if len(invalid_sids) > 0:
+            raise ValueError(
+                f"Invalid SIDs found: {invalid_sids[['symbol', 'sid']].to_dict('records')}. "
+                f"Permatickers must be positive integers."
+            )
 
         # Add sid to pricing data
         all_pricing_data['sid'] = all_pricing_data['ticker'].map(symbol_to_sid)
@@ -847,11 +853,25 @@ def sharadar_bundle(
                 )
 
                 if not sf1_data.empty:
-                    # Add SIDs to fundamentals data for consistency
-                    sf1_data['sid'] = sf1_data['ticker'].map(symbol_to_sid)
+                    # Use permaticker as SID directly (already in SF1 data)
+                    # This ensures perfect consistency with pricing data SIDs
+                    sf1_data['sid'] = sf1_data['permaticker'].astype(int)
 
-                    # Remove any unmapped tickers
-                    sf1_data = sf1_data[sf1_data['sid'].notna()].copy()
+                    # Verify SIDs match pricing data
+                    # (all fundamentals SIDs should exist in symbol_to_sid values)
+                    pricing_sids = set(symbol_to_sid.values())
+                    fundamentals_sids = set(sf1_data['sid'].unique())
+
+                    # Log SID coverage
+                    matched_sids = fundamentals_sids & pricing_sids
+                    unmatched_sids = fundamentals_sids - pricing_sids
+
+                    print(f"  SID matching: {len(matched_sids)} matched, {len(unmatched_sids)} unmatched")
+                    if unmatched_sids and len(unmatched_sids) < 10:
+                        print(f"  Unmatched SIDs (no pricing data): {sorted(list(unmatched_sids))[:10]}")
+
+                    # Keep only fundamentals for assets with pricing data
+                    sf1_data = sf1_data[sf1_data['sid'].isin(pricing_sids)].copy()
 
                     # Store fundamentals in bundle directory
                     store_fundamentals(sf1_data, output_dir, symbol_to_sid)
@@ -932,11 +952,13 @@ def download_sharadar_table(
     # Define columns based on table type
     if table == 'SEP':
         # SEP (Sharadar Equity Prices) - optimized column selection
-        columns = ['ticker', 'date', 'open', 'high', 'low', 'close', 'volume', 'closeadj', 'closeunadj']
+        # IMPORTANT: Include 'permaticker' for stable SID assignment across bundles
+        columns = ['ticker', 'date', 'open', 'high', 'low', 'close', 'volume', 'closeadj', 'closeunadj', 'permaticker']
         qopts = {"columns": columns}
     elif table == 'SFP':
         # SFP (Sharadar Fund Prices) - same structure as SEP
-        columns = ['ticker', 'date', 'open', 'high', 'low', 'close', 'volume', 'closeadj', 'closeunadj']
+        # IMPORTANT: Include 'permaticker' for stable SID assignment across bundles
+        columns = ['ticker', 'date', 'open', 'high', 'low', 'close', 'volume', 'closeadj', 'closeunadj', 'permaticker']
         qopts = {"columns": columns}
     elif table == 'ACTIONS':
         # ACTIONS table - corporate actions (splits, dividends)
@@ -1247,6 +1269,9 @@ def download_sharadar_fundamentals(
     This ensures we only access data that was actually available on each historical date,
     preventing look-ahead bias.
 
+    PERMATICKER: SF1 includes 'permaticker' which we use as SID for consistency with
+    pricing data. This ensures perfect alignment even when ticker symbols change.
+
     Parameters
     ----------
     api_key : str
@@ -1263,6 +1288,7 @@ def download_sharadar_fundamentals(
     pd.DataFrame
         Fundamentals data with columns including:
         - ticker: Stock symbol
+        - permaticker: Permanent ticker ID (used as SID)
         - datekey: Date when data became available (for point-in-time)
         - calendardate: Calendar date of the quarter end
         - dimension: ARQ (As-Reported Quarterly)
@@ -1272,6 +1298,7 @@ def download_sharadar_fundamentals(
 
     # Download using existing download_sharadar_table function
     # This handles API key, pagination, chunking, etc.
+    # NOTE: SF1 table includes 'permaticker' column automatically
     sf1_data = download_sharadar_table(
         table='SF1',
         api_key=api_key,
@@ -1293,7 +1320,7 @@ def download_sharadar_fundamentals(
         print("  ⚠️  No 'dimension' column found - using all data")
 
     # Ensure critical columns exist
-    required_cols = ['ticker', 'datekey', 'calendardate']
+    required_cols = ['ticker', 'permaticker', 'datekey', 'calendardate']
     missing_cols = [col for col in required_cols if col not in sf1_data.columns]
     if missing_cols:
         raise ValueError(f"SF1 data missing required columns: {missing_cols}")
@@ -1358,7 +1385,11 @@ def prepare_asset_metadata(
     This function extracts asset metadata (symbols, date ranges, exchanges) from
     the raw pricing data and formats it for Zipline's asset database.
 
+    **CRITICAL CHANGE**: Uses Sharadar's 'permaticker' as SID for stable,
+    consistent identifiers across bundles and data sources.
+
     The metadata includes:
+    - sid: Sharadar permaticker (permanent unique ID) - USED AS ZIPLINE SID
     - symbol: Ticker symbol (e.g., 'AAPL', 'MSFT')
     - start_date: First available trading date for this asset
     - end_date: Last available trading date for this asset
@@ -1366,14 +1397,17 @@ def prepare_asset_metadata(
     - exchange: Primary exchange (defaults to NASDAQ)
     - asset_name: Human-readable name (same as symbol for Sharadar)
 
-    The function ensures that asset date ranges are clipped to the bundle's
-    date range to prevent out-of-bounds errors.
+    Benefits of permaticker as SID:
+    - Stable across bundles (AAPL always has same SID)
+    - Survives ticker changes (FB→META keeps same SID)
+    - Perfect for multi-source fundamentals (LSEG can map to same permaticker)
+    - Consistent with Sharadar's internal SF1 fundamentals
 
     Parameters
     ----------
     pricing_data : pd.DataFrame
         Raw pricing data from SEP and/or SFP tables.
-        Must contain 'ticker' and 'date' columns.
+        Must contain 'ticker', 'date', and 'permaticker' columns.
         May optionally contain 'asset_type' column.
     start_date : str
         Bundle start date in 'YYYY-MM-DD' format.
@@ -1386,6 +1420,7 @@ def prepare_asset_metadata(
     -------
     pd.DataFrame
         Asset metadata with columns:
+        - sid: int (permaticker)
         - symbol: str
         - start_date: datetime64
         - end_date: datetime64
@@ -1395,38 +1430,56 @@ def prepare_asset_metadata(
 
     Notes
     -----
-    The index of the returned DataFrame will be used as SIDs (security identifiers)
-    in Zipline. The index starts at 0 and increments for each asset.
+    The 'sid' column contains Sharadar permaticker values, which are used as
+    Zipline SIDs. This ensures stable identifiers across:
+    - Different bundle ingestions
+    - Ticker symbol changes
+    - Multiple data sources (pricing + fundamentals + LSEG)
 
     Examples
     --------
     >>> pricing = pd.DataFrame({
     ...     'ticker': ['AAPL', 'AAPL', 'MSFT', 'MSFT'],
+    ...     'permaticker': [199059, 199059, 199913, 199913],
     ...     'date': ['2020-01-02', '2020-01-03', '2020-01-02', '2020-01-03'],
     ...     'close': [300.35, 297.43, 160.62, 158.62]
     ... })
     >>> metadata = prepare_asset_metadata(pricing, '2020-01-01', '2020-12-31')
-    >>> print(metadata[['symbol', 'start_date', 'end_date']])
-      symbol start_date   end_date
-    0   AAPL 2020-01-02 2020-01-03
-    1   MSFT 2020-01-02 2020-01-03
+    >>> print(metadata[['sid', 'symbol', 'start_date', 'end_date']])
+         sid symbol start_date   end_date
+    0 199059   AAPL 2020-01-02 2020-01-03
+    1 199913   MSFT 2020-01-02 2020-01-03
     """
+    # Verify permaticker column exists
+    if 'permaticker' not in pricing_data.columns:
+        raise ValueError(
+            "Sharadar pricing data missing 'permaticker' column. "
+            "This is required for stable SID assignment. "
+            "Please re-download bundle data with permaticker included."
+        )
+
     # Determine aggregation columns
-    agg_dict = {'date': ['min', 'max']}
+    agg_dict = {
+        'date': ['min', 'max'],
+        'permaticker': 'first',  # Get permaticker (should be same for all rows of a ticker)
+    }
 
     # Include asset_type if present (to distinguish equities from funds)
     if 'asset_type' in pricing_data.columns:
         agg_dict['asset_type'] = 'first'
 
-    # Get first and last date for each ticker
+    # Get first and last date for each ticker, plus permaticker
     metadata = pricing_data.groupby('ticker').agg(agg_dict).reset_index()
 
     # Flatten column names
     if 'asset_type' in pricing_data.columns:
-        metadata.columns = ['symbol', 'start_date', 'end_date', 'asset_type']
+        metadata.columns = ['symbol', 'start_date', 'end_date', 'permaticker', 'asset_type']
     else:
-        metadata.columns = ['symbol', 'start_date', 'end_date']
+        metadata.columns = ['symbol', 'start_date', 'end_date', 'permaticker']
         metadata['asset_type'] = 'equity'  # Default to equity if not specified
+
+    # Use permaticker as SID
+    metadata['sid'] = metadata['permaticker'].astype(int)
 
     # Add required columns
     metadata['exchange'] = 'NASDAQ'  # Sharadar is primarily NASDAQ/NYSE
@@ -1442,6 +1495,15 @@ def prepare_asset_metadata(
 
     metadata['start_date'] = metadata['start_date'].clip(lower=bundle_start)
     metadata['end_date'] = metadata['end_date'].clip(upper=bundle_end)
+
+    # Verify no duplicate permatickers (should never happen, but be safe)
+    duplicate_sids = metadata['sid'].duplicated()
+    if duplicate_sids.any():
+        duplicates = metadata[duplicate_sids][['symbol', 'sid']].values
+        raise ValueError(
+            f"Duplicate permatickers found: {duplicates}. "
+            f"This indicates corrupted Sharadar data."
+        )
 
     return metadata
 

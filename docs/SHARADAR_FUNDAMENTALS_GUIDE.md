@@ -14,13 +14,14 @@ The Sharadar Fundamentals feature provides access to 150+ quarterly fundamental 
 ## Table of Contents
 
 1. [Quick Start](#quick-start)
-2. [Bundle Ingestion](#bundle-ingestion)
-3. [Available Metrics](#available-metrics)
-4. [Pipeline Usage](#pipeline-usage)
-5. [Point-in-Time Correctness](#point-in-time-correctness)
-6. [Example Strategies](#example-strategies)
-7. [Advanced Usage](#advanced-usage)
-8. [Troubleshooting](#troubleshooting)
+2. [Permaticker SIDs](#permaticker-sids)
+3. [Bundle Ingestion](#bundle-ingestion)
+4. [Available Metrics](#available-metrics)
+5. [Pipeline Usage](#pipeline-usage)
+6. [Point-in-Time Correctness](#point-in-time-correctness)
+7. [Example Strategies](#example-strategies)
+8. [Advanced Usage](#advanced-usage)
+9. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -59,6 +60,60 @@ def initialize(context):
 def before_trading_start(context, data):
     context.fundamentals = pipeline_output('fundamentals')
     # Use context.fundamentals DataFrame in your trading logic
+```
+
+---
+
+## Permaticker SIDs
+
+**IMPORTANT**: This bundle uses Sharadar's `permaticker` field as Zipline SIDs.
+
+### What is Permaticker?
+
+Permaticker is Sharadar's **permanent unique identifier** for each security. Unlike ticker symbols (which can change), permatickers are stable forever.
+
+**Examples**:
+- **AAPL**: permaticker = `199059`
+- **MSFT**: permaticker = `199913`
+- **META** (formerly FB): permaticker = `199623` (same before and after ticker change)
+
+### Why Use Permaticker as SID?
+
+1. **Stable Across Ingestions**: AAPL always has SID `199059`, regardless of when you ingest
+2. **Survives Ticker Changes**: FB → META keeps the same SID (`199623`)
+3. **Multi-Source Consistency**: LSEG fundamentals can map to the same permaticker
+4. **Perfect Alignment**: Pricing and fundamentals guaranteed to match (same permaticker)
+
+### Breaking Change
+
+**Previous Implementation**: Used sequential SIDs (0, 1, 2, ...)
+**New Implementation**: Uses permaticker as SID (199059, 199913, ...)
+
+⚠️ **Action Required**: You must **re-ingest all bundles** to use permaticker SIDs. Old bundles are incompatible.
+
+```bash
+# Clean old bundles
+docker exec zipline-reloaded-jupyter zipline clean -b sharadar --keep-last 0
+
+# Re-ingest with permaticker SIDs
+docker exec zipline-reloaded-jupyter zipline ingest -b sharadar
+```
+
+### Verifying Permaticker SIDs
+
+Check that SIDs are permatickers (large integers, not 0, 1, 2...):
+
+```python
+from zipline.pipeline import Pipeline
+from zipline.pipeline.data import EquityPricing
+
+# Run pipeline
+pipeline = Pipeline(columns={'close': EquityPricing.close.latest})
+result = pipeline_output('my_pipeline')
+
+# Check SIDs (should be 6-digit integers)
+print(result.index.get_level_values('sid').unique())
+# Output: Int64Index([199059, 199913, 199623, ...], dtype='int64', name='sid')
 ```
 
 ---

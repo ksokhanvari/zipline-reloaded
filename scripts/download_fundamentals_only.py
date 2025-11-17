@@ -137,7 +137,18 @@ def main():
         print("❌ No fundamentals data downloaded")
         sys.exit(1)
 
-    # Add SIDs
+    # Add permaticker if missing (bulk export may not include it)
+    if 'permaticker' not in sf1_data.columns:
+        print("  ⚠️  SF1 missing permaticker column, adding from bundle asset mapping...")
+        # symbol_to_sid is actually ticker->permaticker since we use permaticker as SID
+        sf1_data['permaticker'] = sf1_data['ticker'].map(symbol_to_sid)
+
+        missing_permaticker = sf1_data[sf1_data['permaticker'].isna()]['ticker'].unique()
+        if len(missing_permaticker) > 0:
+            print(f"     {len(missing_permaticker)} tickers couldn't be mapped to permaticker")
+            sf1_data = sf1_data[sf1_data['permaticker'].notna()].copy()
+
+    # Add SIDs (permaticker IS the SID in our architecture)
     sf1_data['sid'] = sf1_data['permaticker'].astype(int)
 
     # Verify SID matching

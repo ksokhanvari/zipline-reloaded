@@ -1430,7 +1430,8 @@ def download_sharadar_fundamentals(
         print("  ⚠️  No 'dimension' column found - using all data")
 
     # Ensure critical columns exist
-    required_cols = ['ticker', 'permaticker', 'datekey', 'calendardate']
+    # Note: permaticker is optional - caller should add it from TICKERS if missing
+    required_cols = ['ticker', 'datekey', 'calendardate']
     missing_cols = [col for col in required_cols if col not in sf1_data.columns]
     if missing_cols:
         raise ValueError(f"SF1 data missing required columns: {missing_cols}")

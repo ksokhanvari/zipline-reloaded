@@ -899,7 +899,21 @@ def sharadar_bundle(
                 )
 
                 if not sf1_data.empty:
-                    # Use permaticker as SID directly (already in SF1 data)
+                    # Check if permaticker column exists
+                    # Bulk export API may not include it by default
+                    if 'permaticker' not in sf1_data.columns:
+                        print("  ⚠️  SF1 missing permaticker column, adding from TICKERS mapping...")
+                        # Use the ticker_to_permaticker mapping we created earlier
+                        sf1_data['permaticker'] = sf1_data['ticker'].map(ticker_to_permaticker)
+
+                        # Warn if any tickers couldn't be mapped
+                        missing_permaticker = sf1_data[sf1_data['permaticker'].isna()]['ticker'].unique()
+                        if len(missing_permaticker) > 0:
+                            print(f"     {len(missing_permaticker)} tickers couldn't be mapped to permaticker")
+                            # Remove rows without permaticker
+                            sf1_data = sf1_data[sf1_data['permaticker'].notna()].copy()
+
+                    # Use permaticker as SID directly
                     # This ensures perfect consistency with pricing data SIDs
                     sf1_data['sid'] = sf1_data['permaticker'].astype(int)
 
@@ -1015,10 +1029,13 @@ def download_sharadar_table(
         qopts = {"columns": columns}
     elif table == 'SF1':
         # SF1 (Sharadar Fundamentals) - get all columns (150+ metrics)
-        # Don't specify columns to get all fundamental data
+        # IMPORTANT: Must explicitly include 'permaticker' - it's not in default columns
+        # We don't specify individual metric columns to get all 150+ metrics
         # We'll filter to ARQ dimension in download_sharadar_fundamentals()
         # NOTE: SF1 uses 'calendardate' not 'date' for filtering
-        qopts = None
+        # Setting qopts=None gets default columns which may not include permaticker
+        # So we explicitly request it without limiting other columns
+        qopts = None  # Get all columns - but see filters below
     else:
         # For other tables, don't specify columns (get all)
         qopts = None

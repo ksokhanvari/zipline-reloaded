@@ -26,6 +26,12 @@ class TemporalSIDMapper:
     with the appropriate as-of-date for each row.
     """
 
+    # Known symbol changes not in Sharadar bundle (FB was never ingested as separate symbol)
+    # Map old_symbol -> current_symbol for normalization
+    KNOWN_SYMBOL_CHANGES = {
+        'FB': 'META',  # Facebook renamed to Meta in Oct 2021
+    }
+
     def __init__(self, asset_finder):
         """
         Initialize mapper with Zipline asset finder.
@@ -51,14 +57,17 @@ class TemporalSIDMapper:
         if isinstance(date, str):
             date = pd.Timestamp(date)
 
-        # Check cache
-        cache_key = (symbol, date.date())
+        # Normalize symbol if it's a known change (e.g., FB -> META)
+        normalized_symbol = self.KNOWN_SYMBOL_CHANGES.get(symbol, symbol)
+
+        # Check cache (use normalized symbol for cache key)
+        cache_key = (normalized_symbol, date.date())
         if cache_key in self._symbol_cache:
             return self._symbol_cache[cache_key]
 
         # Lookup symbol as of date
         try:
-            asset = self.asset_finder.lookup_symbol(symbol, as_of_date=date)
+            asset = self.asset_finder.lookup_symbol(normalized_symbol, as_of_date=date)
             sid = asset.sid
             self._symbol_cache[cache_key] = sid
             return sid
@@ -97,10 +106,15 @@ class TemporalSIDMapper:
 
     def map_dataframe_grouped(self, df, symbol_col='Symbol', date_col='Date', verbose=True):
         """
-        Map dataframe using grouped lookups for better performance.
+        Map dataframe using unique (symbol, date) pairs for optimal performance.
 
-        Optimized for datasets where the same symbol appears many times.
-        Good for medium datasets (100k-1M rows).
+        OPTIMIZED for fundamental data where same symbols repeat across many dates.
+        This is the FASTEST method for typical use cases (100k-10M rows).
+
+        Strategy:
+        1. Find all unique (symbol, date) pairs (typically 1k-10k pairs)
+        2. Look up SID for each unique pair ONCE
+        3. Map results back to all rows via merge
 
         Args:
             df: DataFrame with symbol and date columns
@@ -112,27 +126,41 @@ class TemporalSIDMapper:
             Series: SIDs for each row
         """
         if verbose:
-            print(f"Mapping {len(df):,} rows using grouped lookups...")
+            print(f"Mapping {len(df):,} rows using unique pairs strategy...")
 
         # Ensure date is Timestamp
-        df = df.copy()
-        df[date_col] = pd.to_datetime(df[date_col])
+        df_work = df[[symbol_col, date_col]].copy()
+        df_work[date_col] = pd.to_datetime(df_work[date_col])
 
-        # Group by symbol to reduce lookups
-        sids = pd.Series(index=df.index, dtype=object)
+        # Get unique (symbol, date) pairs - this is the key optimization!
+        unique_pairs = df_work.drop_duplicates()
 
-        for symbol, group in df.groupby(symbol_col):
-            if verbose and len(sids.notna()) % 50000 == 0:
-                print(f"  Mapped {sids.notna().sum():,} rows...")
+        if verbose:
+            print(f"  Found {len(unique_pairs):,} unique (symbol, date) pairs")
+            print(f"  Reduction: {len(df) / len(unique_pairs):.1f}x fewer lookups needed")
 
-            # For each unique date in this symbol's group
-            for date in group[date_col].unique():
-                sid = self.map_single_row(symbol, date)
-                # Assign SID to all rows with this (symbol, date) pair
-                mask = (df[symbol_col] == symbol) & (df[date_col] == date)
-                sids[mask] = sid
+        # Map each unique pair
+        sids_list = []
+        for idx, (symbol, date) in enumerate(zip(unique_pairs[symbol_col], unique_pairs[date_col])):
+            if verbose and idx > 0 and idx % 100 == 0:
+                print(f"  Processed {idx:,} / {len(unique_pairs):,} unique pairs ({idx/len(unique_pairs)*100:.1f}%)")
+            sids_list.append(self.map_single_row(symbol, date))
 
-        return sids
+        # Create mapping dataframe
+        unique_pairs['Sid'] = sids_list
+
+        # Merge back to original dataframe
+        if verbose:
+            print(f"  Merging SIDs back to {len(df):,} rows...")
+
+        result = pd.merge(
+            df_work,
+            unique_pairs,
+            on=[symbol_col, date_col],
+            how='left'
+        )
+
+        return result['Sid']
 
     def map_dataframe_parallel(self, df, symbol_col='Symbol', date_col='Date',
                                n_jobs=-1, verbose=True):

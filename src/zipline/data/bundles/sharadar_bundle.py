@@ -1589,6 +1589,13 @@ def prepare_asset_metadata(
         metadata.columns = ['symbol', 'start_date', 'end_date', 'permaticker']
         metadata['asset_type'] = 'equity'  # Default to equity if not specified
 
+    # Filter out any rows with NaN permaticker before converting to SID
+    if metadata['permaticker'].isna().any():
+        na_count = metadata['permaticker'].isna().sum()
+        na_symbols = metadata[metadata['permaticker'].isna()]['symbol'].tolist()
+        log.warning(f"Dropping {na_count} assets with missing permaticker: {na_symbols[:10]}{'...' if len(na_symbols) > 10 else ''}")
+        metadata = metadata[metadata['permaticker'].notna()].copy()
+
     # Use permaticker as SID
     metadata['sid'] = metadata['permaticker'].astype(int)
 

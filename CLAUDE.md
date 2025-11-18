@@ -14,21 +14,31 @@ Zipline is a Pythonic algorithmic trading library for backtesting trading strate
   - `algorithm.py`: Core algorithm execution
   - `api.py`: Public API functions
   - `data/`: Data ingestion and handling
+    - `bundles/sharadar_bundle.py`: Sharadar data bundle with NaN fixes
     - `custom/`: Custom fundamentals data integration
       - `pipeline_integration.py`: CustomSQLiteLoader implementation
       - `db_manager.py`: Database utilities
       - `config.py`: Configuration constants
-  - `finance/`: Financial calculations and order execution
   - `pipeline/`: Factor-based screening system
-- `notebooks/`: Strategy examples and data loading workflows
-  - `load_csv_fundamentals.ipynb`: CSV → SQLite → Pipeline workflow
-  - `strategy_top5_roe.py`: Full-featured production strategy example
-  - `strategy_top5_roe_simple.py`: Minimal clean strategy example
-  - `run_strategy.py`: Helper to run strategy files from notebooks
-  - `run_backtest_example.ipynb`: Examples using run_strategy helper
-  - `STRATEGY_README.md`: Comprehensive strategy documentation
+    - `multi_source.py`: **Multi-source data integration (NEW)**
+- `examples/`: **Reorganized examples directory (NEW)**
+  - `1_getting_started/`: Basic examples and quickstart guides
+  - `2_strategies/`: Trading strategy implementations
+  - `3_analysis/`: Performance analysis and visualization
+  - `4_pipeline/`: Pipeline API examples
+  - `5_multi_source_data/`: **Multi-source integration examples (NEW)**
+  - `6_custom_data/`: Custom database creation
+  - `utils/`: Shared utilities and inspection tools
+  - `custom_data/`: Legacy examples (backward compatibility)
+- `notebooks/`: Jupyter notebooks
+  - `sharadar_data_explorer.ipynb`: **Interactive Sharadar data exploration (NEW)**
+  - `multi_source_fundamentals_example.ipynb`: Multi-source strategy notebook
+- `docs/`: Documentation
+  - `MULTI_SOURCE_DATA.md`: **Multi-source data comprehensive guide (NEW)**
+  - `MULTI_SOURCE_QUICKREF.md`: **Quick reference guide (NEW)**
+  - `GETTING_STARTED.md`: Getting started guide
+  - `FLIGHTLOG_USAGE.md`: FlightLog monitoring guide
 - `tests/`: Test suite
-- `docs/`: Documentation source
 
 ## Development Commands
 ```bash
@@ -43,667 +53,728 @@ cd docs && make html
 
 # Install in development mode
 pip install -e .
+
+# Run simple backtest
+python examples/1_getting_started/simple_flightlog_demo.py
+
+# Check Sharadar field availability
+python examples/utils/check_sf1_data.py
+
+# Check custom database
+python examples/utils/check_lseg_db.py
 ```
-
-## Testing Approach
-- Unit tests use pytest
-- Test data is stored in `tests/resources/`
-- Mock trading environments for testing strategies
-
-## Common Tasks
-1. **Implementing new data bundles**: See `src/zipline/data/bundles/`
-2. **Adding new pipeline factors**: See `src/zipline/pipeline/factors/`
-3. **Modifying order execution**: See `src/zipline/finance/execution.py`
-4. **Working with trading calendars**: Uses `exchange_calendars` library
-
-## Important Notes
-- The project uses Cython for performance-critical components
-- Be careful with numpy/pandas API changes due to major version updates
-- Trading calendars are handled by the external `exchange_calendars` package
-
----
-
-# Custom Fundamentals System - Architecture & Implementation Guide
-
-## Overview
-
-This project includes a comprehensive custom fundamentals data integration system that enables users to load custom fundamental data into SQLite databases and use them seamlessly in Zipline Pipeline for algorithmic trading strategies.
-
-**Target Audience**: LLM coding assistants, new developers, and maintainers who need to understand the complete architecture and implementation details.
-
-**Docker Environment**: This setup is designed to run in Docker containers with paths configured for `/root/.zipline/data/custom` and `/notebooks`.
-
----
-
-## System Architecture
-
-### High-Level Design
-
-```
-┌─────────────────────┐
-│   CSV Data Files    │
-│  (Fundamentals)     │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│  Load & Transform   │  ← notebooks/load_csv_fundamentals.ipynb
-│  (Pandas)           │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│  SQLite Database    │  ← /root/.zipline/data/custom/fundamentals.sqlite
-│  (Custom Schema)    │     Schema: Price table with Sid, Date, columns
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│ CustomSQLiteLoader  │  ← src/zipline/data/custom/pipeline_integration.py
-│ (PipelineLoader)    │     Implements load_adjusted_array()
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│ SimplePipelineEngine│  ← Uses custom_loader parameter
-│                     │     Routes columns to appropriate loaders
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│  Database Class     │  ← User-defined (e.g., CustomFundamentals)
-│  (Dataset)          │     Defines columns with dtype, missing_value
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│  Pipeline Queries   │  ← Returns filtered DataFrames of stocks
-│  (Factors/Filters)  │     e.g., .top(100), .latest, .rank()
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│  Trading Strategy   │  ← Uses run_algorithm() or TradingAlgorithm
-│  (Backtest)         │     Rebalances portfolio based on pipeline
-└─────────────────────┘
-```
-
-### Core Principles
-
-1. **Separation of Concerns**: Data loading, pipeline integration, and strategy logic are separate
-2. **Extensibility**: Custom Database classes can define any columns with appropriate dtypes
-3. **Performance**: SQLite indexing on (Date, Sid) for fast queries
-4. **Type Safety**: Explicit dtype handling prevents mixed-type errors in Pipeline
-5. **Compatibility**: Works seamlessly with existing Zipline bundles (e.g., sharadar)
-
----
-
-## Key Files Deep Dive
-
-### 📄 `src/zipline/data/custom/pipeline_integration.py`
-
-**Purpose**: Core implementation of the custom data loader for Zipline Pipeline.
-
-**Key Classes**:
-- `CustomSQLiteLoader(PipelineLoader)`: Loads custom data from SQLite into Pipeline
-  - `load_adjusted_array()`: Main entry point called by Pipeline engine
-  - `_query_database()`: Executes SQL queries and returns 2D numpy arrays
-
-**Critical Implementation Details**:
-- **Dtype Handling**: Numeric columns (float64, int64) vs object columns (str) require different handling
-- **Missing Values**:
-  - Numeric: `np.nan`
-  - Text/Object: `''` (empty string, NOT None or NaN)
-- **AdjustedArray Creation**: Must use matching `missing_value` based on dtype
-- **Type Conversion**: SQLite may return numeric data as strings → explicit `pd.to_numeric()` conversion
-
----
-
-### 📄 `notebooks/strategy_top5_roe.py` - Full-Featured Production Strategy
-
-**Purpose**: Production-ready strategy demonstrating custom fundamentals with full features.
-
-**Key Features**:
-- **Configuration via Constants**: All parameters at top of file
-- **Progress Logging**: Zipline's built-in progress tracking
-- **Auto-Discovery**: Automatically discovers all fundamental columns
-- **Metadata Export**: Saves backtest configuration to JSON
-- **Result Saving**: Exports to CSV and pickle
-- **Comprehensive Logging**: Optional verbose logging (disabled by default)
-
-**Architecture**:
-
-1. **Database Definition with Auto-Discovery**
-   ```python
-   class CustomFundamentals(Database):
-       """Custom Fundamentals database."""
-       CODE = "fundamentals"  # Matches database file
-       LOOKBACK_WINDOW = 252  # One year of trading days
-
-       # Columns auto-discovered via introspection
-       ReturnOnEquity_SmartEstimat = Column(float)
-       CompanyMarketCap = Column(float)
-       GICSSectorName = Column(str)
-       # ... all other columns
-   ```
-
-2. **Build Pipeline Loader Map with LoaderDict**
-   ```python
-   def build_pipeline_loaders():
-       """Build proper PipelineLoader map - no monkey-patching!"""
-
-       # Custom dict that handles domain-aware columns
-       class LoaderDict(dict):
-           """Matches columns by dataset and column name, ignoring domain."""
-           def get(self, key, default=None):
-               # First try exact match
-               if key in self:
-                   return super().__getitem__(key)
-
-               # Fuzzy match by dataset name and column name
-               if hasattr(key, 'dataset') and hasattr(key, 'name'):
-                   key_dataset_name = str(key.dataset).split('<')[0]
-                   key_col_name = key.name
-
-                   for registered_col, loader in self.items():
-                       if hasattr(registered_col, 'dataset') and hasattr(registered_col, 'name'):
-                           reg_dataset_name = str(registered_col.dataset).split('<')[0]
-                           reg_col_name = registered_col.name
-
-                           if key_dataset_name == reg_dataset_name and key_col_name == reg_col_name:
-                               return loader
-               return default
-
-       # Auto-discover and map all fundamental columns
-       custom_loader = LoaderDict()
-       for attr_name in dir(CustomFundamentals):
-           if attr_name.startswith('_') or attr_name in ['CODE', 'LOOKBACK_WINDOW']:
-               continue
-           attr = getattr(CustomFundamentals, attr_name)
-           if hasattr(attr, 'dataset'):
-               custom_loader[attr] = fundamentals_loader
-
-       return custom_loader
-   ```
-
-   **Why LoaderDict**: The pipeline engine looks up domain-aware columns (e.g., `USEquityPricing<US_EQUITIES>.close`) but we register non-domain versions (`USEquityPricing.close`). LoaderDict matches by dataset name and column name, ignoring domain suffixes. The `get()` method is critical because the pipeline engine calls `custom_loader.get(column)`.
-
-3. **Progress Logging Integration**
-   ```python
-   from zipline.utils.progress import enable_progress_logging
-   from zipline.utils.flightlog_client import enable_flightlog
-
-   enable_progress_logging(
-       algo_name='Top5-ROE-Strategy',
-       update_interval=PROGRESS_UPDATE_INTERVAL
-   )
-   enable_flightlog()
-   ```
-
-4. **Automatic Result Saving**
-   ```python
-   # Save results to CSV and pickle
-   timestamp = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
-   results.to_csv(f'backtest_results_{timestamp}.csv')
-   results.to_pickle(f'backtest_results_{timestamp}.pkl')
-   ```
-
----
-
-### 📄 `notebooks/strategy_top5_roe_simple.py` - Minimal Clean Strategy
-
-**Purpose**: Minimal version for quick testing and clean usage pattern.
-
-**Key Features**:
-- Clean `run_algorithm()` interface
-- Inline parameter configuration
-- Built-in analyze() function
-- No external dependencies
-- Perfect for notebook usage
-
-**Usage**:
-```python
-# Direct execution
-python strategy_top5_roe_simple.py
-
-# From notebook
-from run_strategy import run_strategy
-results = run_strategy('strategy_top5_roe_simple.py', start='2020-01-01', end='2023-12-31')
-```
-
----
-
-### 📄 `notebooks/run_strategy.py` - Notebook Helper
-
-**Purpose**: Helper function to run strategy files from Jupyter notebooks.
-
-**Key Features**:
-- Dynamic module loading using `importlib.util`
-- Extracts initialize, handle_data, before_trading_start, analyze functions
-- Auto-discovers and applies custom loaders
-- Override parameters inline
-
-**Usage**:
-```python
-from run_strategy import run_strategy
-
-# Basic usage with defaults
-results = run_strategy('strategy_top5_roe_simple.py')
-
-# Custom dates and capital
-results = run_strategy(
-    'strategy_top5_roe_simple.py',
-    start='2018-01-01',
-    end='2023-12-31',
-    capital_base=500000
-)
-
-# With progress logging
-from zipline.utils.progress import enable_progress_logging
-enable_progress_logging(algo_name='My-Strategy', update_interval=10)
-
-results = run_strategy(
-    'strategy_top5_roe.py',
-    start='2021-01-01',
-    end='2023-12-31'
-)
-```
-
-**Implementation**:
-```python
-def load_module_from_file(filepath):
-    """Load a Python module from a file path."""
-    filepath = Path(filepath)
-    spec = importlib.util.spec_from_file_location(filepath.stem, filepath)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[filepath.stem] = module
-    spec.loader.exec_module(module)
-    return module
-
-def run_strategy(strategy_file, start='2020-01-01', end='2023-12-31',
-                capital_base=100000, data_frequency='daily',
-                bundle='sharadar', **kwargs):
-    module = load_module_from_file(strategy_file)
-
-    # Extract functions
-    initialize = getattr(module, 'initialize', None)
-    handle_data = getattr(module, 'handle_data', None)
-    before_trading_start = getattr(module, 'before_trading_start', None)
-    analyze = getattr(module, 'analyze', None)
-
-    # Get custom loader if available
-    if hasattr(module, 'build_pipeline_loaders'):
-        custom_loader = module.build_pipeline_loaders()
-        kwargs['custom_loader'] = custom_loader
-
-    return run_algorithm(
-        start=start, end=end,
-        initialize=initialize,
-        handle_data=handle_data,
-        before_trading_start=before_trading_start,
-        analyze=analyze,
-        capital_base=capital_base,
-        data_frequency=data_frequency,
-        bundle=bundle,
-        **kwargs
-    )
-```
-
----
-
-### 📄 `notebooks/run_backtest_example.ipynb`
-
-Example notebook showing multiple usage patterns for `run_strategy()`:
-
-1. Quick backtest with defaults
-2. Custom dates and capital
-3. Full version with progress logging
-4. Result analysis and visualization
-
----
-
-## Database Schema
-
-**Table Structure**: Single table named `Price` (historical convention)
-
-```sql
-CREATE TABLE Price (
-    Sid INTEGER NOT NULL,           -- Zipline asset ID
-    Date TEXT NOT NULL,             -- Format: 'YYYY-MM-DD'
-    ReturnOnEquity_SmartEstimat REAL,
-    CompanyMarketCap REAL,
-    GICSSectorName TEXT,            -- Text columns for categorical data
-    -- ... other columns
-    PRIMARY KEY (Sid, Date)
-);
-
-CREATE INDEX idx_date_sid ON Price(Date, Sid);  -- Critical for performance
-```
-
-**Design Decisions**:
-- **Sid (not Ticker)**: Zipline uses integer sids internally; more robust than tickers
-- **Date as TEXT**: SQLite date handling; converted to datetime in Python
-- **Denormalized**: All columns in one table for query performance
-- **Indexed**: (Date, Sid) index enables fast range queries
-- **Deduplication**: Handle duplicates on (Sid, Date) after symbol mapping
-
----
-
-## Known Issues & Solutions
-
-### Issue 1: "Categorical categories cannot be null"
-
-**Root Cause**: Text columns contain NaN values, creating mixed str/float object arrays.
-
-**Solution**: Apply in **two places**:
-
-1. **Data Loading** (notebook):
-   ```python
-   for col in text_columns:
-       custom_data[col].fillna('', inplace=True)
-   ```
-
-2. **Pipeline Integration** (already fixed in `pipeline_integration.py`):
-   ```python
-   if col_dtype == object:
-       reindexed = reindexed.fillna('')
-   ```
-
----
-
-### Issue 2: "UNIQUE constraint failed: Price.Sid, Price.Date"
-
-**Root Cause**: Duplicate (Sid, Date) combinations in source data.
-
-**Solution**: Deduplicate AFTER mapping symbols to sids:
-```python
-df['Sid'] = df['Symbol'].map(ticker_to_sid)
-df = df.drop_duplicates(subset=['Sid', 'Date'], keep='last')
-```
-
----
-
-### Issue 3: LoaderDict get() method required
-
-**Root Cause**: Pipeline engine calls `custom_loader.get(column)`, not `custom_loader[column]`.
-
-**Solution**: Implement both `get()` and `__getitem__()` methods in LoaderDict:
-```python
-class LoaderDict(dict):
-    def get(self, key, default=None):
-        # Fuzzy matching logic
-        ...
-
-    def __getitem__(self, key):
-        result = self.get(key)
-        if result is None:
-            raise KeyError(key)
-        return result
-```
-
----
-
-## Key Learnings & Best Practices
-
-1. **Text columns require special handling**: Empty string ('') not NaN or None
-2. **Use custom_loader parameter**: `run_algorithm()` has built-in support - no monkey-patching!
-3. **Auto-discovery pattern**: Use introspection to discover columns automatically
-4. **LoaderDict is essential**: Handles domain-aware column matching
-5. **Timezone handling is subtle**: Let Zipline handle TZ internally (no `tz='UTC'`)
-6. **Version strategy**: Provide both full-featured and simple versions
-7. **Progress logging**: Use Zipline's built-in `enable_progress_logging()`
-8. **Module loading for notebooks**: Use `importlib.util` for dynamic loading
-9. **Clean defaults**: Disable verbose logging by default (LOG_PIPELINE_STATS = False)
-10. **scikit-learn integration**: sklearn >= 1.0.0 available for ML algorithms
-
----
-
-## Strategy Development Workflow
-
-### Option A: Using run_strategy() Helper (Recommended for Notebooks)
-
-```python
-from run_strategy import run_strategy
-
-# Quick test
-results = run_strategy('strategy_top5_roe_simple.py')
-
-# Custom parameters
-results = run_strategy(
-    'strategy_top5_roe.py',
-    start='2018-01-01',
-    end='2023-12-31',
-    capital_base=500000
-)
-
-# Analyze
-total_return = (results['portfolio_value'].iloc[-1] / results['portfolio_value'].iloc[0] - 1) * 100
-print(f"Total Return: {total_return:.2f}%")
-```
-
-### Option B: Direct Execution
-
-```bash
-# Run from command line
-python /notebooks/strategy_top5_roe.py
-
-# Edit strategy logic directly
-cp strategy_top5_roe_simple.py my_strategy.py
-# ... edit ...
-python my_strategy.py
-```
-
----
-
-## Version Comparison: Full vs Simple
-
-| Feature | Full Version | Simple Version |
-|---------|-------------|----------------|
-| **File** | `strategy_top5_roe.py` | `strategy_top5_roe_simple.py` |
-| **Configuration** | Constants at top | Inline parameters |
-| **Progress Logging** | Yes (enable_progress_logging) | No |
-| **Auto-Discovery** | Yes (introspection) | No (manual list) |
-| **Result Saving** | Yes (CSV + pickle) | No |
-| **Metadata Export** | Yes (JSON) | No |
-| **Verbose Logging** | Configurable | Minimal |
-| **Built-in Analyze** | Optional | Yes |
-| **Use Case** | Production, long backtests | Quick testing, notebooks |
-| **Lines of Code** | ~800 | ~220 |
-
----
-
-## Recent Updates & Commits
-
-### Latest Session Work
-
-1. **Notebook Helper System** (commits ca409ee8, etc.)
-   - Created `run_strategy.py` for running strategy files from notebooks
-   - Created `run_backtest_example.ipynb` with usage examples
-   - Dynamic module loading using `importlib.util`
-
-2. **Simple Strategy Version** (commit 5bdc7517)
-   - Created `strategy_top5_roe_simple.py` with minimal code
-   - Clean `run_algorithm()` interface
-   - Built-in analyze() function
-
-3. **Documentation Updates** (commit 1449a75f)
-   - Updated `STRATEGY_README.md` for both versions
-   - Added version comparison table
-   - Comprehensive usage examples
-
-4. **Verbose Logging Disabled** (commit 927579ba)
-   - Set LOG_PIPELINE_STATS = False by default
-   - Set LOG_REBALANCE_DETAILS = False by default
-   - Cleaner output for production use
-
-5. **Progress Logging Integration** (commits 6b0017b8, 031aa3c0)
-   - Added `enable_progress_logging()` imports
-   - Fixed TypeError with progress parameter
-   - FlightLog support
-
-6. **Auto-Discovery Refactoring** (commit 2a5cfbef)
-   - Implemented automatic column discovery
-   - Eliminated manual column listing
-   - More maintainable code
-
-7. **Result Saving** (commit 9d6e6fb3)
-   - Automatic CSV and pickle export
-   - Timestamped filenames
-
-8. **Database Alignment** (commit 5f60527a)
-   - Changed CODE from 'refe-fundamentals' to 'fundamentals'
-   - Matches notebook database name
-
-9. **LoaderDict Implementation** (commits 7fa907e1, cc80898d)
-   - Added `get()` method for domain-aware matching
-   - Fixed AttributeError on custom_loader.get()
-
-10. **scikit-learn Dependency** (commit 2c68df0a)
-    - Added `scikit-learn >=1.0.0` to dependencies
-    - Enables ML algorithms with sklearn imports
-
-### Key Architecture Commits
-
-- **5235d38**: Refactored to clean custom_loader approach (no monkey-patching)
-- **71b556e**: Set working directory for strategy execution
-- **bd93b2e**: Added Sharadar bundle registration
-- **b120aec**: Removed verbose logging, fixed backtest dates
-- **71949ca**: Fixed object dtype handling with empty strings
-- **d488870**: Removed broken backtest cells from notebook
-
----
 
 ## Docker Environment
 
-**Paths**:
-```
-/root/.zipline/data/custom/          # Custom database directory
-/root/.zipline/data/custom/fundamentals.sqlite  # Database file
-/notebooks/                          # Strategy files location
+### BuildKit Configuration
+Docker BuildKit is **enabled** for faster builds with caching:
+
+**`.env` file includes:**
+```bash
+DOCKER_BUILDKIT=1
+COMPOSE_DOCKER_CLI_BUILD=1
 ```
 
-**Class Naming**:
-- Database class: `CustomFundamentals` (generic, clean)
-- Database CODE: `"fundamentals"` (matches file: fundamentals.sqlite)
+**Benefits**: 5-10x faster rebuilds with `--mount=type=cache` directives in Dockerfile
+
+### Volume Mounts
+```yaml
+volumes:
+  - ./examples:/app/examples
+  - ./notebooks:/notebooks
+  - zipline-data:/root/.zipline
+```
+
+### Important Paths
+```
+/root/.zipline/bundles/sharadar/      # Sharadar bundle data
+/root/.zipline/data/custom/           # Custom databases
+/app/examples/                        # Examples directory
+/notebooks/                           # Jupyter notebooks
+```
 
 ---
 
-## Testing
+# Multi-Source Data System (NEW)
 
-### Unit Tests
+## Overview
+
+The **Multi-Source Data System** allows combining Sharadar fundamentals with custom databases in a single Pipeline query. This enables sophisticated strategies that leverage multiple data sources.
+
+**Key Innovation**: Use different data sources for different parts of your strategy without complex workarounds.
+
+## Architecture
+
+```
+┌─────────────────────┐     ┌─────────────────────┐
+│  Sharadar Bundle    │     │  Custom SQLite DB   │
+│  (SF1 Fundamentals) │     │  (LSEG/Custom Data) │
+└──────────┬──────────┘     └──────────┬──────────┘
+           │                           │
+           │                           │
+           ▼                           ▼
+    ┌────────────────────────────────────────┐
+    │      AutoLoader (Multi-Source)         │
+    │  - Routes columns to correct loader    │
+    │  - Handles SID translation             │
+    │  - Manages domain awareness            │
+    └──────────────┬─────────────────────────┘
+                   │
+                   ▼
+    ┌────────────────────────────────────────┐
+    │       SimplePipelineEngine             │
+    │  - Executes combined queries           │
+    │  - Returns unified DataFrame           │
+    └──────────────┬─────────────────────────┘
+                   │
+                   ▼
+    ┌────────────────────────────────────────┐
+    │          Your Strategy                 │
+    │  - Use both sources in filters         │
+    │  - Combine metrics from each           │
+    │  - Build consensus signals             │
+    └────────────────────────────────────────┘
+```
+
+## Key Files
+
+### Core Implementation
+- `src/zipline/pipeline/multi_source.py`: Main implementation
+  - `AutoLoader`: Intelligent multi-source routing
+  - `Database`: Base class for custom databases
+  - `Column`: Column definition with type safety
+  - `setup_auto_loader()`: One-line setup function
+  - `SharadarFundamentals`: Pre-configured Sharadar dataset
+
+### Documentation
+- `docs/MULTI_SOURCE_DATA.md`: Comprehensive guide with examples
+- `docs/MULTI_SOURCE_QUICKREF.md`: Quick reference for common patterns
+- `examples/README.md`: Reorganized examples index
+
+### Examples
+- `examples/5_multi_source_data/simple_multi_source_example.py`: Complete working example
+- `examples/5_multi_source_data/debug_multi_source.py`: Test pipeline without backtest
+- `notebooks/multi_source_fundamentals_example.ipynb`: Jupyter notebook version
+
+### Utilities
+- `examples/utils/check_sf1_data.py`: Check Sharadar field availability
+- `examples/utils/check_lseg_db.py`: Inspect custom database
+- `examples/utils/inspect_sf1.py`: Inspect HDF5 structure
+- `examples/utils/test_sharadar_loader.py`: Test Sharadar loader directly
+
+## Quick Start
+
+### 1. Define Custom Database
+```python
+from zipline.pipeline import multi_source as ms
+
+class CustomFundamentals(ms.Database):
+    CODE = "fundamentals"  # Must match SQLite filename
+    LOOKBACK_WINDOW = 252
+
+    # Define columns with types
+    ROE = ms.Column(float)
+    PEG = ms.Column(float)
+    MarketCap = ms.Column(float)
+```
+
+### 2. Create Pipeline
+```python
+def make_pipeline():
+    # Sharadar data (high availability fields)
+    s_fcf = ms.SharadarFundamentals.fcf.latest
+    s_pe = ms.SharadarFundamentals.pe.latest
+
+    # Custom data
+    c_roe = CustomFundamentals.ROE.latest
+    c_peg = CustomFundamentals.PEG.latest
+
+    # Combine both sources
+    sharadar_quality = (s_fcf > 0) & (s_pe < 30)
+    custom_quality = (c_roe > 15) & (c_peg < 2.5)
+    combined = sharadar_quality & custom_quality
+
+    return ms.Pipeline(
+        columns={'s_fcf': s_fcf, 's_pe': s_pe, 'c_roe': c_roe},
+        screen=combined,
+    )
+```
+
+### 3. Run Backtest
+```python
+from zipline import run_algorithm
+
+results = run_algorithm(
+    start='2023-01-01',
+    end='2024-01-01',
+    initialize=initialize,
+    bundle='sharadar',
+    custom_loader=ms.setup_auto_loader(),  # That's it!
+)
+```
+
+## Sharadar Field Availability
+
+**CRITICAL**: Many Sharadar fields are **empty**. Always check availability before using.
+
+### High Availability Fields (95%+)
+```python
+# Cash Flow
+fcf = ms.SharadarFundamentals.fcf.latest
+fcfps = ms.SharadarFundamentals.fcfps.latest
+
+# Valuation
+marketcap = ms.SharadarFundamentals.marketcap.latest  # 96%
+pe = ms.SharadarFundamentals.pe.latest                # 90%
+pb = ms.SharadarFundamentals.pb.latest
+ps = ms.SharadarFundamentals.ps.latest
+
+# Income Statement
+revenue = ms.SharadarFundamentals.revenue.latest
+ebitda = ms.SharadarFundamentals.ebitda.latest
+netinc = ms.SharadarFundamentals.netinc.latest
+eps = ms.SharadarFundamentals.eps.latest
+
+# Balance Sheet (100%)
+assets = ms.SharadarFundamentals.assets.latest
+cashnequsd = ms.SharadarFundamentals.cashnequsd.latest
+debt = ms.SharadarFundamentals.debt.latest
+equity = ms.SharadarFundamentals.equity.latest
+```
+
+### Empty Fields (0% availability)
+```python
+# ⚠️ DO NOT USE - These fields are empty
+roe = ms.SharadarFundamentals.roe.latest  # 0% availability!
+```
+
+**Solution**: Use custom database for ROE or calculate manually:
+```python
+calculated_roe = (s_netinc / s_equity) * 100
+```
+
+### Check Availability
+```bash
+# Run this to see all field availability percentages
+python examples/utils/check_sf1_data.py
+```
+
+## Common Patterns
+
+### Consensus Scoring
+```python
+# Both sources agree = higher confidence
+consensus = (s_roe > 15) & (c_roe > 15)
+selection = s_roe.top(20, mask=consensus)
+```
+
+### Multi-Source Universe
+```python
+# Sharadar: size and valuation
+universe = s_marketcap.top(500)
+value = (s_pe > 0) & (s_pe < 25)
+
+# Custom: quality
+quality = (c_roe > 15) & (c_peg < 2)
+
+# Combined
+selection = c_roe.top(20, mask=universe & value & quality)
+```
+
+### Divergence Detection
+```python
+# Find disagreements between sources
+divergence = ((s_roe > 15) & (c_roe < 10)) | ((s_roe < 10) & (c_roe > 15))
+```
+
+---
+
+# Sharadar Bundle Fixes
+
+## NaN Permaticker Fix
+
+**Issue**: Some assets have NaN permaticker values causing ingest to fail with:
+```
+IntCastingNaNError: Cannot convert non-finite values (NA or inf) to integer
+```
+
+**Fix Applied** (in `src/zipline/data/bundles/sharadar_bundle.py`):
+```python
+# Filter out any rows with NaN permaticker before converting to SID
+if metadata['permaticker'].isna().any():
+    na_count = metadata['permaticker'].isna().sum()
+    na_symbols = metadata[metadata['permaticker'].isna()]['symbol'].tolist()
+    print(f"   ⚠️  Dropping {na_count} assets with missing permaticker")
+    metadata = metadata[metadata['permaticker'].notna()].copy()
+
+# Use permaticker as SID
+metadata['sid'] = metadata['permaticker'].astype(int)
+```
+
+**Status**: Fixed and tested ✅
+
+## Dimension Information
+
+**Available Dimension**: `ARQ` (As Reported Quarterly)
+**NOT Available**: `MRQ` (Most Recent Quarter)
+
+**Correct Usage**:
+```python
+# ✅ Correct
+aapl_quarterly = aapl_fund[aapl_fund['dimension'] == 'ARQ'].copy()
+
+# ❌ Wrong - will return empty
+aapl_quarterly = aapl_fund[aapl_fund['dimension'] == 'MRQ'].copy()
+```
+
+---
+
+# Directory Reorganization (NEW)
+
+## New Structure
+
+All examples are now organized by functionality under `examples/`:
+
+```
+examples/
+├── README.md                   # Comprehensive index and guides
+├── 1_getting_started/          # Start here!
+│   ├── simple_flightlog_demo.py
+│   └── quickstart notebooks
+├── 2_strategies/               # Real strategies
+│   ├── momentum_strategy_with_flightlog.py
+│   └── other strategy examples
+├── 3_analysis/                 # Performance analysis
+│   └── pyfolio notebooks
+├── 4_pipeline/                 # Pipeline examples
+│   └── sharadar_data_explorer.ipynb
+├── 5_multi_source_data/        # Multi-source integration
+│   ├── simple_multi_source_example.py
+│   ├── debug_multi_source.py
+│   └── test_sharadar_loader.py
+├── 6_custom_data/              # Database creation
+│   └── create_fundamentals_db.py
+└── utils/                      # Shared utilities
+    ├── register_bundles.py     # Bundle registration
+    ├── check_sf1_data.py       # Check Sharadar fields
+    ├── check_lseg_db.py        # Inspect custom DB
+    ├── inspect_sf1.py          # Inspect HDF5
+    └── backtest_helpers.py     # Shared helpers
+```
+
+## Key Features
+
+1. **Numbered directories** for clear learning path
+2. **Comprehensive README.md** with:
+   - Directory structure overview
+   - File descriptions
+   - Common use cases
+   - Quick start guides
+   - Learning path recommendations
+3. **Unified imports**: All utilities in `examples/utils/`
+4. **Backward compatible**: Old paths still work
+
+## Import Pattern
+
+All scripts use this pattern for imports:
+```python
+import sys
+from pathlib import Path
+
+# Add examples directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from utils.register_bundles import ensure_bundles_registered
+```
+
+---
+
+# Database Schema & Custom Data
+
+## Custom Database Structure
+
+**Table**: `Price` (historical convention)
+
+```sql
+CREATE TABLE Price (
+    Date TEXT NOT NULL,      -- YYYY-MM-DD format
+    Sid INTEGER NOT NULL,    -- Use bundle SIDs
+    [YourColumns...],
+    PRIMARY KEY (Date, Sid)
+);
+
+CREATE INDEX idx_date ON Price(Date);
+CREATE INDEX idx_sid ON Price(Sid);
+```
+
+## Database Location
+
+```
+~/.zipline/data/custom/{CODE}.sqlite
+```
+
+Example:
+- Database CODE: `"fundamentals"`
+- Location: `~/.zipline/data/custom/fundamentals.sqlite`
+
+## Column Types
+
+```python
+Revenue = ms.Column(float)   # Numeric data
+Count = ms.Column(int)       # Integer data
+Sector = ms.Column(object)   # Text data
+```
+
+**IMPORTANT**: Text columns must use empty strings (`''`) not NaN for missing values.
+
+---
+
+# Known Issues & Solutions
+
+## Issue 1: Pipeline Returns 0 Stocks
+
+**Symptoms**: Pipeline executes but returns empty DataFrame
+
+**Causes**:
+1. Using empty Sharadar fields (e.g., `roe`)
+2. Wrong dimension (`MRQ` instead of `ARQ`)
+3. Filters too restrictive
+
+**Solutions**:
+1. Check field availability:
+   ```bash
+   python examples/utils/check_sf1_data.py
+   ```
+2. Use high-availability fields (fcf, pe, marketcap)
+3. Test pipeline first:
+   ```bash
+   python examples/5_multi_source_data/debug_multi_source.py
+   ```
+
+## Issue 2: Categorical Categories Cannot Be Null
+
+**Cause**: Text columns contain NaN values
+
+**Solution**: Fill NaN with empty strings in both places:
+```python
+# 1. In data loading
+for col in text_columns:
+    df[col].fillna('', inplace=True)
+
+# 2. In loader (already fixed in multi_source.py)
+if col_dtype == object:
+    reindexed = reindexed.fillna('')
+```
+
+## Issue 3: Import Errors After Reorganization
+
+**Old Import** (now fails):
+```python
+from custom_data.register_bundles import ensure_bundles_registered
+```
+
+**New Import** (correct):
+```python
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from utils.register_bundles import ensure_bundles_registered
+```
+
+---
+
+# Testing & Validation
+
+## Unit Tests
 ```bash
 # All custom data tests
 pytest tests/zipline/data/test_custom_pipeline.py -v
 
-# Specific test
-pytest tests/zipline/data/test_custom_pipeline.py::test_object_dtype_handling -v
+# Multi-source tests
+pytest tests/zipline/pipeline/test_multi_source.py -v
 ```
 
-### Validation Queries
+## Data Inspection
+
+### Check Sharadar Fields
+```bash
+# Inside Docker
+docker exec zipline-reloaded-jupyter python /app/examples/utils/check_sf1_data.py
+```
+
+### Check Custom Database
+```bash
+# Inside Docker
+docker exec zipline-reloaded-jupyter python /app/examples/utils/check_lseg_db.py
+```
+
+### Explore Data Interactively
+```bash
+# Open Jupyter
+# Navigate to: notebooks/sharadar_data_explorer.ipynb
+# Run cells to explore bundle data, fundamentals, price history
+```
+
+## Pipeline Testing
+
+### Test Without Backtest
 ```python
-import sqlite3
-conn = sqlite3.connect('/root/.zipline/data/custom/fundamentals.sqlite')
+# Run this for quick pipeline validation
+python examples/5_multi_source_data/debug_multi_source.py
+```
 
-# Count rows
-pd.read_sql('SELECT COUNT(*) FROM Price', conn)
-
-# Date range
-pd.read_sql('SELECT MIN(Date), MAX(Date) FROM Price', conn)
-
-# Sample data
-pd.read_sql('SELECT * FROM Price LIMIT 10', conn)
+**Output**:
+```
+Pipeline returned 102 stocks passing quality filters
+Top 10 by ROE:
+  Symbol    ROE    FCF      PE
+  AAPL     85.2   123.4B   28.5
+  ...
 ```
 
 ---
 
-## Quick Reference
+# FlightLog Integration
 
-### Import Snippets
-
+## Setup
 ```python
-# Basic Pipeline Setup
-from zipline.pipeline import Pipeline
-from zipline.pipeline.engine import SimplePipelineEngine
-from zipline.pipeline.data.db import Database, Column
-from zipline.data.custom import CustomSQLiteLoader
-from zipline.data.bundles import load as load_bundle
-from zipline.pipeline.domain import US_EQUITIES
-
-# Progress Logging
 from zipline.utils.progress import enable_progress_logging
 from zipline.utils.flightlog_client import enable_flightlog
 
-# Algorithm Execution
-from zipline import run_algorithm
+# Enable FlightLog
+enable_flightlog(host='localhost', port=9020)
 
-# Notebook Helper
-from run_strategy import run_strategy
-```
-
-### Common Patterns
-
-**Database Definition**:
-```python
-class CustomFundamentals(Database):
-    CODE = "fundamentals"
-    LOOKBACK_WINDOW = 252
-    Revenue = Column(float)
-    Sector = Column(str)
-```
-
-**Build Custom Loader**:
-```python
-custom_loader = build_pipeline_loaders()  # From strategy file
-results = run_algorithm(
-    start=start, end=end,
-    initialize=initialize,
-    custom_loader=custom_loader,  # Pass it here!
-    bundle='sharadar'
+# Enable progress logging
+enable_progress_logging(
+    algo_name='My-Strategy',
+    update_interval=5  # Log every 5 days
 )
 ```
 
-**Run from Notebook**:
+## Running with FlightLog
+
+**Terminal 1** (FlightLog server):
+```bash
+python scripts/flightlog.py --host 0.0.0.0 --level INFO
+```
+
+**Terminal 2** (Backtest):
+```bash
+python examples/1_getting_started/simple_flightlog_demo.py
+```
+
+**Result**: Real-time colored logs appear in Terminal 1!
+
+---
+
+# Recent Updates & Commits
+
+## Multi-Source Data System (2025-11-17)
+- **Commit baecd08f**: Directory reorganization
+- **Commit f224fd84**: Fixed USEquityPricingLoader initialization
+- **Commit 266237a4**: Updated documentation for multi-source
+- **Commit 5235d380**: Replaced monkey-patching with clean custom_loader
+- **Commit 71b556eb**: Set working directory for strategy execution
+- **Commit bd93b2e9**: Added Sharadar bundle registration
+
+**Key Features Added**:
+1. Multi-source data integration via `multi_source.py`
+2. AutoLoader for intelligent routing
+3. SID translation between bundles
+4. Comprehensive documentation
+5. Multiple working examples
+6. Inspection utilities
+
+## Sharadar Bundle Fixes (2025-11-17)
+- Fixed NaN permaticker handling in daily ingest
+- Documented dimension usage (ARQ not MRQ)
+- Created sharadar_data_explorer.ipynb
+- Fixed timezone handling in price data queries
+
+## Directory Reorganization (2025-11-17)
+- Reorganized examples into numbered categories
+- Moved register_bundles.py to utils/
+- Updated all import paths
+- Created comprehensive examples/README.md
+- Backward compatible with old structure
+
+## BuildKit Configuration (2025-11-17)
+- Added DOCKER_BUILDKIT=1 to .env
+- Created .env.example with BuildKit settings
+- 5-10x faster Docker rebuilds
+
+---
+
+# Quick Reference
+
+## One-Line Import
 ```python
-results = run_strategy(
-    'strategy_top5_roe_simple.py',
-    start='2020-01-01',
-    end='2023-12-31',
-    capital_base=100000
+from zipline.pipeline import multi_source as ms
+```
+
+This gives you everything:
+- `ms.Pipeline` - Pipeline class
+- `ms.Database` - Custom database base class
+- `ms.Column` - Column definition
+- `ms.SharadarFundamentals` - Sharadar datasets
+- `ms.setup_auto_loader()` - Automatic loader setup
+
+## Common Commands
+
+```bash
+# Check field availability
+python examples/utils/check_sf1_data.py
+
+# Check custom database
+python examples/utils/check_lseg_db.py
+
+# Test pipeline
+python examples/5_multi_source_data/debug_multi_source.py
+
+# Run simple backtest
+python examples/1_getting_started/simple_flightlog_demo.py
+
+# Run multi-source example
+python examples/5_multi_source_data/simple_multi_source_example.py
+```
+
+## Configuration Options
+
+### Custom Database Directory
+```python
+loader = ms.setup_auto_loader(
+    custom_db_dir='/path/to/databases',
+)
+```
+
+### Different Bundle
+```python
+loader = ms.setup_auto_loader(
+    bundle_name='my_bundle',
+)
+```
+
+### Disable SID Translation
+```python
+loader = ms.setup_auto_loader(
+    enable_sid_translation=False,
 )
 ```
 
 ---
 
-## Summary
+# Best Practices
+
+## Data Source Selection
+
+1. **Use Sharadar for**: Size, valuation, liquidity filters
+   - Market cap, P/E ratio, volume
+   - High availability (90-100%)
+
+2. **Use Custom for**: Proprietary metrics, quality factors
+   - Custom ROE calculations
+   - Analyst estimates
+   - Alternative data
+
+3. **Combine for**: Consensus signals
+   - Both agree = higher confidence
+   - Divergence = potential opportunity
+
+## Pipeline Design
+
+1. **Always check field availability** before using Sharadar fields
+2. **Test pipeline first** with debug_multi_source.py
+3. **Use high-availability fields** (fcf, pe, marketcap)
+4. **Start with loose filters** then tighten based on results
+5. **Log pipeline statistics** during development
+
+## Performance
+
+1. **Use indexed SQLite queries** (Date, Sid primary key)
+2. **Limit lookback window** to what you need
+3. **Filter universe early** (e.g., top 500 by market cap)
+4. **Cache results** when appropriate
+5. **Enable BuildKit** for faster Docker builds
+
+---
+
+# Troubleshooting Guide
+
+## "Module 'zipline' has no attribute 'pipeline'"
+
+**Cause**: Running outside Docker without zipline installed
+
+**Solution**: Run inside Docker:
+```bash
+docker exec zipline-reloaded-jupyter python /app/examples/...
+```
+
+## "No such file: fundamentals.sqlite"
+
+**Cause**: Custom database not created
+
+**Solution**:
+```bash
+python examples/6_custom_data/create_fundamentals_db.py
+```
+
+## "Pipeline returned 0 stocks"
+
+**Cause**: Empty Sharadar fields or wrong dimension
+
+**Solution**:
+1. Check availability: `python examples/utils/check_sf1_data.py`
+2. Use high-availability fields (fcf, pe, marketcap)
+3. Test pipeline: `python examples/5_multi_source_data/debug_multi_source.py`
+
+## "ImportError: cannot import name 'multi_source'"
+
+**Cause**: Old branch or zipline not rebuilt
+
+**Solution**:
+```bash
+# Rebuild Docker image
+docker compose build
+
+# Or pull latest code
+git pull origin your-branch
+```
+
+---
+
+# Summary
 
 This Zipline Reloaded fork includes:
 
 1. **Core Zipline**: Algorithmic trading backtesting library
-2. **Custom Fundamentals System**: SQLite-based fundamental data integration
-3. **Production Strategies**: Full-featured and simple strategy templates
-4. **Notebook Helpers**: Tools for running strategies from Jupyter
-5. **Auto-Discovery**: Automatic column mapping via introspection
-6. **Progress Logging**: Built-in progress tracking and monitoring
-7. **ML Support**: scikit-learn integration for machine learning algorithms
+2. **Multi-Source Data System**: Combine Sharadar + custom databases (NEW)
+3. **Sharadar Bundle**: Fixed NaN handling, documented field availability
+4. **Custom Fundamentals**: SQLite-based integration
+5. **Reorganized Examples**: Numbered directories for easy navigation (NEW)
+6. **Inspection Tools**: Check data availability, debug pipelines
+7. **FlightLog Integration**: Real-time monitoring
+8. **BuildKit Support**: Faster Docker builds
+9. **Comprehensive Docs**: MULTI_SOURCE_DATA.md, QUICKREF.md, examples/README.md
 
 **Key Success Factors**:
-- LoaderDict with `get()` method for domain-aware column matching
-- Proper text column handling (empty strings, not NaN)
-- Clean custom_loader parameter usage (no monkey-patching)
-- Auto-discovery pattern for maintainability
-- Dual versions (full/simple) for different use cases
-- Notebook integration via run_strategy() helper
+- AutoLoader handles multi-source routing automatically
+- SID translation works seamlessly
+- High-availability Sharadar fields documented
+- Clean examples structure
+- Extensive inspection utilities
+- Backward compatible reorganization
 
 **Next Steps for New Sessions**:
-- Review this document for full context
-- Check `/root/.zipline/data/custom/fundamentals.sqlite` exists
-- Test with: `python /notebooks/strategy_top5_roe_simple.py`
-- Or use: `run_strategy('strategy_top5_roe_simple.py')` from notebook
-- Extend with custom Database classes and strategies
+1. Review `docs/MULTI_SOURCE_QUICKREF.md` for quick patterns
+2. Check examples/README.md for learning path
+3. Test with: `python examples/5_multi_source_data/simple_multi_source_example.py`
+4. Explore data: Open `notebooks/sharadar_data_explorer.ipynb`
+5. Build custom strategies combining both sources
 
 ---
 
-**Document Version**: 4.0
-**Last Updated**: 2025-11-14
+**Document Version**: 5.0
+**Last Updated**: 2025-11-17
 **Branch**: claude/continue-session-011-011CUzneiQ5d1tV3Y3r29tCA
-**Maintainer**: Auto-generated from session context
+**Key Features**: Multi-source data, reorganized examples, Sharadar fixes, BuildKit

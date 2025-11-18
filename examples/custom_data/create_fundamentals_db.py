@@ -8,7 +8,9 @@ This script creates a fundamentals database and loads sample data from CSV.
 import pandas as pd
 import sys
 from pathlib import Path
-from pathlib import Path
+
+# Add parent directory to path for utils import
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from utils.register_bundles import ensure_bundles_registered
 from zipline.data.bundles import load as load_bundle
@@ -25,6 +27,7 @@ BUNDLE_NAME = "sharadar"
 
 # Define column types matching the Fundamentals Database class
 FUNDAMENTAL_COLUMNS = {
+    'Symbol': 'text',  # Ticker symbol (AAPL, MSFT, etc.)
     'Revenue': 'float',
     'NetIncome': 'float',
     'TotalAssets': 'float',
@@ -67,6 +70,12 @@ def main():
         return 1
 
     df = pd.read_csv(SAMPLE_DATA_FILE)
+
+    # Add Symbol column if not present (copy from Ticker column)
+    if 'Symbol' not in df.columns and 'Ticker' in df.columns:
+        df['Symbol'] = df['Ticker']
+        print(f"✓ Added Symbol column from Ticker column")
+
     print(f"✓ Loaded {len(df)} rows with columns: {', '.join(df.columns)}")
     print()
 
@@ -107,11 +116,17 @@ def main():
     print(f"✓ Converted {len(sid_map)} tickers to SIDs")
     print()
 
-    # Step 5: Load CSV data into database
+    # Step 5: Save modified DataFrame with Symbol column to temp file
+    import tempfile
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as tmp:
+        df.to_csv(tmp.name, index=False)
+        temp_csv_path = tmp.name
+
+    # Step 6: Load CSV data into database
     print("Loading data into database...")
     try:
         result = load_csv_to_db(
-            csv_path=SAMPLE_DATA_FILE,
+            csv_path=temp_csv_path,  # Use temp file with Symbol column
             db_code=DB_CODE,
             sid_map=sid_map,
             id_col='Ticker',  # CSV uses 'Ticker' not 'Symbol'
@@ -133,8 +148,13 @@ def main():
         import traceback
         traceback.print_exc()
         return 1
+    finally:
+        # Clean up temp file
+        import os
+        if os.path.exists(temp_csv_path):
+            os.unlink(temp_csv_path)
 
-    # Step 6: Verify
+    # Step 7: Verify
     print("=" * 80)
     print("DATABASE CREATED SUCCESSFULLY")
     print("=" * 80)

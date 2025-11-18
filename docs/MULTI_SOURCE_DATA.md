@@ -20,11 +20,10 @@ class CustomFundamentals(ms.Database):
 
 # 2. Create a pipeline mixing Sharadar and custom data
 def make_pipeline():
-    # Sharadar data
-    s_fund = ms.sharadar.Fundamentals.slice('MRQ')
-    s_roe = s_fund.ROE.latest
-    s_fcf = s_fund.FCF.latest
-    s_marketcap = s_fund.MARKETCAP.latest
+    # Sharadar data (note: ROE field is empty in some bundles, use FCF/PE instead)
+    s_fcf = ms.SharadarFundamentals.fcf.latest
+    s_marketcap = ms.SharadarFundamentals.marketcap.latest
+    s_pe = ms.SharadarFundamentals.pe.latest
 
     # Custom data
     c_roe = CustomFundamentals.ROE.latest
@@ -33,16 +32,21 @@ def make_pipeline():
     # Universe
     universe = s_marketcap.top(100)
 
-    # Consensus: both sources agree = higher confidence
-    both_quality = (s_roe > 15) & (c_roe > 15)
+    # Quality filters from each source
+    sharadar_quality = (s_fcf > 0) & (s_pe > 0) & (s_pe < 30)
+    custom_quality = (c_roe > 15) & (c_peg < 2.5)
+
+    # Combined: both sources agree = higher confidence
+    combined_quality = sharadar_quality & custom_quality
 
     # Selection
-    selection = s_roe.top(10, mask=universe & both_quality)
+    selection = c_roe.top(10, mask=universe & combined_quality)
 
     return ms.Pipeline(
         columns={
-            's_roe': s_roe,
             's_fcf': s_fcf,
+            's_pe': s_pe,
+            's_marketcap': s_marketcap,
             'c_roe': c_roe,
             'c_peg': c_peg,
         },
@@ -206,23 +210,34 @@ pe = fund.PE.latest
 ### Common Fields
 
 **Financial Metrics:**
-- `ROE`, `ROA`, `ROIC` - Return ratios
-- `FCF`, `FCFPS` - Free cash flow
-- `REVENUE`, `REVENUEUSD` - Revenue
-- `EBITDA`, `EBITDAUSD` - EBITDA
-- `EPS`, `EPSUSD` - Earnings per share
+- `fcf`, `fcfps` - Free cash flow (95%+ availability)
+- `revenue`, `revenueusd` - Revenue (97%+ availability)
+- `ebitda`, `ebitdausd` - EBITDA
+- `eps`, `epsusd` - Earnings per share
+- `netinc` - Net income (97%+ availability)
 
 **Valuation:**
-- `MARKETCAP` - Market capitalization
-- `PE`, `PE1` - Price to earnings
-- `PB` - Price to book
-- `PS`, `PS1` - Price to sales
+- `marketcap` - Market capitalization (96%+ availability)
+- `pe`, `pe1` - Price to earnings (90%+ availability)
+- `pb` - Price to book
+- `ps`, `ps1` - Price to sales
 
 **Balance Sheet:**
-- `ASSETS` - Total assets
-- `CASHNEQUSD` - Cash and equivalents
-- `DEBTUSD` - Total debt
-- `EQUITY`, `EQUITYUSD` - Total equity
+- `assets` - Total assets (100% availability)
+- `cashnequsd` - Cash and equivalents (100% availability)
+- `debt`, `debtusd` - Total debt (100% availability)
+- `equity`, `equityusd` - Total equity (100% availability)
+
+**⚠️ Important Note: ROE Field**
+The `roe` field in Sharadar bundles may be **empty (0% availability)**. To calculate ROE manually:
+```python
+# Use netinc / equity instead of roe
+s_netinc = ms.SharadarFundamentals.netinc.latest
+s_equity = ms.SharadarFundamentals.equity.latest
+calculated_roe = (s_netinc / s_equity) * 100
+```
+
+Or use your custom database's ROE field if available.
 
 ## Pipeline Patterns
 
@@ -231,14 +246,21 @@ pe = fund.PE.latest
 Give bonus points when multiple sources agree:
 
 ```python
-s_roe = ms.sharadar.Fundamentals.slice('MRQ').ROE.latest
-c_roe = CustomFundamentals.ROE.latest
+# Sharadar quality (using fields with high availability)
+s_fcf = ms.SharadarFundamentals.fcf.latest
+s_pe = ms.SharadarFundamentals.pe.latest
+sharadar_quality = (s_fcf > 0) & (s_pe > 0) & (s_pe < 30)
 
-# Both sources confirm quality
-consensus = (s_roe > 15) & (c_roe > 15)
+# Custom database quality
+c_roe = CustomFundamentals.ROE.latest
+c_peg = CustomFundamentals.PEG.latest
+custom_quality = (c_roe > 15) & (c_peg < 2.5)
+
+# Both sources confirm quality = higher confidence
+combined_quality = sharadar_quality & custom_quality
 
 # Use in selection
-selection = s_roe.top(20, mask=consensus)
+selection = c_roe.top(20, mask=combined_quality)
 ```
 
 ### Multi-Metric Filtering
@@ -428,16 +450,88 @@ results = run_algorithm(
 )
 ```
 
+## Database Inspection Tools
+
+Several scripts are provided to help you inspect and verify your data:
+
+### Check Custom Database SIDs and Data
+
+```bash
+# Check LSEG/custom database
+python examples/custom_data/check_lseg_db.py
+
+# Or inside Docker
+docker exec zipline-reloaded-jupyter python /app/examples/custom_data/check_lseg_db.py
+```
+
+**Output shows:**
+- SID verification for major stocks (AAPL, MSFT, etc.)
+- Date range coverage
+- Sample data records
+- Data availability statistics
+
+### Inspect Sharadar Bundle Data
+
+```bash
+# Check data availability in Sharadar bundle
+python examples/custom_data/check_sf1_data.py
+
+# View sf1.h5 file structure
+python examples/custom_data/inspect_sf1.py
+```
+
+**Useful for:**
+- Identifying which Sharadar fields have data
+- Checking availability percentages
+- Debugging empty fields (like ROE)
+
+### Test Pipeline Before Backtest
+
+```bash
+# Run pipeline for a single day to see what data is available
+python examples/custom_data/debug_multi_source.py
+```
+
+**Shows:**
+- How many stocks pass each filter
+- Data availability from each source
+- Top stocks selected by your criteria
+- Combined quality confirmation counts
+
+This is essential for debugging strategies that return 0 stocks!
+
+### Test Sharadar Loader Directly
+
+```bash
+# Test if Sharadar loader can read data
+python examples/custom_data/test_sharadar_loader.py
+```
+
+**Verifies:**
+- Loader can read sf1.h5 file
+- Field names are correct
+- Data exists for test stocks
+
 ## Troubleshooting
 
 ### No data in custom database
 
-Check database location:
+**1. Check database location:**
 ```bash
 ls -lh ~/.zipline/data/custom/
 ```
 
-Verify SIDs match bundle:
+**2. Use inspection script:**
+```bash
+python examples/custom_data/check_lseg_db.py
+```
+
+This will show:
+- If SIDs match between your database and bundle
+- Date range coverage
+- Sample data to verify correctness
+
+**3. Verify SIDs match bundle:**
 ```python
 from zipline.data.bundles import load as load_bundle
 bundle_data = load_bundle('sharadar')
@@ -445,13 +539,21 @@ asset = bundle_data.asset_finder.lookup_symbol('AAPL', as_of_date=None)
 print(f"Bundle SID for AAPL: {asset.sid}")
 ```
 
-Check database contents:
+**4. Check database contents manually:**
 ```python
 import sqlite3
-conn = sqlite3.connect('~/.zipline/data/custom/fundamentals.sqlite')
+import os
+db_path = os.path.expanduser('~/.zipline/data/custom/fundamentals.sqlite')
+conn = sqlite3.connect(db_path)
 cursor = conn.cursor()
-cursor.execute("SELECT DISTINCT Sid FROM Price LIMIT 10")
-print(cursor.fetchall())
+
+# Check structure
+cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+print("Tables:", cursor.fetchall())
+
+# Check data
+cursor.execute("SELECT DISTINCT Sid FROM fundamentals LIMIT 10")
+print("Sample SIDs:", cursor.fetchall())
 ```
 
 ### AutoLoader not finding custom columns
@@ -470,6 +572,41 @@ Check that asset_finder is available:
 loader = ms.setup_auto_loader(enable_sid_translation=True)
 # Check logs for "Asset finder loaded for SID translation"
 ```
+
+### Pipeline returns 0 stocks
+
+This is often due to empty data fields. **Use the debug script first:**
+
+```bash
+python examples/custom_data/debug_multi_source.py
+```
+
+**Common causes:**
+
+1. **Empty Sharadar ROE field** - Use the inspection tool:
+   ```bash
+   python examples/custom_data/check_sf1_data.py
+   ```
+
+   If ROE shows 0% availability, use alternative fields:
+   ```python
+   # Instead of s_roe > 15
+   s_fcf = ms.SharadarFundamentals.fcf.latest
+   s_pe = ms.SharadarFundamentals.pe.latest
+   quality = (s_fcf > 0) & (s_pe < 30)
+   ```
+
+2. **No data overlap between sources** - The debug script shows:
+   ```
+   Sharadar quality: 258 stocks
+   LSEG quality: 154 stocks
+   Combined quality: 0 stocks  ← Problem!
+   ```
+
+   Solution: Relax one of the filters or check date ranges
+
+3. **Date mismatch** - Custom database may not have data for backtest dates.
+   Use inspection script to verify date range.
 
 ## API Reference
 

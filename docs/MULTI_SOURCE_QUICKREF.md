@@ -32,18 +32,22 @@ class CustomFundamentals(ms.Database):
 
 ```python
 def make_pipeline():
-    # Sharadar data
-    s_roe = ms.sharadar.Fundamentals.slice('MRQ').ROE.latest
+    # Sharadar data (use fields with high availability)
+    s_fcf = ms.SharadarFundamentals.fcf.latest
+    s_pe = ms.SharadarFundamentals.pe.latest
 
     # Custom data
     c_roe = CustomFundamentals.ROE.latest
+    c_peg = CustomFundamentals.PEG.latest
 
     # Mix them!
-    both_quality = (s_roe > 15) & (c_roe > 15)
+    sharadar_quality = (s_fcf > 0) & (s_pe < 30)
+    custom_quality = (c_roe > 15) & (c_peg < 2.5)
+    combined = sharadar_quality & custom_quality
 
     return ms.Pipeline(
-        columns={'s_roe': s_roe, 'c_roe': c_roe},
-        screen=both_quality,
+        columns={'s_fcf': s_fcf, 's_pe': s_pe, 'c_roe': c_roe},
+        screen=combined,
     )
 ```
 
@@ -99,36 +103,37 @@ ms.sharadar.Fundamentals.slice('ARQ', period_offset=0)  # As Reported Quarterly
 ms.sharadar.Fundamentals.slice('ART', period_offset=0)  # As Reported TTM
 ```
 
-### Common Fields
+### Common Fields (with data availability)
+
+**⚠️ Important:** Use SharadarFundamentals directly, not .slice()
+
 ```python
-fund = ms.sharadar.Fundamentals.slice('MRQ')
+# Cash Flow (95%+ availability)
+fcf = ms.SharadarFundamentals.fcf.latest
+fcfps = ms.SharadarFundamentals.fcfps.latest
 
-# Returns
-roe = fund.ROE.latest
-roa = fund.ROA.latest
-roic = fund.ROIC.latest
+# Valuation (90-96% availability)
+marketcap = ms.SharadarFundamentals.marketcap.latest  # 96%
+pe = ms.SharadarFundamentals.pe.latest                # 90%
+pb = ms.SharadarFundamentals.pb.latest
+ps = ms.SharadarFundamentals.ps.latest
 
-# Cash Flow
-fcf = fund.FCF.latest
-fcfps = fund.FCFPS.latest
+# Income Statement (97%+ availability)
+revenue = ms.SharadarFundamentals.revenue.latest
+ebitda = ms.SharadarFundamentals.ebitda.latest
+netinc = ms.SharadarFundamentals.netinc.latest
+eps = ms.SharadarFundamentals.eps.latest
 
-# Valuation
-marketcap = fund.MARKETCAP.latest
-pe = fund.PE.latest
-pb = fund.PB.latest
-ps = fund.PS.latest
-
-# Income Statement
-revenue = fund.REVENUE.latest
-ebitda = fund.EBITDA.latest
-eps = fund.EPS.latest
-
-# Balance Sheet
-assets = fund.ASSETS.latest
-cash = fund.CASHNEQUSD.latest
-debt = fund.DEBTUSD.latest
-equity = fund.EQUITY.latest
+# Balance Sheet (100% availability)
+assets = ms.SharadarFundamentals.assets.latest
+cashnequsd = ms.SharadarFundamentals.cashnequsd.latest
+debt = ms.SharadarFundamentals.debt.latest
+equity = ms.SharadarFundamentals.equity.latest
 ```
+
+**⚠️ Warning: Empty Fields**
+- `roe` - 0% availability (use custom data or calculate: netinc/equity)
+- Check availability with: `python examples/custom_data/check_sf1_data.py`
 
 ## Column Types
 
@@ -187,6 +192,24 @@ loader = ms.setup_auto_loader(
 )
 ```
 
+## Debugging Tools
+
+```bash
+# Check custom database SIDs and data
+python examples/custom_data/check_lseg_db.py
+
+# Check Sharadar data availability
+python examples/custom_data/check_sf1_data.py
+
+# Test pipeline before running backtest
+python examples/custom_data/debug_multi_source.py
+
+# Test Sharadar loader directly
+python examples/custom_data/test_sharadar_loader.py
+```
+
+**Location:** All scripts are at `examples/custom_data/check_lseg_db.py`
+
 ## Help Functions
 
 ```python
@@ -217,16 +240,25 @@ class MyFundamentals(ms.Database):
 
 # 2. Create pipeline
 def make_pipeline():
-    s_roe = ms.sharadar.Fundamentals.slice('MRQ').ROE.latest
-    s_marketcap = ms.sharadar.Fundamentals.slice('MRQ').MARKETCAP.latest
-    c_roe = MyFundamentals.ROE.latest
+    # Sharadar (use fields with data)
+    s_fcf = ms.SharadarFundamentals.fcf.latest
+    s_marketcap = ms.SharadarFundamentals.marketcap.latest
+    s_pe = ms.SharadarFundamentals.pe.latest
 
+    # Custom data
+    c_roe = MyFundamentals.ROE.latest
+    c_peg = MyFundamentals.PEG.latest
+
+    # Filters
     universe = s_marketcap.top(100)
-    consensus = (s_roe > 15) & (c_roe > 15)
-    selection = s_roe.top(10, mask=universe & consensus)
+    sharadar_quality = (s_fcf > 0) & (s_pe < 30)
+    custom_quality = (c_roe > 15) & (c_peg < 2.5)
+    combined = sharadar_quality & custom_quality
+
+    selection = c_roe.top(10, mask=universe & combined)
 
     return ms.Pipeline(
-        columns={'s_roe': s_roe, 'c_roe': c_roe},
+        columns={'s_fcf': s_fcf, 's_pe': s_pe, 'c_roe': c_roe},
         screen=selection,
     )
 

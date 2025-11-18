@@ -25,8 +25,6 @@ import os
 import sys
 import importlib.util
 import pandas as pd
-import sys
-from pathlib import Path
 import numpy as np
 from pathlib import Path
 from datetime import datetime
@@ -34,9 +32,6 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # Bundle registration (must be before other zipline imports)
-# Add examples directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 from utils.register_bundles import ensure_bundles_registered
 ensure_bundles_registered()
 

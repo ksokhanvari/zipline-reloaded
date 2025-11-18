@@ -4,9 +4,9 @@ Check what data is available in the Sharadar bundle.
 """
 
 import pandas as pd
+# Add examples directory to path for imports
 import sys
 from pathlib import Path
-# Add examples directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from utils.register_bundles import ensure_bundles_registered

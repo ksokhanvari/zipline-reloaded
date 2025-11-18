@@ -5,10 +5,12 @@ Create and populate the fundamentals custom database.
 This script creates a fundamentals database and loads sample data from CSV.
 """
 
-import pandas as pd
 import sys
+import pandas as pd
 from pathlib import Path
-from pathlib import Path
+
+# Add examples directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from utils.register_bundles import ensure_bundles_registered
 from zipline.data.bundles import load as load_bundle

@@ -14,7 +14,7 @@ from pathlib import Path
 import pandas as pd
 
 # Add examples directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from utils.register_bundles import ensure_bundles_registered
 from zipline import run_algorithm

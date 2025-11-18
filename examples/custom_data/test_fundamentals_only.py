@@ -5,9 +5,11 @@ This helps isolate if the string/float error is from custom data or EquityPricin
 """
 
 import pandas as pd
+import sys
+from pathlib import Path
 import numpy as np
 from pathlib import Path
-from register_bundles import ensure_bundles_registered
+from utils.register_bundles import ensure_bundles_registered
 from zipline import run_algorithm
 from zipline.api import attach_pipeline, pipeline_output
 from zipline.pipeline import Pipeline

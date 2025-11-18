@@ -13,10 +13,12 @@ Strategy:
 """
 
 import pandas as pd
-import sys
-from pathlib import Path
 import numpy as np
 from pathlib import Path
+# Add examples directory to path for imports
+import sys
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 from utils.register_bundles import ensure_bundles_registered
 from zipline import run_algorithm
 from zipline.api import (

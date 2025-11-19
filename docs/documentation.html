@@ -433,6 +433,13 @@
             </div>
 
             <div class="nav-section">
+                <div class="nav-section-title">Data Reference</div>
+                <a href="#fundamental-data-reference" class="nav-item">Fundamental Data</a>
+                <a href="#sharadar-columns" class="nav-item nav-subitem">Sharadar SF1</a>
+                <a href="#lseg-columns" class="nav-item nav-subitem">LSEG Custom</a>
+            </div>
+
+            <div class="nav-section">
                 <div class="nav-section-title">Reference</div>
                 <a href="#command-reference" class="nav-item">Command Reference</a>
                 <a href="#resource-requirements" class="nav-item">Resources</a>
@@ -1121,6 +1128,296 @@ print("Open" if result == 0 else "Closed")</code></pre>
 
                 <h3>No Data for Today</h3>
                 <p>Wait 1-2 hours after market close (safe after 6 PM ET).</p>
+            </section>
+
+            <!-- Fundamental Data Reference -->
+            <section id="fundamental-data-reference" class="section">
+                <h2>Fundamental Data Reference</h2>
+                <p>Complete reference of all available fundamental data columns from Sharadar SF1 and LSEG custom databases for strategy development.</p>
+            </section>
+
+            <!-- Sharadar Columns -->
+            <section id="sharadar-columns" class="section">
+                <h2>Sharadar SF1 Columns</h2>
+                <p>66 fundamental metrics available from Sharadar's SF1 (Core US Fundamentals) table. Access via <code>SharadarFundamentals.{column}.latest</code>.</p>
+
+                <h3>Income Statement</h3>
+                <table>
+                    <tr><th>Column</th><th>Description</th></tr>
+                    <tr><td><code>revenue</code></td><td>Total revenue - top-line sales</td></tr>
+                    <tr><td><code>cor</code></td><td>Cost of revenue</td></tr>
+                    <tr><td><code>grossprofit</code></td><td>Gross profit (revenue minus cost of revenue)</td></tr>
+                    <tr><td><code>sgna</code></td><td>Selling, general, and administrative expenses</td></tr>
+                    <tr><td><code>rnd</code></td><td>Research and development expenses</td></tr>
+                    <tr><td><code>opex</code></td><td>Operating expenses</td></tr>
+                    <tr><td><code>opinc</code></td><td>Operating income</td></tr>
+                    <tr><td><code>intexp</code></td><td>Interest expense</td></tr>
+                    <tr><td><code>taxexp</code></td><td>Tax expense</td></tr>
+                    <tr><td><code>netinc</code></td><td>Net income - bottom-line profit</td></tr>
+                    <tr><td><code>ebit</code></td><td>Earnings before interest and taxes</td></tr>
+                    <tr><td><code>ebitda</code></td><td>Earnings before interest, taxes, depreciation, and amortization</td></tr>
+                    <tr><td><code>consolinc</code></td><td>Consolidated net income</td></tr>
+                    <tr><td><code>netincnci</code></td><td>Net income to non-controlling interests</td></tr>
+                    <tr><td><code>netincdis</code></td><td>Net income from discontinued operations</td></tr>
+                    <tr><td><code>prefdivis</code></td><td>Preferred dividends</td></tr>
+                </table>
+
+                <h3>Balance Sheet - Assets</h3>
+                <table>
+                    <tr><th>Column</th><th>Description</th></tr>
+                    <tr><td><code>assets</code></td><td>Total assets</td></tr>
+                    <tr><td><code>cashneq</code></td><td>Cash and cash equivalents</td></tr>
+                    <tr><td><code>investments</code></td><td>Investments</td></tr>
+                    <tr><td><code>investmentsc</code></td><td>Current investments</td></tr>
+                    <tr><td><code>investmentsnc</code></td><td>Non-current investments</td></tr>
+                    <tr><td><code>receivables</code></td><td>Accounts receivable</td></tr>
+                    <tr><td><code>inventory</code></td><td>Inventory</td></tr>
+                    <tr><td><code>ppnenet</code></td><td>Property, plant, and equipment (net)</td></tr>
+                    <tr><td><code>intangibles</code></td><td>Intangible assets</td></tr>
+                    <tr><td><code>goodwill</code></td><td>Goodwill (not in Zipline class)</td></tr>
+                    <tr><td><code>assetsc</code></td><td>Current assets</td></tr>
+                    <tr><td><code>assetsnc</code></td><td>Non-current assets</td></tr>
+                </table>
+
+                <h3>Balance Sheet - Liabilities & Equity</h3>
+                <table>
+                    <tr><th>Column</th><th>Description</th></tr>
+                    <tr><td><code>liabilities</code></td><td>Total liabilities</td></tr>
+                    <tr><td><code>liabilitiesc</code></td><td>Current liabilities</td></tr>
+                    <tr><td><code>liabilitiesnc</code></td><td>Non-current liabilities</td></tr>
+                    <tr><td><code>payables</code></td><td>Accounts payable</td></tr>
+                    <tr><td><code>debtc</code></td><td>Current debt</td></tr>
+                    <tr><td><code>debtnc</code></td><td>Non-current debt</td></tr>
+                    <tr><td><code>debt</code></td><td>Total debt</td></tr>
+                    <tr><td><code>equity</code></td><td>Shareholders' equity</td></tr>
+                    <tr><td><code>retearn</code></td><td>Retained earnings</td></tr>
+                    <tr><td><code>accoci</code></td><td>Accumulated other comprehensive income</td></tr>
+                </table>
+
+                <h3>Cash Flow Statement</h3>
+                <table>
+                    <tr><th>Column</th><th>Description</th></tr>
+                    <tr><td><code>ncfo</code></td><td>Net cash flow from operating activities</td></tr>
+                    <tr><td><code>ncfi</code></td><td>Net cash flow from investing activities</td></tr>
+                    <tr><td><code>ncff</code></td><td>Net cash flow from financing activities</td></tr>
+                    <tr><td><code>ncfx</code></td><td>Effect of exchange rate changes on cash</td></tr>
+                    <tr><td><code>ncfbus</code></td><td>Net cash flow - business acquisitions and disposals</td></tr>
+                    <tr><td><code>ncfinv</code></td><td>Net cash flow - investment acquisitions and disposals</td></tr>
+                    <tr><td><code>ncfcommon</code></td><td>Issuance (retirement) of common stock</td></tr>
+                    <tr><td><code>ncfdebt</code></td><td>Issuance (retirement) of debt securities</td></tr>
+                    <tr><td><code>capex</code></td><td>Capital expenditures</td></tr>
+                    <tr><td><code>fcf</code></td><td>Free cash flow</td></tr>
+                    <tr><td><code>depamor</code></td><td>Depreciation and amortization</td></tr>
+                    <tr><td><code>sbcomp</code></td><td>Stock-based compensation</td></tr>
+                </table>
+
+                <h3>Valuation Ratios</h3>
+                <table>
+                    <tr><th>Column</th><th>Description</th></tr>
+                    <tr><td><code>pe</code></td><td>Price to earnings ratio</td></tr>
+                    <tr><td><code>pe1</code></td><td>Price to earnings ratio (alternative)</td></tr>
+                    <tr><td><code>pb</code></td><td>Price to book ratio</td></tr>
+                    <tr><td><code>ps</code></td><td>Price to sales ratio</td></tr>
+                    <tr><td><code>ps1</code></td><td>Price to sales ratio (alternative)</td></tr>
+                    <tr><td><code>marketcap</code></td><td>Market capitalization</td></tr>
+                    <tr><td><code>ev</code></td><td>Enterprise value</td></tr>
+                    <tr><td><code>evebit</code></td><td>Enterprise value to EBIT</td></tr>
+                    <tr><td><code>evebitda</code></td><td>Enterprise value to EBITDA</td></tr>
+                </table>
+
+                <h3>Profitability Ratios</h3>
+                <table>
+                    <tr><th>Column</th><th>Description</th></tr>
+                    <tr><td><code>roe</code></td><td>Return on equity (%)</td></tr>
+                    <tr><td><code>roa</code></td><td>Return on assets (%)</td></tr>
+                    <tr><td><code>roic</code></td><td>Return on invested capital (%)</td></tr>
+                    <tr><td><code>ros</code></td><td>Return on sales (%)</td></tr>
+                    <tr><td><code>grossmargin</code></td><td>Gross margin (%)</td></tr>
+                    <tr><td><code>netmargin</code></td><td>Net margin (%)</td></tr>
+                    <tr><td><code>ebitdamargin</code></td><td>EBITDA margin (%)</td></tr>
+                </table>
+
+                <h3>Liquidity & Leverage Ratios</h3>
+                <table>
+                    <tr><th>Column</th><th>Description</th></tr>
+                    <tr><td><code>de</code></td><td>Debt to equity ratio</td></tr>
+                    <tr><td><code>currentratio</code></td><td>Current ratio (current assets / current liabilities)</td></tr>
+                    <tr><td><code>workingcapital</code></td><td>Working capital</td></tr>
+                    <tr><td><code>tangibles</code></td><td>Tangible assets</td></tr>
+                </table>
+
+                <h3>Per-Share Metrics</h3>
+                <table>
+                    <tr><th>Column</th><th>Description</th></tr>
+                    <tr><td><code>eps</code></td><td>Earnings per share (diluted)</td></tr>
+                    <tr><td><code>epsdil</code></td><td>Earnings per share (diluted)</td></tr>
+                    <tr><td><code>epsusd</code></td><td>Earnings per share in USD</td></tr>
+                    <tr><td><code>bvps</code></td><td>Book value per share</td></tr>
+                    <tr><td><code>dps</code></td><td>Dividends per share</td></tr>
+                    <tr><td><code>fcfps</code></td><td>Free cash flow per share</td></tr>
+                    <tr><td><code>sps</code></td><td>Sales per share</td></tr>
+                    <tr><td><code>revenueusd</code></td><td>Revenue in USD</td></tr>
+                    <tr><td><code>sharesbas</code></td><td>Shares outstanding (basic)</td></tr>
+                    <tr><td><code>shareswa</code></td><td>Weighted average shares outstanding</td></tr>
+                    <tr><td><code>shareswadil</code></td><td>Weighted average shares outstanding (diluted)</td></tr>
+                    <tr><td><code>sharesfactor</code></td><td>Share factor for stock splits</td></tr>
+                </table>
+
+                <h3>Growth Metrics</h3>
+                <table>
+                    <tr><th>Column</th><th>Description</th></tr>
+                    <tr><td><code>revenuegrowth</code></td><td>Revenue growth rate (%)</td></tr>
+                    <tr><td><code>netincgrowth</code></td><td>Net income growth rate (%)</td></tr>
+                    <tr><td><code>epsgrowth</code></td><td>EPS growth rate (%)</td></tr>
+                    <tr><td><code>assetturnover</code></td><td>Asset turnover ratio</td></tr>
+                </table>
+
+                <h3>Other Metrics</h3>
+                <table>
+                    <tr><th>Column</th><th>Description</th></tr>
+                    <tr><td><code>payoutratio</code></td><td>Dividend payout ratio</td></tr>
+                    <tr><td><code>divyield</code></td><td>Dividend yield</td></tr>
+                    <tr><td><code>invcapavg</code></td><td>Average invested capital</td></tr>
+                    <tr><td><code>equityavg</code></td><td>Average equity</td></tr>
+                    <tr><td><code>assetsavg</code></td><td>Average assets</td></tr>
+                    <tr><td><code>debtusd</code></td><td>Total debt in USD</td></tr>
+                    <tr><td><code>equityusd</code></td><td>Shareholders' equity in USD</td></tr>
+                    <tr><td><code>cashnequsd</code></td><td>Cash and equivalents in USD</td></tr>
+                </table>
+
+                <div class="callout callout-info">
+                    <strong>Usage Example:</strong>
+                    <pre><code>from zipline.pipeline.data.sharadar import SharadarFundamentals
+
+# Screen for value stocks
+value_screen = (
+    (SharadarFundamentals.pe.latest < 15) &
+    (SharadarFundamentals.roe.latest > 15) &
+    (SharadarFundamentals.de.latest < 1.0)
+)</code></pre>
+                </div>
+            </section>
+
+            <!-- LSEG Columns -->
+            <section id="lseg-columns" class="section">
+                <h2>LSEG Custom Database Columns</h2>
+                <p>~50+ fundamental and analytics columns available from LSEG (formerly Refinitiv) custom database. Access via custom database class definition.</p>
+
+                <h3>Smart Estimates & Forecasts</h3>
+                <table>
+                    <tr><th>Column</th><th>Description</th></tr>
+                    <tr><td><code>ReturnOnEquity_SmartEstimate</code></td><td>ROE consensus smart estimate</td></tr>
+                    <tr><td><code>ReturnOnAssets_SmartEstimate</code></td><td>ROA consensus smart estimate</td></tr>
+                    <tr><td><code>EarningsPerShare_SmartEstimate</code></td><td>EPS consensus smart estimate</td></tr>
+                    <tr><td><code>LongTermGrowth_Mean</code></td><td>Mean long-term growth estimate</td></tr>
+                    <tr><td><code>TargetPrice_Mean</code></td><td>Mean analyst target price</td></tr>
+                    <tr><td><code>Recommendation_Mean</code></td><td>Mean analyst recommendation (1-5 scale)</td></tr>
+                </table>
+
+                <h3>Valuation Metrics</h3>
+                <table>
+                    <tr><th>Column</th><th>Description</th></tr>
+                    <tr><td><code>CompanyMarketCap</code></td><td>Company market capitalization</td></tr>
+                    <tr><td><code>EnterpriseValue</code></td><td>Enterprise value</td></tr>
+                    <tr><td><code>ForwardPE</code></td><td>Forward price to earnings ratio</td></tr>
+                    <tr><td><code>ForwardPEG</code></td><td>Forward PEG ratio</td></tr>
+                    <tr><td><code>PriceToBook_Daily</code></td><td>Daily price to book ratio</td></tr>
+                    <tr><td><code>PriceToSales_Daily</code></td><td>Daily price to sales ratio</td></tr>
+                    <tr><td><code>EVToEBITDA</code></td><td>EV to EBITDA ratio</td></tr>
+                    <tr><td><code>EVToSales</code></td><td>EV to sales ratio</td></tr>
+                </table>
+
+                <h3>Fundamental Actuals</h3>
+                <table>
+                    <tr><th>Column</th><th>Description</th></tr>
+                    <tr><td><code>EarningsPerShare_Actual</code></td><td>Actual reported EPS</td></tr>
+                    <tr><td><code>Revenue_Actual</code></td><td>Actual reported revenue</td></tr>
+                    <tr><td><code>NetIncome_Actual</code></td><td>Actual reported net income</td></tr>
+                    <tr><td><code>EBITDA_Actual</code></td><td>Actual reported EBITDA</td></tr>
+                    <tr><td><code>FreeCashFlow_Actual</code></td><td>Actual reported free cash flow</td></tr>
+                    <tr><td><code>DividendPerShare_Actual</code></td><td>Actual dividend per share</td></tr>
+                </table>
+
+                <h3>Balance Sheet Items</h3>
+                <table>
+                    <tr><th>Column</th><th>Description</th></tr>
+                    <tr><td><code>TotalAssets</code></td><td>Total assets</td></tr>
+                    <tr><td><code>TotalLiabilities</code></td><td>Total liabilities</td></tr>
+                    <tr><td><code>TotalEquity</code></td><td>Total shareholders' equity</td></tr>
+                    <tr><td><code>Debt_Total</code></td><td>Total debt</td></tr>
+                    <tr><td><code>Cash_Total</code></td><td>Total cash and equivalents</td></tr>
+                    <tr><td><code>Inventory_Total</code></td><td>Total inventory</td></tr>
+                    <tr><td><code>Receivables_Total</code></td><td>Total receivables</td></tr>
+                </table>
+
+                <h3>Profitability Ratios</h3>
+                <table>
+                    <tr><th>Column</th><th>Description</th></tr>
+                    <tr><td><code>ROE_TTM</code></td><td>Return on equity (trailing 12 months)</td></tr>
+                    <tr><td><code>ROA_TTM</code></td><td>Return on assets (trailing 12 months)</td></tr>
+                    <tr><td><code>ROIC_TTM</code></td><td>Return on invested capital (TTM)</td></tr>
+                    <tr><td><code>GrossMargin_TTM</code></td><td>Gross margin (TTM)</td></tr>
+                    <tr><td><code>OperatingMargin_TTM</code></td><td>Operating margin (TTM)</td></tr>
+                    <tr><td><code>NetProfitMargin_TTM</code></td><td>Net profit margin (TTM)</td></tr>
+                </table>
+
+                <h3>Alpha Model Rankings</h3>
+                <table>
+                    <tr><th>Column</th><th>Description</th></tr>
+                    <tr><td><code>CombinedAlphaModelScore</code></td><td>Combined alpha model score</td></tr>
+                    <tr><td><code>CombinedAlphaModelRank</code></td><td>Combined alpha model rank</td></tr>
+                    <tr><td><code>CombinedAlphaModelSectorRank</code></td><td>Alpha model rank within sector</td></tr>
+                    <tr><td><code>ValueScore</code></td><td>Value factor score</td></tr>
+                    <tr><td><code>GrowthScore</code></td><td>Growth factor score</td></tr>
+                    <tr><td><code>QualityScore</code></td><td>Quality factor score</td></tr>
+                    <tr><td><code>MomentumScore</code></td><td>Momentum factor score</td></tr>
+                </table>
+
+                <h3>Technical & Sentiment</h3>
+                <table>
+                    <tr><th>Column</th><th>Description</th></tr>
+                    <tr><td><code>Beta</code></td><td>Stock beta vs market</td></tr>
+                    <tr><td><code>Volatility_30Day</code></td><td>30-day price volatility</td></tr>
+                    <tr><td><code>Volatility_90Day</code></td><td>90-day price volatility</td></tr>
+                    <tr><td><code>ShortInterest_Ratio</code></td><td>Short interest ratio</td></tr>
+                    <tr><td><code>InstitutionalOwnership</code></td><td>Percentage institutional ownership</td></tr>
+                    <tr><td><code>InsiderOwnership</code></td><td>Percentage insider ownership</td></tr>
+                </table>
+
+                <h3>Dividend & Yield</h3>
+                <table>
+                    <tr><th>Column</th><th>Description</th></tr>
+                    <tr><td><code>DividendYield</code></td><td>Current dividend yield</td></tr>
+                    <tr><td><code>DividendPayoutRatio</code></td><td>Dividend payout ratio</td></tr>
+                    <tr><td><code>DividendGrowth_5Year</code></td><td>5-year dividend growth rate</td></tr>
+                    <tr><td><code>ExDividendDate</code></td><td>Ex-dividend date</td></tr>
+                </table>
+
+                <div class="callout callout-info">
+                    <strong>Usage Example:</strong>
+                    <pre><code>from zipline.pipeline import multi_source as ms
+
+class LSEGFundamentals(ms.Database):
+    CODE = "lseg_fundamentals"
+    LOOKBACK_WINDOW = 252
+
+    # Define columns matching your database
+    ReturnOnEquity_SmartEstimate = ms.Column(float)
+    CombinedAlphaModelSectorRank = ms.Column(float)
+    ForwardPEG = ms.Column(float)
+
+# Use in pipeline
+pipeline = ms.Pipeline(
+    columns={
+        'roe_estimate': LSEGFundamentals.ReturnOnEquity_SmartEstimate.latest,
+        'sector_rank': LSEGFundamentals.CombinedAlphaModelSectorRank.latest,
+    }
+)</code></pre>
+                </div>
+
+                <div class="callout callout-warning">
+                    <strong>Note:</strong> LSEG column names may vary based on your specific data subscription and export format. The columns listed above are common examples. Check your actual database schema for exact column names.
+                </div>
             </section>
 
             <!-- Command Reference -->

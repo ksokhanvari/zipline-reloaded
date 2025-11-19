@@ -3,7 +3,7 @@
 Test what SIDs the pipeline is actually using.
 """
 import sys
-sys.path.insert(0, '/app/examples/custom_data')
+sys.path.insert(0, '/app/examples/shared_modules')
 
 import pandas as pd
 from zipline.pipeline import Pipeline

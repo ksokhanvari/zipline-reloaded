@@ -3,7 +3,7 @@
 Debug script to check which SIDs are being used for the universe tickers.
 """
 import sys
-sys.path.insert(0, '/app/examples/custom_data')
+sys.path.insert(0, '/app/examples/shared_modules')
 
 from zipline.data.bundles import register, load as load_bundle
 from zipline.data.bundles.sharadar_bundle import sharadar_bundle

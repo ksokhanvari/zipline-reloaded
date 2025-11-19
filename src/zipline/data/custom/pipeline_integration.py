@@ -403,7 +403,7 @@ class CustomSQLiteLoader(PipelineLoader):
             if len(df) == 0:
                 log.warning(
                     f"No data found in {self.db_code} database for "
-                    f"dates {start_date} to {end_date}, sids {sids_str[:5]}..."
+                    f"dates {start_date} to {end_date}, sids {bundle_sids_str[:5]}..."
                 )
 
             # Parse dates

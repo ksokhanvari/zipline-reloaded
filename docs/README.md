@@ -6,112 +6,49 @@ Complete guides for using Zipline-Reloaded with Sharadar data, FlightLog monitor
 
 ## Quick Navigation
 
-### 🚀 Getting Started
+### Getting Started
 
 **New to Zipline?** Start here:
 
-1. **[Quick Start Data Guide](./QUICK_START_DATA.md)** - Get data set up in 5 minutes
-2. **[FlightLog Usage Guide](./FLIGHTLOG_USAGE.md)** - Real-time backtest monitoring
+1. **[QUICK_START_DATA.md](./QUICK_START_DATA.md)** - Get data set up in 5 minutes
+2. **[FLIGHTLOG.md](./FLIGHTLOG.md)** - Real-time backtest monitoring
+3. **[DEVELOPMENT.md](./DEVELOPMENT.md)** - Development setup and workflow
 
-### 📊 Data Management
+### Data Management
 
 **Managing Sharadar market data:**
 
-- **[DATA_MANAGEMENT.md](./DATA_MANAGEMENT.md)** - Complete guide to downloading and updating data
-  - Initial setup and API configuration
-  - Daily incremental updates (10-30 seconds!)
-  - Automation with cron jobs
-  - Troubleshooting common issues
-  - Advanced usage and backups
+- **[DATA_MANAGEMENT.md](./DATA_MANAGEMENT.md)** - Complete guide to bundles, updates, and cleanup
+- **[SHARADAR_FUNDAMENTALS_GUIDE.md](./SHARADAR_FUNDAMENTALS_GUIDE.md)** - Using fundamentals in pipelines
+- **[SYMBOL_MAPPING.md](./SYMBOL_MAPPING.md)** - Handling symbol changes (FB→META)
 
-- **[QUICK_START_DATA.md](./QUICK_START_DATA.md)** - Quick reference for daily operations
-  - One-time setup
-  - Daily update commands
-  - Command cheat sheet
-  - Resource requirements
+### Multi-Source Data
 
-### 📡 Monitoring & Logging
+**Combining multiple data sources:**
 
-**Real-time backtest monitoring:**
+- **[MULTI_SOURCE_DATA.md](./MULTI_SOURCE_DATA.md)** - Architecture for combining Sharadar + custom data
+- **[MULTI_SOURCE_QUICKREF.md](./MULTI_SOURCE_QUICKREF.md)** - Quick reference for multi-source pipelines
 
-- **[FLIGHTLOG_USAGE.md](./FLIGHTLOG_USAGE.md)** - FlightLog real-time log streaming
-  - Setup and usage
-  - Filtering options
-  - Troubleshooting connection issues
-  - Color-coded log levels
-  - Docker integration
+### Monitoring & Development
+
+**Tools and development:**
+
+- **[FLIGHTLOG.md](./FLIGHTLOG.md)** - Real-time log streaming and progress monitoring
+- **[DEVELOPMENT.md](./DEVELOPMENT.md)** - Docker build optimization and development workflow
 
 ---
 
 ## Documentation Summary
 
-### Data Management
-
-| Guide | Purpose | Audience | Time to Read |
-|-------|---------|----------|--------------|
-| [QUICK_START_DATA.md](./QUICK_START_DATA.md) | Get started fast | New users | 5 min |
-| [DATA_MANAGEMENT.md](./DATA_MANAGEMENT.md) | Complete reference | All users | 20 min |
-
-**Key Topics Covered:**
-
-✅ **Initial Setup**
-- API key configuration
-- First-time download (full, sample, custom)
-- Bundle registration
-
-✅ **Daily Updates**
-- Incremental updates (automatic detection)
-- When to run (timing guidance)
-- Automation examples
-
-✅ **Monitoring**
-- Check bundle status
-- Verify data coverage
-- View ingestion logs
-
-✅ **Troubleshooting**
-- API key issues
-- Out of memory errors
-- Stale data
-- Incremental updates not working
-
-✅ **Advanced**
-- Multiple bundles
-- Custom date ranges
-- Backup strategies
-- Resource management
-
-### Monitoring & Logging
-
-| Guide | Purpose | Audience | Time to Read |
-|-------|---------|----------|--------------|
-| [FLIGHTLOG_USAGE.md](./FLIGHTLOG_USAGE.md) | Real-time logging | All users | 15 min |
-
-**Key Topics Covered:**
-
-✅ **FlightLog Features**
-- Real-time TCP streaming
-- Color-coded log levels
-- Progress bar support
-- Filtering options
-
-✅ **Setup**
-- Docker configuration
-- Connection from notebooks
-- Multiple FlightLog instances
-
-✅ **Usage Patterns**
-- Default (all logs)
-- Algorithm-only (no progress bars)
-- Debug mode
-- Save to file
-
-✅ **Troubleshooting**
-- Connection refused
-- No logs appearing
-- Duplicate messages
-- Missing progress logs
-- No colors in output
+| Guide | Purpose | Time |
+|-------|---------|------|
+| [QUICK_START_DATA.md](./QUICK_START_DATA.md) | Get started fast | 5 min |
+| [DATA_MANAGEMENT.md](./DATA_MANAGEMENT.md) | Bundle management, updates, cleanup | 15 min |
+| [SHARADAR_FUNDAMENTALS_GUIDE.md](./SHARADAR_FUNDAMENTALS_GUIDE.md) | Fundamentals in pipelines | 20 min |
+| [SYMBOL_MAPPING.md](./SYMBOL_MAPPING.md) | Handle symbol changes | 10 min |
+| [MULTI_SOURCE_DATA.md](./MULTI_SOURCE_DATA.md) | Combine multiple data sources | 15 min |
+| [FLIGHTLOG.md](./FLIGHTLOG.md) | Real-time monitoring | 10 min |
+| [DEVELOPMENT.md](./DEVELOPMENT.md) | Development workflow | 10 min |
 
 ---
 
@@ -177,10 +114,15 @@ crontab -e
 
 ```
 docs/
-├── README.md                    # This file - navigation guide
-├── QUICK_START_DATA.md         # 5-minute quick start
-├── DATA_MANAGEMENT.md          # Complete data management guide
-└── FLIGHTLOG_USAGE.md          # FlightLog monitoring guide
+├── README.md                      # This file - navigation guide
+├── QUICK_START_DATA.md           # 5-minute quick start
+├── DATA_MANAGEMENT.md            # Bundle management, updates, cleanup
+├── SHARADAR_FUNDAMENTALS_GUIDE.md # Fundamentals in pipelines
+├── SYMBOL_MAPPING.md             # Handle FB→META symbol changes
+├── MULTI_SOURCE_DATA.md          # Combine Sharadar + custom data
+├── MULTI_SOURCE_QUICKREF.md      # Quick reference for multi-source
+├── FLIGHTLOG.md                  # Real-time log monitoring
+└── DEVELOPMENT.md                # Docker build, development workflow
 ```
 
 ---
@@ -219,8 +161,12 @@ docs/
 ### Documentation
 
 - **Quick Start:** [QUICK_START_DATA.md](./QUICK_START_DATA.md)
-- **Full Reference:** [DATA_MANAGEMENT.md](./DATA_MANAGEMENT.md)
-- **Monitoring:** [FLIGHTLOG_USAGE.md](./FLIGHTLOG_USAGE.md)
+- **Data Management:** [DATA_MANAGEMENT.md](./DATA_MANAGEMENT.md)
+- **Fundamentals:** [SHARADAR_FUNDAMENTALS_GUIDE.md](./SHARADAR_FUNDAMENTALS_GUIDE.md)
+- **Symbol Mapping:** [SYMBOL_MAPPING.md](./SYMBOL_MAPPING.md)
+- **Multi-Source:** [MULTI_SOURCE_DATA.md](./MULTI_SOURCE_DATA.md)
+- **Monitoring:** [FLIGHTLOG.md](./FLIGHTLOG.md)
+- **Development:** [DEVELOPMENT.md](./DEVELOPMENT.md)
 
 ### External Resources
 
@@ -236,7 +182,7 @@ docs/
 - Check `~/.zipline/ingestions/sharadar_*.log`
 
 **FlightLog Issues:**
-- See [FLIGHTLOG_USAGE.md - Troubleshooting](./FLIGHTLOG_USAGE.md#troubleshooting)
+- See [FLIGHTLOG.md - Troubleshooting](./FLIGHTLOG.md#troubleshooting)
 - Verify connection: `docker ps | grep flightlog`
 
 **General Issues:**
@@ -320,6 +266,6 @@ These documentation files are part of Zipline-Reloaded and are licensed under Ap
 
 ---
 
-**Last Updated:** 2025-11-04
+**Last Updated:** 2025-11-19
 
 **Maintained by:** Zipline-Reloaded Community

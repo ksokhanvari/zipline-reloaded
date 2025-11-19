@@ -1,939 +1,326 @@
-# Sharadar Data Management Guide
+# Data Management Guide
 
-Complete guide to downloading, updating, and managing Sharadar market data for Zipline backtesting.
+Complete guide to managing Sharadar data bundles, including setup, daily updates, incremental updates, and cleanup.
 
 ---
 
 ## Table of Contents
 
-1. [Overview](#overview)
+1. [Quick Start](#quick-start)
 2. [Initial Setup](#initial-setup)
-3. [First-Time Data Download](#first-time-data-download)
-4. [Daily Incremental Updates](#daily-incremental-updates)
-5. [Monitoring Your Data](#monitoring-your-data)
-6. [Automation](#automation)
-7. [Troubleshooting](#troubleshooting)
-8. [Advanced Usage](#advanced-usage)
-9. [Command Reference](#command-reference)
+3. [Daily Updates](#daily-updates)
+4. [Incremental Updates](#incremental-updates)
+5. [Bundle Cleanup](#bundle-cleanup)
+6. [Alternative Bundles](#alternative-bundles)
+7. [Automation](#automation)
+8. [Troubleshooting](#troubleshooting)
 
 ---
 
-## Overview
+## Quick Start
 
-### What is Sharadar?
+### One-Time Setup (5 minutes)
 
-Sharadar is a **premium** dataset from NASDAQ Data Link that provides:
-- **Daily OHLCV pricing** for ~8,000 US equities
-- **ETF and fund pricing** data
-- **Corporate actions** (splits, dividends, etc.)
-- **Historical data** from 1998 to present
-- **Daily updates** with T+0 availability
+```bash
+# 1. Get API key from https://data.nasdaq.com/databases/SFA
+# 2. Configure key
+echo 'NASDAQ_DATA_LINK_API_KEY=your-key-here' > .env
 
-**Cost:** Requires a paid subscription from [NASDAQ Data Link](https://data.nasdaq.com/databases/SFA)
+# 3. Start container and download data (10-20 minutes)
+docker compose up -d
+docker compose exec zipline-jupyter zipline ingest -b sharadar
+```
 
-### Incremental Updates (Key Feature)
+### Daily Updates (30 seconds)
 
-The Sharadar bundle supports **incremental updates**, which dramatically speeds up daily data refreshes:
-
-| Update Type | Date Range | Time Required | Data Downloaded |
-|-------------|------------|---------------|-----------------|
-| **Initial download** | 1998 - Present | 10-20 minutes | ~10 GB (all history) |
-| **Daily update** | Yesterday only | 10-30 seconds | ~50 MB (1 day) |
-
-**How it works:**
-1. First ingestion downloads all historical data since 1998
-2. Subsequent ingestions **automatically detect** the last download date
-3. Only new data since last ingestion is downloaded
-4. Full history is preserved and combined with new data
+```bash
+# Run after market close (6 PM ET)
+docker compose exec zipline-jupyter zipline ingest -b sharadar
+```
 
 ---
 
 ## Initial Setup
 
-### Step 1: Get Your API Key
+### What is Sharadar?
 
-1. Sign up for Sharadar at: https://data.nasdaq.com/databases/SFA
-2. Get your API key from: https://data.nasdaq.com/account/profile
-3. Copy the key (looks like: `aBcDeFgHiJkLmNoPqR12`)
+Sharadar is a **premium, institutional-grade dataset** from NASDAQ Data Link that provides:
 
-### Step 2: Configure API Key
+- **SEP (Sharadar Equity Prices)**: Daily OHLCV pricing data
+- **SF1 (Sharadar Fundamentals)**: Fundamental data (revenue, earnings, ratios)
+- **ACTIONS**: Corporate actions (splits, dividends)
+- **TICKERS**: Ticker metadata and classification
 
-**On host machine (Mac/Linux):**
+### Why Choose Sharadar?
 
-```bash
-# Add to your shell profile (~/.zshrc, ~/.bashrc, etc.)
-echo 'export NASDAQ_DATA_LINK_API_KEY="your-api-key-here"' >> ~/.zshrc
-source ~/.zshrc
+| Feature | Sharadar | Yahoo Finance |
+|---------|----------|---------------|
+| **Data Quality** | Institutional-grade | Good |
+| **Point-in-Time** | Yes | No |
+| **Corporate Actions** | Comprehensive | Basic |
+| **Historical Depth** | Complete history | ~20 years |
+| **Cost** | Paid subscription | Free |
 
-# Verify it's set
-echo $NASDAQ_DATA_LINK_API_KEY
-```
+**Use Sharadar if:**
+- Building professional trading strategies
+- Need point-in-time accuracy for backtesting
+- Require comprehensive fundamental data
 
-**For Docker (recommended):**
+**Use Yahoo Finance if:**
+- Learning zipline
+- Prototyping strategies
+- Budget is limited
 
-Create a `.env` file in your zipline-reloaded directory:
+### Get Your API Key
+
+1. Subscribe at: https://data.nasdaq.com/databases/SFA
+2. Log in and go to Account Settings
+3. Copy your API key (format: `abc123xyz...`)
+
+### Configure API Key
+
+**Option A: Via .env file (Recommended)**
 
 ```bash
 cd /path/to/zipline-reloaded
-
-# Create .env file
-cat > .env << 'EOF'
-NASDAQ_DATA_LINK_API_KEY=your-api-key-here
-EOF
-
-# Verify
-cat .env
+echo 'NASDAQ_DATA_LINK_API_KEY=your_key_here' > .env
+docker compose restart
 ```
 
-The docker-compose.yml automatically loads this file.
-
-### Step 3: Verify Bundle Registration
+**Option B: Environment variable**
 
 ```bash
-# Inside Docker container
-docker compose exec zipline-jupyter bash
-
-# List available bundles
-zipline bundles
-
-# You should see:
-# sharadar              <no ingestions>
-# sharadar-equities     <no ingestions>
-# sharadar-tech         <no ingestions>
+export NASDAQ_DATA_LINK_API_KEY='your_key_here'
 ```
 
-If bundles are missing, check that `extension.py` exists at `~/.zipline/extension.py`.
+### Initial Download
+
+```bash
+docker compose exec zipline-jupyter zipline ingest -b sharadar
+```
+
+**Expected:**
+- Time: 60-90 minutes for full dataset
+- Storage: ~10-15 GB
+- Date range: 1998 to today
+- Tickers: ~8,000 US equities + ETFs
 
 ---
 
-## First-Time Data Download
+## Daily Updates
 
-### Option 1: Full Dataset (Recommended for Production)
-
-Downloads **all** US equities and ETFs since 1998.
+After the initial download, updates are **fast and automatic**:
 
 ```bash
-# Inside Docker container
-docker compose exec zipline-jupyter bash
-
-# Run ingestion
-zipline ingest -b sharadar
-
-# Expected output:
-# ============================================================
-# Sharadar Bundle Ingestion
-# ============================================================
-# Date range: 1998-01-01 to 2025-11-04
-# Tickers: ALL (this may take a while and use significant storage)
-# ============================================================
-#
-# Step 1/4: Downloading Sharadar Equity Prices (SEP table)...
-# Downloaded 60,000,000 equity price records for 8,234 tickers
-#
-# Step 2/4: Downloading Sharadar Fund Prices (SFP table)...
-# Downloaded 15,000,000 fund price records for 2,456 tickers
-#
-# Combined 75,000,000 total price records
-#
-# Step 3/4: Downloading corporate actions (ACTIONS table)...
-# Downloaded 450,000 corporate action records
-#
-# Step 4/4: Processing data for zipline...
-# Writing asset metadata...
-# Writing daily bars...
-# Writing adjustments...
-#
-# ============================================================
-# ✓ Sharadar bundle ingestion complete!
-# ============================================================
+docker compose exec zipline-jupyter zipline ingest -b sharadar
 ```
 
-**Time required:** 10-20 minutes (depending on internet speed)
-**Storage required:** ~10-15 GB
-**Memory required:** 8-16 GB RAM
+**Expected:**
+- Time: 2-5 minutes
+- Storage: ~50-100 MB (just new data)
 
-### Option 2: Tech Stocks Sample (Fast for Testing)
+### When to Run
 
-Downloads only major tech stocks for faster testing.
+| Time (ET) | Status | Action |
+|-----------|--------|--------|
+| Before 5:00 PM | Data not ready | Don't run yet |
+| 5:00-6:00 PM | Processing | May be incomplete |
+| After 6:00 PM | Ready | Safe to run |
+| Weekends | No trading | Skip |
+
+### Verify Your Data
 
 ```bash
-# Use the pre-configured tech bundle
-zipline ingest -b sharadar-tech
-
-# Expected output:
-# Date range: 1998-01-01 to 2025-11-04
-# Tickers: 15 symbols
-# Downloaded 125,000 equity price records for 15 tickers
+# Check ingestion status
+docker compose exec zipline-jupyter zipline bundles
 ```
 
-**Time required:** 30-60 seconds
-**Storage required:** ~50 MB
-**Memory required:** 2 GB RAM
+---
 
-### Option 3: Custom Ticker List
+## Incremental Updates
 
-Edit `~/.zipline/extension.py` to create a custom bundle:
+### How It Works
+
+**First Ingestion**: Downloads ALL historical data (60-90 minutes)
+
+**Subsequent Ingestions**: Only downloads NEW data since last ingestion (2-5 minutes)
+
+The bundle automatically:
+1. Checks for existing data in `~/.zipline/data/sharadar/`
+2. Finds the last date in the database
+3. Requests data from `last_date + 1 day` onwards
+
+### Performance Comparison
+
+| Scenario | Duration | Data Downloaded |
+|----------|----------|-----------------|
+| **First Ingestion** | 60-90 min | 27 years (1998-2025) |
+| **Daily Update** | 2-3 min | 1 day |
+| **Weekly Update** | 3-4 min | 7 days |
+| **Monthly Update** | 4-5 min | 30 days |
+
+---
+
+## Bundle Cleanup
+
+### Why Cleanup is Important
+
+Each ingestion creates a new timestamped directory. Cleanup saves disk space:
+
+```bash
+# Keep only the 2 most recent ingestions
+docker exec zipline-reloaded-jupyter zipline clean -b sharadar --keep-last 2
+
+# Keep only the most recent
+docker exec zipline-reloaded-jupyter zipline clean -b sharadar --keep-last 1
+```
+
+### Recommended Keep Count
+
+| Scenario | Keep Last | Reason |
+|----------|-----------|--------|
+| **Development** | 1-2 | Save disk space |
+| **Production Daily** | 2-3 | Quick rollback |
+| **Production Critical** | 5-7 | Multiple rollback points |
+
+### Storage Calculation
+
+**Sharadar bundle size**: ~600 MB per ingestion
+
+| Keep Last | Disk Usage |
+|-----------|------------|
+| 1 | ~600 MB |
+| 2 | ~1.2 GB |
+| 3 | ~1.8 GB |
+| 5 | ~3.0 GB |
+
+---
+
+## Alternative Bundles
+
+### Tech Stocks Only (Fast Testing)
+
+```bash
+# Takes 30 seconds instead of 20 minutes
+docker exec zipline-reloaded-jupyter zipline ingest -b sharadar-tech
+```
+
+### Custom Ticker List
+
+Edit `~/.zipline/extension.py`:
 
 ```python
 from zipline.data.bundles import register
 from zipline.data.bundles.sharadar_bundle import sharadar_bundle
 
-# Your custom watchlist
-register(
-    'my-watchlist',
-    sharadar_bundle(
-        tickers=[
-            'SPY', 'QQQ', 'IWM',  # Index ETFs
-            'AAPL', 'MSFT', 'GOOGL',  # Your stocks
-        ],
-        incremental=True,
-        include_funds=True,
-    ),
-)
-```
-
-Then ingest:
-
-```bash
-zipline ingest -b my-watchlist
-```
-
----
-
-## Daily Incremental Updates
-
-### How Incremental Updates Work
-
-When you run `zipline ingest -b sharadar` the second time:
-
-1. **Detection:** Checks the existing bundle database for the last ingestion date
-2. **Smart Download:** Downloads only data from `last_date + 1` to today
-3. **Merging:** Combines new data with existing historical data
-4. **Speed:** ~10-30 seconds instead of 10-20 minutes
-
-### Manual Daily Update
-
-**Recommended workflow** (run once per day after market close):
-
-```bash
-# Inside Docker container
-docker compose exec zipline-jupyter bash
-
-# Run incremental update
-zipline ingest -b sharadar
-
-# Expected output:
-# ============================================================
-# 🔄 INCREMENTAL UPDATE DETECTED
-# ============================================================
-# Last ingestion ended: 2025-11-03
-# Downloading new data from: 2025-11-04 to 2025-11-04
-# This will be much faster than a full download!
-# ============================================================
-#
-# Step 1/4: Downloading NEW Sharadar Equity Prices (incremental)...
-# Downloaded 8,234 equity price records for 8,234 tickers
-#
-# Step 2/4: Downloading NEW Sharadar Fund Prices (incremental)...
-# Downloaded 2,456 fund price records for 2,456 tickers
-#
-# Combined 10,690 total price records
-#
-# Step 3/4: Downloading NEW corporate actions (incremental)...
-# Downloaded 15 corporate action records
-#
-# Step 4/4: Processing data for zipline...
-# ✓ Sharadar bundle ingestion complete!
-```
-
-**Time required:** 10-30 seconds
-**Data downloaded:** ~50 MB (1 day)
-**When to run:** After 5:00 PM ET (market close + data processing)
-
-### Verify Update
-
-```bash
-# Check ingestion history
-zipline bundles
-
-# Output shows:
-# sharadar 2025-11-04 19:23:14.123456
-# sharadar 2025-11-03 19:15:42.789012
-# sharadar 2025-11-02 19:10:33.456789
-```
-
-The most recent timestamp is your latest ingestion.
-
----
-
-## Monitoring Your Data
-
-### Check Bundle Status
-
-```bash
-# List all bundles and ingestion dates
-zipline bundles
-
-# Output:
-# sharadar              2025-11-04 19:23:14.123456
-# sharadar-equities     <no ingestions>
-# sharadar-tech         2025-11-03 18:45:22.987654
-```
-
-### Check Data Coverage
-
-Create a script to verify your data range:
-
-```python
-# scripts/check_data_coverage.py
-from zipline.data import bundles
-import pandas as pd
-
-bundle_name = 'sharadar'
-bundle_data = bundles.load(bundle_name)
-
-# Get date range
-sessions = bundle_data.equity_daily_bar_reader.sessions
-print(f"\n{'='*60}")
-print(f"Bundle: {bundle_name}")
-print(f"{'='*60}")
-print(f"First date: {sessions[0].date()}")
-print(f"Last date:  {sessions[-1].date()}")
-print(f"Total trading days: {len(sessions):,}")
-
-# Get asset count
-asset_finder = bundle_data.asset_finder
-all_sids = asset_finder.sids
-print(f"Total assets: {len(all_sids):,}")
-
-# Get last 10 dates
-print(f"\nMost recent trading days:")
-for session in sessions[-10:]:
-    print(f"  {session.date()}")
-print(f"{'='*60}\n")
-```
-
-Run it:
-
-```bash
-docker compose exec zipline-jupyter python /app/scripts/check_data_coverage.py
-```
-
-### Check Specific Symbol
-
-```python
-# In Jupyter notebook
-from zipline.data import bundles
-
-bundle = bundles.load('sharadar')
-asset_finder = bundle.asset_finder
-
-# Look up a symbol
-aapl = asset_finder.lookup_symbol('AAPL', as_of_date=None)
-
-print(f"Symbol: {aapl.symbol}")
-print(f"Start date: {aapl.start_date.date()}")
-print(f"End date: {aapl.end_date.date()}")
-print(f"Exchange: {aapl.exchange}")
-```
-
-### Ingestion Logs
-
-Zipline saves ingestion logs to:
-
-```bash
-# View latest ingestion log
-docker compose exec zipline-jupyter bash
-ls -lt ~/.zipline/ingestions/
-
-# Read the log
-cat ~/.zipline/ingestions/sharadar_YYYYMMDD_HHMMSS.log
+register('my-stocks', sharadar_bundle(
+    tickers=['SPY', 'QQQ', 'AAPL', 'MSFT', 'TSLA'],
+    incremental=True,
+))
 ```
 
 ---
 
 ## Automation
 
-### Option 1: Cron Job (Linux/Mac)
-
-**On your host machine** (not in Docker), set up a daily cron job:
+### Cron Job (Recommended)
 
 ```bash
 # Edit crontab
 crontab -e
 
-# Add this line (runs daily at 6 PM)
-0 18 * * 1-5 cd /path/to/zipline-reloaded && docker compose exec -T zipline-jupyter zipline ingest -b sharadar >> /path/to/logs/sharadar_ingest.log 2>&1
+# Add line (runs Mon-Fri at 6 PM ET)
+0 18 * * 1-5 cd /path/to/zipline-reloaded && \
+    docker compose exec -T zipline-jupyter zipline ingest -b sharadar \
+    >> /var/log/sharadar-update.log 2>&1
 ```
 
-**Explanation:**
-- `0 18 * * 1-5` = 6:00 PM, Monday-Friday only
-- `-T` flag = disable pseudo-TTY for cron compatibility
-- `>> ... 2>&1` = append logs to file
-
-**View logs:**
-
-```bash
-tail -f /path/to/logs/sharadar_ingest.log
-```
-
-### Option 2: Shell Script
-
-Create a dedicated update script:
+### Update Script with Cleanup
 
 ```bash
 #!/bin/bash
-# scripts/update_sharadar_data.sh
+BUNDLE=${1:-sharadar}
+KEEP_LAST=${2:-2}
 
-# Configuration
-BUNDLE_NAME="sharadar"
-LOG_DIR="/path/to/zipline-reloaded/logs"
-LOG_FILE="${LOG_DIR}/sharadar_$(date +%Y%m%d_%H%M%S).log"
-
-# Create log directory if needed
-mkdir -p "$LOG_DIR"
-
-# Run ingestion
-echo "========================================" | tee -a "$LOG_FILE"
-echo "Sharadar Data Update - $(date)" | tee -a "$LOG_FILE"
-echo "========================================" | tee -a "$LOG_FILE"
-
-cd /path/to/zipline-reloaded
-
-docker compose exec -T zipline-jupyter zipline ingest -b "$BUNDLE_NAME" 2>&1 | tee -a "$LOG_FILE"
-
-EXIT_CODE=${PIPESTATUS[0]}
-
-if [ $EXIT_CODE -eq 0 ]; then
-    echo "✓ Update completed successfully" | tee -a "$LOG_FILE"
-else
-    echo "✗ Update failed with exit code: $EXIT_CODE" | tee -a "$LOG_FILE"
-    # Send email alert (optional)
-    # echo "Sharadar update failed" | mail -s "Zipline Alert" your@email.com
-fi
-
-echo "========================================" | tee -a "$LOG_FILE"
+docker exec zipline-reloaded-jupyter zipline ingest -b $BUNDLE
+docker exec zipline-reloaded-jupyter zipline clean -b $BUNDLE --keep-last $KEEP_LAST
 ```
-
-Make it executable:
-
-```bash
-chmod +x scripts/update_sharadar_data.sh
-
-# Test it
-./scripts/update_sharadar_data.sh
-```
-
-Then add to crontab:
-
-```bash
-0 18 * * 1-5 /path/to/zipline-reloaded/scripts/update_sharadar_data.sh
-```
-
-### Option 3: GitHub Actions (for remote updates)
-
-Create `.github/workflows/update-data.yml`:
-
-```yaml
-name: Update Sharadar Data
-
-on:
-  schedule:
-    # Run Monday-Friday at 6 PM ET (11 PM UTC)
-    - cron: '0 23 * * 1-5'
-  workflow_dispatch:  # Allow manual trigger
-
-jobs:
-  update-data:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Set up Docker
-        run: docker compose build
-
-      - name: Run data ingestion
-        env:
-          NASDAQ_DATA_LINK_API_KEY: ${{ secrets.NASDAQ_API_KEY }}
-        run: |
-          docker compose up -d zipline-jupyter
-          docker compose exec -T zipline-jupyter zipline ingest -b sharadar
-
-      - name: Archive bundle data
-        if: always()
-        run: |
-          # Optionally backup bundle data to S3, artifact, etc.
-          tar -czf sharadar-bundle.tar.gz -C ~/.zipline/data .
-```
-
-**Note:** Store your API key in GitHub Secrets (`Settings > Secrets > NASDAQ_API_KEY`)
 
 ---
 
 ## Troubleshooting
 
-### Problem: "No module named 'nasdaqdatalink'"
-
-**Cause:** Missing package in Docker image.
-
-**Fix:**
+### "API key required"
 
 ```bash
-# Rebuild Docker image (package should be included)
-docker compose build zipline-jupyter
-docker compose up -d
-```
-
-Verify `nasdaq-data-link` is in `Dockerfile`:
-
-```dockerfile
-RUN pip install --no-cache-dir nasdaq-data-link
-```
-
-### Problem: "NASDAQ Data Link API key required"
-
-**Cause:** API key not set or not accessible to container.
-
-**Fix:**
-
-```bash
-# Check if .env file exists
+# Check .env file
 cat .env
 
-# Should contain:
-NASDAQ_DATA_LINK_API_KEY=your-key-here
-
-# Restart container to load .env
-docker compose restart zipline-jupyter
-
-# Verify inside container
-docker compose exec zipline-jupyter bash
-echo $NASDAQ_DATA_LINK_API_KEY
+# If missing
+echo 'NASDAQ_DATA_LINK_API_KEY=your-key' > .env
+docker compose restart
 ```
 
-### Problem: "Out of memory" during ingestion
+### "Out of memory"
 
-**Cause:** Insufficient RAM for processing 60M+ records.
+Increase Docker memory to **16 GB** for initial ingestion (Docker Desktop → Settings → Resources).
 
-**Solutions:**
+For incremental updates, **4 GB** is sufficient.
 
-**1. Increase Docker memory:**
-- Docker Desktop → Settings → Resources → Memory
-- Set to **16 GB** for full download
-- Set to **8 GB** minimum for incremental updates
+### "No data for today"
 
-**2. Use smaller ticker list:**
+Wait 1-2 hours after market close (safe after 6 PM ET).
 
-```python
-# Edit ~/.zipline/extension.py
-register(
-    'sharadar-small',
-    sharadar_bundle(
-        tickers=['SPY', 'QQQ', 'AAPL', 'MSFT'],  # Just a few tickers
-        incremental=True,
-    ),
-)
-```
-
-**3. Use chunked download:**
-
-```python
-register(
-    'sharadar',
-    sharadar_bundle(
-        use_chunks=True,  # Download in 5-year chunks
-        incremental=True,
-    ),
-)
-```
-
-### Problem: Incremental update not working (full download every time)
-
-**Cause:** Bundle database not found or corrupted.
-
-**Fix:**
+### Emergency: Disk Space Full
 
 ```bash
-# Check existing ingestions
-zipline bundles
-
-# If shows ingestions but still downloads full data, clean and reingest
-zipline clean -b sharadar --keep-last 1
-zipline ingest -b sharadar
-```
-
-### Problem: "Bulk export not ready after X hours"
-
-**Cause:** NASDAQ servers take very long to prepare full historical export (1998-present).
-
-**Solutions:**
-
-1. **Wait and retry** - File might be ready now
-2. **Download smaller date range first:**
-
-```python
-register(
-    'sharadar-recent',
-    sharadar_bundle(
-        start_date='2020-01-01',  # Last 5 years only
-        incremental=True,
-    ),
-)
-```
-
-3. **Contact NASDAQ support** if persistent
-
-### Problem: "Invalid subscription" or "No data returned"
-
-**Cause:** Your NASDAQ account doesn't have Sharadar access.
-
-**Fix:**
-
-1. Verify subscription at: https://data.nasdaq.com/databases/SFA
-2. Ensure subscription is **active** (not expired)
-3. Test API key manually:
-
-```python
-import nasdaqdatalink
-nasdaqdatalink.ApiConfig.api_key = 'your-key'
-data = nasdaqdatalink.get_table('SHARADAR/SEP', ticker='AAPL', paginate=True)
-print(data.head())
-```
-
-### Problem: Data seems stale or missing recent days
-
-**Cause:** Sharadar data has a processing delay.
-
-**Expected behavior:**
-- Market closes: 4:00 PM ET
-- Data available: ~5:00 PM ET (T+0 typically)
-- Run ingestion after: 6:00 PM ET to be safe
-
-**Fix:**
-
-```bash
-# Check what date range was actually downloaded
-zipline bundles
-
-# Re-run ingestion if needed
-zipline ingest -b sharadar
+# Aggressive cleanup - keep only latest
+docker exec zipline-reloaded-jupyter zipline clean -b sharadar --keep-last 1
 ```
 
 ---
 
-## Advanced Usage
+## Resource Requirements
 
-### Multiple Bundles for Different Strategies
-
-You can maintain separate bundles for different use cases:
-
-```python
-# ~/.zipline/extension.py
-
-# Full dataset for production
-register('sharadar-prod', sharadar_bundle(
-    incremental=True,
-    include_funds=True,
-))
-
-# Equities only for stock strategies
-register('sharadar-stocks', sharadar_bundle(
-    incremental=True,
-    include_funds=False,
-))
-
-# Tech sector for sector rotation
-register('sharadar-tech', sharadar_bundle(
-    tickers=['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'NVDA'],
-    incremental=True,
-))
-
-# ETFs only for portfolio allocation
-register('sharadar-etfs', sharadar_bundle(
-    tickers=['SPY', 'QQQ', 'IWM', 'TLT', 'GLD', 'USO'],
-    incremental=True,
-))
-```
-
-Update each one:
-
-```bash
-zipline ingest -b sharadar-prod
-zipline ingest -b sharadar-stocks
-zipline ingest -b sharadar-tech
-zipline ingest -b sharadar-etfs
-```
-
-### Force Full Re-download
-
-To force a complete re-download (not incremental):
-
-**Option 1: Clean and reingest**
-
-```bash
-# Remove all previous ingestions
-zipline clean -b sharadar
-
-# Fresh download
-zipline ingest -b sharadar
-```
-
-**Option 2: Create non-incremental bundle**
-
-```python
-# Temporary bundle for full refresh
-register('sharadar-full-refresh', sharadar_bundle(
-    incremental=False,  # Disable incremental
-))
-```
-
-```bash
-zipline ingest -b sharadar-full-refresh
-```
-
-### Keep Last N Ingestions
-
-To save disk space, keep only recent ingestions:
-
-```bash
-# Keep last 7 days (delete older)
-zipline clean -b sharadar --keep-last 7
-
-# Keep only the latest
-zipline clean -b sharadar --keep-last 1
-
-# Remove specific ingestion by timestamp
-zipline clean -b sharadar --before 2025-10-01
-```
-
-### Backup Your Bundle Data
-
-Bundle data is stored at `~/.zipline/data/`:
-
-```bash
-# Backup to tar.gz
-tar -czf sharadar-bundle-$(date +%Y%m%d).tar.gz \
-    -C ~/.zipline/data .
-
-# Restore from backup
-mkdir -p ~/.zipline/data
-tar -xzf sharadar-bundle-20251104.tar.gz -C ~/.zipline/data/
-```
-
-**For Docker:**
-
-```bash
-# Backup Docker volume
-docker run --rm \
-    -v zipline-reloaded_zipline-data:/data \
-    -v $(pwd):/backup \
-    ubuntu tar -czf /backup/zipline-data-backup.tar.gz -C /data .
-
-# Restore Docker volume
-docker run --rm \
-    -v zipline-reloaded_zipline-data:/data \
-    -v $(pwd):/backup \
-    ubuntu tar -xzf /backup/zipline-data-backup.tar.gz -C /data
-```
-
-### Custom Date Ranges
-
-Download specific date ranges:
-
-```python
-# Last year only
-register('sharadar-2024', sharadar_bundle(
-    start_date='2024-01-01',
-    end_date='2024-12-31',
-    incremental=False,
-))
-
-# Financial crisis period
-register('sharadar-crisis', sharadar_bundle(
-    start_date='2007-01-01',
-    end_date='2009-12-31',
-    incremental=False,
-))
-```
+| Operation | Time | Storage | RAM |
+|-----------|------|---------|-----|
+| **Initial download** | 60-90 min | 10-15 GB | 16 GB |
+| **Daily update** | 2-5 min | +50-100 MB | 4 GB |
+| **Tech bundle** | 30 sec | 50 MB | 2 GB |
 
 ---
 
-## Command Reference
-
-### Bundle Management
+## Quick Command Reference
 
 ```bash
-# List all registered bundles
+# List bundles and ingestion dates
 zipline bundles
 
-# Ingest a bundle
-zipline ingest -b <bundle-name>
+# Ingest/update data
+zipline ingest -b sharadar
 
-# Ingest with verbose output
-zipline ingest -b <bundle-name> --show-progress
+# Clean old ingestions (keep last 2)
+zipline clean -b sharadar --keep-last 2
 
-# Clean old ingestions (keep last N)
-zipline clean -b <bundle-name> --keep-last <N>
-
-# Clean old ingestions (before date)
-zipline clean -b <bundle-name> --before YYYY-MM-DD
-
-# Remove all ingestions for a bundle
-zipline clean -b <bundle-name>
-```
-
-### Docker Commands
-
-```bash
-# Enter container
-docker compose exec zipline-jupyter bash
-
-# Run command in container (from host)
-docker compose exec -T zipline-jupyter <command>
-
-# View container logs
-docker compose logs zipline-jupyter
-
-# Restart container
-docker compose restart zipline-jupyter
-
-# Rebuild image
-docker compose build zipline-jupyter
-```
-
-### Data Inspection
-
-```python
-# In Python/Jupyter
-from zipline.data import bundles
-
-# Load bundle
-bundle = bundles.load('sharadar')
-
-# Get asset finder
-finder = bundle.asset_finder
-
-# Look up symbol
-asset = finder.lookup_symbol('AAPL', as_of_date=None)
-print(f"SID: {asset.sid}")
-print(f"Range: {asset.start_date} to {asset.end_date}")
-
-# Get daily bar reader
-reader = bundle.equity_daily_bar_reader
-
-# Get sessions
-sessions = reader.sessions
-print(f"First: {sessions[0]}")
-print(f"Last: {sessions[-1]}")
+# Check disk usage
+du -sh /root/.zipline/data/sharadar
 ```
 
 ---
 
 ## Best Practices
 
-### 1. Daily Update Schedule
-
-**Recommended timing:**
-- ✅ After **6:00 PM ET** (market close + data processing)
-- ✅ **Monday-Friday** only (skip weekends/holidays)
-- ✅ Use **incremental mode** for speed
-
-### 2. Monitoring
-
-**Check weekly:**
-- Last ingestion date matches recent trading day
-- Data coverage is continuous (no gaps)
-- Log files for any errors
-
-**Alerts to set up:**
-- Email notification if ingestion fails
-- Slack/Discord webhook for completion status
-- Disk space monitoring (keep 20+ GB free)
-
-### 3. Backup Strategy
-
-**Daily:** Keep last 7 ingestions
-```bash
-zipline clean -b sharadar --keep-last 7
-```
-
-**Weekly:** Backup to external storage
-```bash
-tar -czf sharadar-weekly-$(date +%Y%m%d).tar.gz ~/.zipline/data/
-```
-
-**Monthly:** Archive to S3/cloud storage
-
-### 4. Resource Management
-
-**Memory:**
-- Full download: 16 GB RAM
-- Incremental update: 4 GB RAM
-- Adjust Docker Desktop settings accordingly
-
-**Disk:**
-- Reserve **20 GB** for bundle data
-- Monitor with `df -h`
-- Clean old ingestions regularly
-
-### 5. Testing
-
-Before relying on automation:
-
-```bash
-# Test manual update
-zipline ingest -b sharadar
-
-# Verify data
-python scripts/check_data_coverage.py
-
-# Test backtest with latest data
-python examples/simple_flightlog_demo.py
-```
+1. **Start small**: Test with tech bundle before full ingestion
+2. **Run daily updates**: Keeps ingestion fast (2-5 minutes)
+3. **Use Docker volumes**: Persist data between container restarts
+4. **Monitor disk space**: Clean old ingestions regularly
+5. **Backup bundles**: Before major changes
+6. **Keep multiple ingestions**: At least 2 for rollback
 
 ---
 
-## Summary
+## Related Documentation
 
-**For daily incremental updates:**
-
-```bash
-# 1. One-time setup
-echo 'NASDAQ_DATA_LINK_API_KEY=your-key' > .env
-
-# 2. Initial download (once)
-docker compose exec zipline-jupyter zipline ingest -b sharadar
-
-# 3. Daily update (automated)
-0 18 * * 1-5 cd /path/to/zipline-reloaded && \
-    docker compose exec -T zipline-jupyter zipline ingest -b sharadar
-```
-
-**Key points:**
-- ✅ First download: 10-20 minutes, ~10 GB
-- ✅ Daily updates: 10-30 seconds, ~50 MB
-- ✅ Automatic incremental detection
-- ✅ Run after market close (6 PM ET)
-- ✅ Monitor logs for errors
-- ✅ Backup weekly
-
----
-
-## Getting Help
-
-**Issues with Sharadar data:**
-- NASDAQ Data Link Support: https://data.nasdaq.com/contact
-- Sharadar Forums: https://data.nasdaq.com/databases/SFA/documentation
-
-**Issues with Zipline bundle:**
-- Zipline Docs: https://zipline.ml4trading.io
-- Community: https://exchange.ml4trading.io
-- GitHub Issues: https://github.com/stefan-jansen/zipline-reloaded/issues
-
-**Check bundle logs:**
-```bash
-ls -lt ~/.zipline/ingestions/
-cat ~/.zipline/ingestions/sharadar_*.log
-```
+- [QUICK_START_DATA.md](./QUICK_START_DATA.md) - 5-minute setup
+- [SHARADAR_FUNDAMENTALS_GUIDE.md](./SHARADAR_FUNDAMENTALS_GUIDE.md) - Using fundamentals
+- [MULTI_SOURCE_DATA.md](./MULTI_SOURCE_DATA.md) - Combining data sources

@@ -386,7 +386,7 @@
                 <div class="nav-section-title">Getting Started</div>
                 <a href="#overview" class="nav-item">Overview</a>
                 <a href="#quick-start" class="nav-item">Quick Start</a>
-                <a href="#installation" class="nav-item">Installation</a>
+                <a href="#installation" class="nav-item">Installation Guide</a>
             </div>
 
             <div class="nav-section">
@@ -451,26 +451,58 @@
             <!-- Overview -->
             <section id="overview" class="section">
                 <h1>Zipline-Reloaded Documentation</h1>
-                <p>Complete guide for using Zipline-Reloaded with Sharadar data, multi-source fundamentals, FlightLog monitoring, and backtesting.</p>
 
+                <div class="callout callout-info">
+                    <strong>What is Zipline-Reloaded?</strong>
+                    <p style="margin-bottom: 0;">A professional-grade algorithmic trading backtesting platform built on the original Quantopian Zipline framework. This enhanced version provides institutional-quality data integration, multi-source fundamental analysis, and real-time monitoring capabilities for developing and testing quantitative trading strategies.</p>
+                </div>
+
+                <h3>Purpose & Capabilities</h3>
+                <p>Zipline-Reloaded is designed for quantitative researchers, algorithmic traders, and data scientists who need a robust, production-ready backtesting environment. It provides:</p>
+                <ul>
+                    <li><strong>Institutional-Grade Data</strong>: Integration with Sharadar's point-in-time accurate fundamental data covering 8,000+ US equities since 1998</li>
+                    <li><strong>Alternative Data Integration</strong>: Native support for LSEG (Refinitiv), custom databases, and third-party data sources through a unified Pipeline API</li>
+                    <li><strong>Factor-Based Screening</strong>: Powerful Pipeline system for creating complex multi-factor screens combining price, fundamental, and alternative data</li>
+                    <li><strong>Real-Time Monitoring</strong>: FlightLog streaming system for live backtest progress and debugging</li>
+                    <li><strong>Dockerized Environment</strong>: Fully containerized setup ensuring reproducible results across different machines</li>
+                </ul>
+
+                <h3>Key Features</h3>
                 <div class="feature-grid">
                     <div class="feature-card">
-                        <h4>📊 Sharadar Data</h4>
-                        <p>Premium institutional-grade market data with point-in-time accuracy and 150+ fundamental metrics.</p>
+                        <h4>Sharadar Fundamentals</h4>
+                        <p>150+ fundamental metrics with point-in-time accuracy. Income statements, balance sheets, cash flows, and valuation ratios - all properly aligned to avoid look-ahead bias.</p>
                     </div>
                     <div class="feature-card">
-                        <h4>🔄 Incremental Updates</h4>
-                        <p>Daily updates in 30 seconds instead of re-downloading everything.</p>
+                        <h4>LSEG & Alternative Data</h4>
+                        <p>Integrate LSEG (Refinitiv) smart estimates, alpha models, and custom alternative data sources. Combine multiple data providers in a single trading strategy.</p>
                     </div>
                     <div class="feature-card">
-                        <h4>📡 FlightLog</h4>
-                        <p>Real-time log streaming with color-coded levels and progress monitoring.</p>
+                        <h4>Multi-Source Pipelines</h4>
+                        <p>Unified API for combining Sharadar fundamentals with LSEG analytics, custom databases, and proprietary signals. AutoLoader handles routing automatically.</p>
                     </div>
                     <div class="feature-card">
-                        <h4>🔗 Multi-Source</h4>
-                        <p>Combine Sharadar with custom databases (LSEG, etc.) in a single pipeline.</p>
+                        <h4>Incremental Updates</h4>
+                        <p>Daily data updates in 30 seconds instead of re-downloading everything. Smart incremental ingestion saves time and bandwidth.</p>
+                    </div>
+                    <div class="feature-card">
+                        <h4>FlightLog Monitoring</h4>
+                        <p>Real-time log streaming with color-coded levels, progress bars, and portfolio metrics. Monitor long-running backtests in a separate terminal.</p>
+                    </div>
+                    <div class="feature-card">
+                        <h4>Symbol Mapping</h4>
+                        <p>Automatic handling of ticker changes (FB→META, GOOG→GOOGL) with temporal SID mapping. Maintains data continuity across corporate actions.</p>
                     </div>
                 </div>
+
+                <h3>Who Should Use This?</h3>
+                <ul>
+                    <li><strong>Quantitative Researchers</strong>: Testing factor-based investment strategies with institutional data</li>
+                    <li><strong>Algorithmic Traders</strong>: Developing and validating systematic trading signals</li>
+                    <li><strong>Data Scientists</strong>: Exploring financial data with Python's scientific stack</li>
+                    <li><strong>Portfolio Managers</strong>: Backtesting portfolio construction methodologies</li>
+                    <li><strong>Students & Academics</strong>: Learning quantitative finance with professional tools</li>
+                </ul>
             </section>
 
             <!-- Quick Start -->
@@ -507,26 +539,286 @@ docker compose exec zipline-jupyter zipline ingest -b sharadar</code></pre>
 
             <!-- Installation -->
             <section id="installation" class="section">
-                <h2>Installation</h2>
-                
-                <h3>Prerequisites</h3>
-                <ul>
-                    <li>Docker and Docker Compose</li>
-                    <li>NASDAQ Data Link API key (Sharadar subscription)</li>
-                    <li>16 GB RAM (for initial ingestion)</li>
-                    <li>20 GB free disk space</li>
-                </ul>
+                <h2>Installation & Setup Guide <span class="badge badge-time">30 min</span></h2>
+                <p>Complete step-by-step guide to set up Zipline-Reloaded on a new machine from scratch.</p>
 
-                <h3>Clone and Setup</h3>
-                <pre><code>git clone https://github.com/ksokhanvari/zipline-reloaded.git
+                <h3>System Requirements</h3>
+                <table>
+                    <tr>
+                        <th>Requirement</th>
+                        <th>Minimum</th>
+                        <th>Recommended</th>
+                    </tr>
+                    <tr>
+                        <td>Operating System</td>
+                        <td>macOS 10.15+, Ubuntu 20.04+, Windows 10+</td>
+                        <td>macOS 12+ or Ubuntu 22.04</td>
+                    </tr>
+                    <tr>
+                        <td>RAM</td>
+                        <td>8 GB</td>
+                        <td>16 GB or more</td>
+                    </tr>
+                    <tr>
+                        <td>Disk Space</td>
+                        <td>20 GB free</td>
+                        <td>50 GB free</td>
+                    </tr>
+                    <tr>
+                        <td>CPU</td>
+                        <td>4 cores</td>
+                        <td>8+ cores</td>
+                    </tr>
+                </table>
+
+                <h3>Step 1: Install Required Software</h3>
+
+                <h4>macOS</h4>
+                <pre><code># Install Homebrew (if not already installed)
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# Install Git
+brew install git
+
+# Install Docker Desktop
+brew install --cask docker
+
+# Launch Docker Desktop
+open -a Docker
+
+# Wait for Docker to start (check menu bar for whale icon)
+# Then verify installation
+docker --version
+docker compose version</code></pre>
+
+                <h4>Ubuntu/Debian Linux</h4>
+                <pre><code># Update package index
+sudo apt update
+
+# Install Git
+sudo apt install -y git
+
+# Install Docker
+sudo apt install -y docker.io docker-compose-v2
+
+# Add user to docker group (avoid sudo for docker commands)
+sudo usermod -aG docker $USER
+
+# Apply group changes (or logout/login)
+newgrp docker
+
+# Start Docker service
+sudo systemctl start docker
+sudo systemctl enable docker
+
+# Verify installation
+docker --version
+docker compose version</code></pre>
+
+                <h4>Windows</h4>
+                <pre><code># Install Git for Windows
+# Download from: https://git-scm.com/download/win
+# Run installer with default options
+
+# Install Docker Desktop for Windows
+# Download from: https://www.docker.com/products/docker-desktop
+# Run installer, enable WSL 2 when prompted
+
+# Restart computer after installation
+
+# Open PowerShell and verify
+docker --version
+docker compose version</code></pre>
+
+                <h3>Step 2: Enable Docker BuildKit</h3>
+                <p>BuildKit provides faster builds with better caching. Add to your shell configuration:</p>
+
+                <h4>macOS/Linux (bash/zsh)</h4>
+                <pre><code># Add to ~/.zshrc (macOS) or ~/.bashrc (Linux)
+echo 'export DOCKER_BUILDKIT=1' >> ~/.zshrc
+echo 'export COMPOSE_DOCKER_CLI_BUILD=1' >> ~/.zshrc
+
+# Reload shell config
+source ~/.zshrc</code></pre>
+
+                <h4>Windows (PowerShell)</h4>
+                <pre><code># Set environment variables
+[Environment]::SetEnvironmentVariable("DOCKER_BUILDKIT", "1", "User")
+[Environment]::SetEnvironmentVariable("COMPOSE_DOCKER_CLI_BUILD", "1", "User")
+
+# Restart PowerShell to apply changes</code></pre>
+
+                <h3>Step 3: Clone the Repository</h3>
+                <pre><code># Clone the repository
+git clone https://github.com/ksokhanvari/zipline-reloaded.git
+
+# Navigate to project directory
 cd zipline-reloaded
 
-# Configure API key
-echo 'NASDAQ_DATA_LINK_API_KEY=your-key' > .env
+# Verify you're in the right directory
+ls -la</code></pre>
 
-# Build and start
+                <h3>Step 4: Configure API Keys</h3>
+                <p>You need a NASDAQ Data Link API key to download Sharadar data.</p>
+
+                <h4>Get Your API Key</h4>
+                <ol>
+                    <li>Go to <a href="https://data.nasdaq.com/sign-up">data.nasdaq.com/sign-up</a> and create an account</li>
+                    <li>Subscribe to Sharadar Core US Fundamentals: <a href="https://data.nasdaq.com/databases/SFA">data.nasdaq.com/databases/SFA</a></li>
+                    <li>Go to Account Settings → API Key and copy your key</li>
+                </ol>
+
+                <h4>Create Environment File</h4>
+                <pre><code># Create .env file with your API key
+echo 'NASDAQ_DATA_LINK_API_KEY=your-api-key-here' > .env
+
+# Verify the file was created
+cat .env</code></pre>
+
+                <div class="callout callout-warning">
+                    <strong>Important:</strong> Never commit your .env file to git. It's already in .gitignore.
+                </div>
+
+                <h3>Step 5: Build Docker Image</h3>
+                <pre><code># Build the Docker image (takes 15-20 minutes first time)
 docker compose build
-docker compose up -d</code></pre>
+
+# Watch for any errors during build
+# If successful, you'll see "Successfully built" message</code></pre>
+
+                <div class="callout callout-info">
+                    <strong>Build Times:</strong>
+                    <ul style="margin-bottom: 0;">
+                        <li>First build: 15-20 minutes (downloads all dependencies)</li>
+                        <li>Subsequent builds: 2-5 minutes (uses cache)</li>
+                    </ul>
+                </div>
+
+                <h3>Step 6: Start the Containers</h3>
+                <pre><code># Start all services in background
+docker compose up -d
+
+# Verify containers are running
+docker compose ps
+
+# You should see:
+# - zipline-reloaded-jupyter (Jupyter notebook server)
+# - Other services as configured</code></pre>
+
+                <h3>Step 7: Download Market Data</h3>
+                <pre><code># Initial data download (takes 10-20 minutes)
+docker compose exec zipline-jupyter zipline ingest -b sharadar
+
+# This downloads:
+# - Price data for 8,000+ US equities
+# - 150+ fundamental metrics from 1998 to today
+# - Corporate actions and splits data</code></pre>
+
+                <h3>Step 8: Verify Installation</h3>
+                <pre><code># Check that data bundle was created
+docker compose exec zipline-jupyter zipline bundles
+
+# You should see output like:
+# sharadar 2024-XX-XX XX:XX:XX.XXXXXX</code></pre>
+
+                <h3>Step 9: Access Jupyter Notebook</h3>
+                <pre><code># Get Jupyter URL with token
+docker compose logs zipline-jupyter | grep "http://127.0.0.1:8888"
+
+# Open the URL in your browser
+# Default: http://localhost:8888</code></pre>
+
+                <h3>Step 10: Run Your First Backtest</h3>
+                <p>Open a new notebook in Jupyter and run:</p>
+                <pre><code>import pandas as pd
+from zipline import run_algorithm
+from zipline.api import order_target_percent, symbol
+
+def initialize(context):
+    context.stock = symbol('AAPL')
+
+def handle_data(context, data):
+    if data.can_trade(context.stock):
+        order_target_percent(context.stock, 1.0)
+
+results = run_algorithm(
+    start=pd.Timestamp('2020-01-01', tz='UTC'),
+    end=pd.Timestamp('2021-01-01', tz='UTC'),
+    initialize=initialize,
+    handle_data=handle_data,
+    capital_base=10000,
+    bundle='sharadar',
+)
+
+print(f"Total Return: {results['algorithm_period_return'].iloc[-1]*100:.2f}%")</code></pre>
+
+                <h3>Common Docker Commands</h3>
+                <table>
+                    <tr>
+                        <th>Command</th>
+                        <th>Description</th>
+                    </tr>
+                    <tr>
+                        <td><code>docker compose up -d</code></td>
+                        <td>Start all services in background</td>
+                    </tr>
+                    <tr>
+                        <td><code>docker compose down</code></td>
+                        <td>Stop all services</td>
+                    </tr>
+                    <tr>
+                        <td><code>docker compose ps</code></td>
+                        <td>List running containers</td>
+                    </tr>
+                    <tr>
+                        <td><code>docker compose logs -f</code></td>
+                        <td>View logs (follow mode)</td>
+                    </tr>
+                    <tr>
+                        <td><code>docker compose restart</code></td>
+                        <td>Restart all services</td>
+                    </tr>
+                    <tr>
+                        <td><code>docker compose build --no-cache</code></td>
+                        <td>Rebuild without cache</td>
+                    </tr>
+                    <tr>
+                        <td><code>docker compose exec zipline-jupyter bash</code></td>
+                        <td>Enter container shell</td>
+                    </tr>
+                </table>
+
+                <h3>Troubleshooting Installation</h3>
+
+                <h4>Docker Not Starting (macOS)</h4>
+                <pre><code># Reset Docker to factory defaults
+# Docker Desktop → Troubleshoot → Reset to factory defaults
+
+# Or restart Docker service
+killall Docker && open -a Docker</code></pre>
+
+                <h4>Permission Denied (Linux)</h4>
+                <pre><code># Add user to docker group
+sudo usermod -aG docker $USER
+
+# Log out and back in, or run:
+newgrp docker</code></pre>
+
+                <h4>Build Fails with Memory Error</h4>
+                <pre><code># Increase Docker memory allocation
+# Docker Desktop → Settings → Resources → Memory → Set to 8GB+
+
+# Or try building with less parallelism
+DOCKER_BUILDKIT=0 docker compose build</code></pre>
+
+                <h4>Port Already in Use</h4>
+                <pre><code># Find process using port 8888
+lsof -i :8888
+
+# Kill the process
+kill -9 &lt;PID&gt;
+
+# Or change port in docker-compose.yml</code></pre>
             </section>
 
             <!-- Data Setup -->

@@ -57,7 +57,7 @@ REQUIREMENTS
 OUTPUT
 ======
 - Console: Backtest statistics and rebalance logs
-- Files: Results saved to /notebooks/backtest_results.{csv,pkl}
+- Files: Results saved to /data/backtest_results/backtest_results.{csv,pkl}
 
 CUSTOMIZATION
 =============

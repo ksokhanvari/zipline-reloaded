@@ -823,41 +823,51 @@ kill -9 &lt;PID&gt;
 
             <!-- Data Setup -->
             <section id="data-setup" class="section">
-                <h2>Initial Data Setup</h2>
+                <h2>Sharadar Data Specifications</h2>
 
-                <h3>Why Sharadar?</h3>
+                <h3>Data Coverage</h3>
                 <table>
                     <tr>
-                        <th>Feature</th>
-                        <th>Sharadar</th>
-                        <th>Yahoo Finance</th>
+                        <th>Specification</th>
+                        <th>Details</th>
                     </tr>
                     <tr>
-                        <td>Data Quality</td>
-                        <td>Institutional-grade</td>
-                        <td>Good</td>
-                    </tr>
-                    <tr>
-                        <td>Point-in-Time</td>
-                        <td>Yes</td>
-                        <td>No</td>
-                    </tr>
-                    <tr>
-                        <td>Corporate Actions</td>
-                        <td>Comprehensive</td>
-                        <td>Basic</td>
+                        <td>Universe</td>
+                        <td>8,000+ US equities (NYSE, NASDAQ, AMEX)</td>
                     </tr>
                     <tr>
                         <td>Historical Depth</td>
-                        <td>Complete (1998+)</td>
-                        <td>~20 years</td>
+                        <td>1998 to present</td>
                     </tr>
                     <tr>
-                        <td>Cost</td>
-                        <td>Paid subscription</td>
-                        <td>Free</td>
+                        <td>Price Data</td>
+                        <td>Daily OHLCV, adjusted for splits and dividends</td>
+                    </tr>
+                    <tr>
+                        <td>Fundamental Metrics</td>
+                        <td>150+ metrics (income, balance sheet, cash flow, ratios)</td>
+                    </tr>
+                    <tr>
+                        <td>Point-in-Time</td>
+                        <td>Yes - uses filing dates to prevent look-ahead bias</td>
+                    </tr>
+                    <tr>
+                        <td>Corporate Actions</td>
+                        <td>Splits, dividends, mergers, spin-offs</td>
+                    </tr>
+                    <tr>
+                        <td>Update Frequency</td>
+                        <td>Daily (after market close)</td>
+                    </tr>
+                    <tr>
+                        <td>Storage Size</td>
+                        <td>~10 GB per ingestion</td>
                     </tr>
                 </table>
+
+                <div class="callout callout-info">
+                    <strong>Complete Column Reference:</strong> For a full list of all 66+ available Sharadar fundamental columns with descriptions, see the <a href="#sharadar-columns">Sharadar SF1 Columns</a> section in the Data Reference.
+                </div>
 
                 <h3>Verify Data</h3>
                 <pre><code># Check ingestion status
@@ -1026,7 +1036,8 @@ pipeline = Pipeline(
 
             <!-- Available Metrics -->
             <section id="available-metrics" class="section">
-                <h2>Available Metrics</h2>
+                <h2>Available Metrics (Sample)</h2>
+                <p>Here are some commonly used metrics. For the complete list of all 66+ available columns, see the <a href="#sharadar-columns">Sharadar SF1 Columns</a> reference.</p>
 
                 <h3>Income Statement</h3>
                 <table>

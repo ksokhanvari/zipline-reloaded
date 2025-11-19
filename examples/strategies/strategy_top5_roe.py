@@ -118,7 +118,7 @@ DB_DIR = Path('/root/.zipline/data/custom')
 BUNDLE_NAME = 'sharadar'
 
 # Output Configuration
-RESULTS_DIR = Path('/notebooks')
+RESULTS_DIR = Path('/app/examples/strategies')
 SAVE_CSV = True
 SAVE_PICKLE = True
 SAVE_METADATA = True

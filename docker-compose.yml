@@ -7,16 +7,10 @@ services:
     ports:
       - "${JUPYTER_PORT:-9000}:8888"  # Jupyter Lab (host:container)
     volumes:
-      # Mount notebooks directory
-      - ./notebooks:/notebooks
-      # Mount data directory for persistence
+      # Mount data directory for persistence (ONLY data persists)
       - ./data:/data
       # Mount zipline data (bundles stored here - persistent across restarts)
       - zipline-data:/root/.zipline
-      # Mount scripts directory for management tools
-      - ./scripts:/scripts
-      # Mount examples directory
-      - ./examples:/app/examples
       # Mount pip cache for faster rebuilds
       - pip-cache:/root/.cache/pip
     environment:
@@ -48,8 +42,6 @@ services:
     volumes:
       # Mount logs directory for persistent log files
       - ./logs:/logs
-      # Mount scripts for flightlog.py
-      - ./scripts:/app/scripts
     environment:
       - PYTHONUNBUFFERED=1
     networks:

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Zipline-Reloaded Documentation</title>
+    <title>Hidden Point Capital - Zipline-Reloaded Documentation</title>
     <style>
         :root {
             --bg-primary: #1a1b26;
@@ -378,8 +378,8 @@
         <!-- Sidebar Navigation -->
         <nav class="sidebar">
             <div class="sidebar-header">
-                <h1>Zipline-Reloaded</h1>
-                <p>Documentation v1.0</p>
+                <h1>Hidden Point Capital</h1>
+                <p>Zipline-Reloaded v1.0</p>
             </div>
 
             <div class="nav-section">
@@ -398,10 +398,12 @@
             </div>
 
             <div class="nav-section">
-                <div class="nav-section-title">Fundamentals</div>
-                <a href="#sharadar-fundamentals" class="nav-item">Sharadar Fundamentals</a>
+                <div class="nav-section-title">Fundamental Data</div>
+                <a href="#sharadar-fundamentals" class="nav-item">Sharadar Overview</a>
+                <a href="#sharadar-columns" class="nav-item nav-subitem">Sharadar Columns</a>
                 <a href="#pipeline-usage" class="nav-item">Pipeline Usage</a>
-                <a href="#available-metrics" class="nav-item">Available Metrics</a>
+                <a href="#lseg-fundamentals" class="nav-item">LSEG Data</a>
+                <a href="#lseg-columns" class="nav-item nav-subitem">LSEG Columns</a>
             </div>
 
             <div class="nav-section">
@@ -433,13 +435,6 @@
             </div>
 
             <div class="nav-section">
-                <div class="nav-section-title">Data Reference</div>
-                <a href="#fundamental-data-reference" class="nav-item">Fundamental Data</a>
-                <a href="#sharadar-columns" class="nav-item nav-subitem">Sharadar SF1</a>
-                <a href="#lseg-columns" class="nav-item nav-subitem">LSEG Custom</a>
-            </div>
-
-            <div class="nav-section">
                 <div class="nav-section-title">Reference</div>
                 <a href="#command-reference" class="nav-item">Command Reference</a>
                 <a href="#resource-requirements" class="nav-item">Resources</a>
@@ -450,7 +445,7 @@
         <main class="main-content">
             <!-- Overview -->
             <section id="overview" class="section">
-                <h1>Zipline-Reloaded Documentation</h1>
+                <h1>Hidden Point Capital - Zipline-Reloaded</h1>
 
                 <div class="callout callout-info">
                     <strong>What is Zipline-Reloaded?</strong>
@@ -497,11 +492,10 @@
 
                 <h3>Who Should Use This?</h3>
                 <ul>
-                    <li><strong>Quantitative Researchers</strong>: Testing factor-based investment strategies with institutional data</li>
-                    <li><strong>Algorithmic Traders</strong>: Developing and validating systematic trading signals</li>
-                    <li><strong>Data Scientists</strong>: Exploring financial data with Python's scientific stack</li>
-                    <li><strong>Portfolio Managers</strong>: Backtesting portfolio construction methodologies</li>
-                    <li><strong>Students & Academics</strong>: Learning quantitative finance with professional tools</li>
+                    <li><strong>Institutional Quantitative Traders</strong>: Professional trading desks requiring production-grade backtesting with institutional data</li>
+                    <li><strong>Quantitative Researchers</strong>: Testing factor-based investment strategies with point-in-time accurate fundamentals</li>
+                    <li><strong>Portfolio Managers</strong>: Backtesting portfolio construction and risk management methodologies</li>
+                    <li><strong>Hedge Fund Analysts</strong>: Developing and validating systematic alpha signals across multiple data sources</li>
                 </ul>
             </section>
 
@@ -556,13 +550,13 @@ docker compose exec zipline-jupyter zipline ingest -b sharadar</code></pre>
                     </tr>
                     <tr>
                         <td>RAM</td>
-                        <td>8 GB</td>
-                        <td>16 GB or more</td>
+                        <td>16 GB</td>
+                        <td>64 GB</td>
                     </tr>
                     <tr>
                         <td>Disk Space</td>
-                        <td>20 GB free</td>
                         <td>50 GB free</td>
+                        <td>100 GB free</td>
                     </tr>
                     <tr>
                         <td>CPU</td>
@@ -978,7 +972,7 @@ register('my-stocks', sharadar_bundle(
 
             <!-- Sharadar Fundamentals -->
             <section id="sharadar-fundamentals" class="section">
-                <h2>Sharadar Fundamentals <span class="badge badge-time">20 min</span></h2>
+                <h2>Sharadar Fundamentals</h2>
 
                 <p>Access 150+ quarterly fundamental metrics from Sharadar's SF1 table through Zipline's Pipeline API.</p>
 
@@ -989,6 +983,10 @@ register('my-stocks', sharadar_bundle(
                     <li><strong>Automatic Forward-Filling</strong>: Quarterly data persists until next quarter</li>
                     <li><strong>Pipeline Integration</strong>: Works with Zipline's factor library</li>
                 </ul>
+
+                <div class="callout callout-info">
+                    <strong>Complete Column Reference:</strong> See <a href="#sharadar-columns">Sharadar SF1 Columns</a> for the full list of 66+ available metrics with descriptions.
+                </div>
 
                 <h3>Basic Usage</h3>
                 <pre><code>from zipline.pipeline import Pipeline
@@ -1034,37 +1032,42 @@ pipeline = Pipeline(
 )</code></pre>
             </section>
 
-            <!-- Available Metrics -->
-            <section id="available-metrics" class="section">
-                <h2>Available Metrics (Sample)</h2>
-                <p>Here are some commonly used metrics. For the complete list of all 66+ available columns, see the <a href="#sharadar-columns">Sharadar SF1 Columns</a> reference.</p>
+            <!-- LSEG Fundamentals Overview -->
+            <section id="lseg-fundamentals" class="section">
+                <h2>LSEG Data</h2>
 
-                <h3>Income Statement</h3>
-                <table>
-                    <tr><th>Metric</th><th>Column</th><th>Description</th></tr>
-                    <tr><td>Revenue</td><td><code>revenue</code></td><td>Total revenue</td></tr>
-                    <tr><td>Net Income</td><td><code>netinc</code></td><td>Bottom-line profit</td></tr>
-                    <tr><td>EBITDA</td><td><code>ebitda</code></td><td>Earnings before interest, taxes, depreciation</td></tr>
-                    <tr><td>Gross Profit</td><td><code>grossprofit</code></td><td>Revenue minus cost</td></tr>
-                </table>
+                <p>Integrate LSEG (formerly Refinitiv) fundamental data, smart estimates, and alpha model scores through the custom database system.</p>
 
-                <h3>Ratios</h3>
-                <table>
-                    <tr><th>Metric</th><th>Column</th><th>Description</th></tr>
-                    <tr><td>ROE</td><td><code>roe</code></td><td>Return on equity (%)</td></tr>
-                    <tr><td>P/E Ratio</td><td><code>pe</code></td><td>Price to earnings</td></tr>
-                    <tr><td>P/B Ratio</td><td><code>pb</code></td><td>Price to book</td></tr>
-                    <tr><td>Debt/Equity</td><td><code>de</code></td><td>Debt to equity ratio</td></tr>
-                </table>
+                <h3>Key Features</h3>
+                <ul>
+                    <li><strong>Smart Estimates</strong>: Consensus analyst estimates for ROE, ROA, EPS, and growth</li>
+                    <li><strong>Alpha Model Scores</strong>: Combined factor scores and sector rankings</li>
+                    <li><strong>Forward-Looking Metrics</strong>: Forward PE, PEG ratios, target prices</li>
+                    <li><strong>Custom Database Integration</strong>: Seamlessly combine with Sharadar data in pipelines</li>
+                </ul>
 
-                <h3>Per-Share Metrics</h3>
-                <table>
-                    <tr><th>Metric</th><th>Column</th><th>Description</th></tr>
-                    <tr><td>EPS</td><td><code>eps</code></td><td>Earnings per share</td></tr>
-                    <tr><td>Book Value</td><td><code>bvps</code></td><td>Book value per share</td></tr>
-                    <tr><td>FCF per Share</td><td><code>fcfps</code></td><td>Free cash flow per share</td></tr>
-                    <tr><td>Dividends</td><td><code>dps</code></td><td>Dividends per share</td></tr>
-                </table>
+                <div class="callout callout-info">
+                    <strong>Complete Column Reference:</strong> See <a href="#lseg-columns">LSEG Custom Columns</a> for the full list of 50+ available metrics with descriptions.
+                </div>
+
+                <h3>Basic Usage</h3>
+                <pre><code>from zipline.pipeline import multi_source as ms
+
+class LSEGFundamentals(ms.Database):
+    CODE = "lseg_fundamentals"
+    LOOKBACK_WINDOW = 252
+
+    ReturnOnEquity_SmartEstimate = ms.Column(float)
+    CombinedAlphaModelSectorRank = ms.Column(float)
+    ForwardPEG = ms.Column(float)
+
+# Use in pipeline
+pipeline = ms.Pipeline(
+    columns={
+        'roe_estimate': LSEGFundamentals.ReturnOnEquity_SmartEstimate.latest,
+        'sector_rank': LSEGFundamentals.CombinedAlphaModelSectorRank.latest,
+    }
+)</code></pre>
             </section>
 
             <!-- Multi-Source Overview -->
@@ -1431,12 +1434,6 @@ print("Open" if result == 0 else "Closed")</code></pre>
 
                 <h3>No Data for Today</h3>
                 <p>Wait 1-2 hours after market close (safe after 6 PM ET).</p>
-            </section>
-
-            <!-- Fundamental Data Reference -->
-            <section id="fundamental-data-reference" class="section">
-                <h2>Fundamental Data Reference</h2>
-                <p>Complete reference of all available fundamental data columns from Sharadar SF1 and LSEG custom databases for strategy development.</p>
             </section>
 
             <!-- Sharadar Columns -->

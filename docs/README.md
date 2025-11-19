@@ -179,7 +179,7 @@ docs/
 
 **Data Issues:**
 - See [DATA_MANAGEMENT.md - Troubleshooting](./DATA_MANAGEMENT.md#troubleshooting)
-- Check `~/.zipline/ingestions/sharadar_*.log`
+- Check Docker logs: `docker compose logs zipline-jupyter`
 
 **FlightLog Issues:**
 - See [FLIGHTLOG.md - Troubleshooting](./FLIGHTLOG.md#troubleshooting)

@@ -275,8 +275,8 @@ bundle = bundles.load('sharadar')
 ## What's Next?
 
 - **Full documentation:** See [DATA_MANAGEMENT.md](./DATA_MANAGEMENT.md)
-- **Run backtests:** See [FLIGHTLOG_USAGE.md](./FLIGHTLOG_USAGE.md)
-- **Monitor logs:** See `~/.zipline/ingestions/sharadar_*.log`
+- **Run backtests:** See [FLIGHTLOG.md](./FLIGHTLOG.md)
+- **Monitor logs:** Run `docker compose logs zipline-jupyter` or redirect ingest output to a file
 
 ---
 

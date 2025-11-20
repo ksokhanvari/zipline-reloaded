@@ -945,94 +945,96 @@ def make_pipeline():
         print(f"[DEBUG] ERROR creating SimpleBeta IWM: {e}")
         raise
 
-    # Build pipeline
+    # Build pipeline columns one by one for debugging
     print("[DEBUG] Building pipeline columns dict...")
+    columns = {}
+
+    print("[DEBUG] Adding company info columns...")
+    columns['name'] = CustomFundamentals.Symbol.latest
+    columns['compname'] = CustomFundamentals.CompanyCommonName.latest
+    columns['sector'] = CustomFundamentals.GICSSectorName.latest
+
+    print("[DEBUG] Adding market data columns...")
+    columns['market_cap'] = CustomFundamentals.CompanyMarketCap.latest
+    columns['entval'] = CustomFundamentals.EnterpriseValue_DailyTimeSeries_.latest
+    columns['price'] = USEquityPricing.close.latest
+    columns['volume'] = USEquityPricing.volume.latest
+    columns['fs_price'] = CustomFundamentals.RefPriceClose.latest
+    columns['fs_volume'] = CustomFundamentals.RefVolume.latest
+    columns['sumvolume'] = SumVolume(window_length=3)
+
+    print("[DEBUG] Adding earnings columns...")
+    columns['eps_ActualSurprise_prev_Q_percent'] = CustomFundamentals.EarningsPerShare_ActualSurprise.latest
+    columns['eps_gr_mean'] = CustomFundamentals.LongTermGrowth_Mean.latest
+
+    print("[DEBUG] Adding financial columns...")
+    columns['CashCashEquivalents_Total'] = CustomFundamentals.CashCashEquivalents_Total.latest
+    columns['fcf'] = SharadarFundamentals.fcf.latest
+    columns['int'] = CustomFundamentals.InterestExpense_NetofCapitalizedInterest.latest
+
+    print("[DEBUG] Adding beta columns...")
+    columns['beta60SPY'] = beta_spy
+    columns['beta60IWM'] = beta_iwm
+
+    print("[DEBUG] Adding technical indicators...")
+    columns['smav'] = SimpleMovingAverage(inputs=[USEquityPricing.volume], window_length=10)
+    columns['slope120'] = Slope(window_length=120, mask=tradable_filter).slope.zscore(mask=tradable_filter)
+    columns['slope220'] = Slope(window_length=220, mask=tradable_filter).slope.zscore(mask=tradable_filter)
+    columns['slope90'] = Slope(window_length=90, mask=tradable_filter).slope.zscore(mask=tradable_filter)
+    columns['slope30'] = Slope(window_length=30, mask=tradable_filter).slope.zscore(mask=tradable_filter)
+    columns['stk20w'] = StochasticOscillatorWeekly()
+    columns['above_200dma'] = Above200DMA(mask=tradable_filter)
+    columns['walpha'] = WeightedAlpha()
+
+    print("[DEBUG] Adding relative strength columns...")
+    columns['RS140_QQQ'] = RelativeStrength(window_length=140, market_sid=qqq_asset.sid)
+    columns['RS160_QQQ'] = RelativeStrength(window_length=160, market_sid=qqq_asset.sid)
+    columns['RS180_QQQ'] = RelativeStrength(window_length=180, market_sid=qqq_asset.sid)
+
+    print("[DEBUG] Adding return columns...")
+    columns['Ret60'] = Returns(window_length=60, mask=tradable_filter)
+    columns['Ret120'] = Returns(window_length=120, mask=tradable_filter)
+    columns['Ret220'] = Returns(window_length=220, mask=tradable_filter)
+
+    print("[DEBUG] Adding other factors...")
+    columns['publicdays'] = PublicSince(window_length=121)
+    columns['vol'] = Volatility(window_length=10, mask=tradable_filter)
+
+    print("[DEBUG] Adding VIX columns...")
+    columns['vixflag'] = CustomFundamentals4.pred.latest
+    columns['vixflag0'] = CustomFundamentals4.pred.latest
+
+    print("[DEBUG] Adding BC data...")
+    columns['bc1'] = CustomFundamentals9.bc1.latest
+
+    print("[DEBUG] Adding MLFactor...")
+    columns['MLfactor'] = MLFactor(
+        inputs=[
+            Returns(window_length=90, mask=tradable_filter),
+            CustomFundamentals.EnterpriseValueToEBITDA_DailyTimeSeriesRatio_,
+            CustomFundamentals.LongTermGrowth_Mean,
+            CustomFundamentals.CombinedAlphaModelSectorRank,
+            CustomFundamentals.ForwardEnterpriseValueToOperatingCashFlow_DailyTimeSeriesRatio_,
+        ],
+        window_length=180,
+        mask=tradable_filter,
+        shift_target=10
+    )
+
+    print("[DEBUG] Adding sentiment factors...")
+    columns['sentcomb'] = (
+        SumFactor(CustomFundamentals2.sentvad_neg, window_length=18).zscore() +
+        SumFactor(CustomFundamentals2.sent2sub, window_length=18).zscore() +
+        (1/SumFactor(CustomFundamentals2.sent2pol, window_length=18).zscore())
+    )
+    columns['sentest'] = 1/SumFactor(CustomFundamentals2.sent2pol, window_length=18)
+
+    print("[DEBUG] Creating ms.Pipeline...")
     pipe = ms.Pipeline(
         screen=tradable_filter,
-        columns={
-            # Company information
-            'name': CustomFundamentals.Symbol.latest,
-            'compname': CustomFundamentals.CompanyCommonName.latest,
-            'sector': CustomFundamentals.GICSSectorName.latest,
-
-            # Market data
-            'market_cap': CustomFundamentals.CompanyMarketCap.latest,
-            'entval': CustomFundamentals.EnterpriseValue_DailyTimeSeries_.latest,
-            'price': USEquityPricing.close.latest,
-            'volume': USEquityPricing.volume.latest,
-            'fs_price': CustomFundamentals.RefPriceClose.latest,
-            'fs_volume': CustomFundamentals.RefVolume.latest,
-            'sumvolume': SumVolume(window_length=3),
-
-            # Earnings and growth metrics
-            'eps_ActualSurprise_prev_Q_percent': CustomFundamentals.EarningsPerShare_ActualSurprise.latest,
-            'eps_gr_mean': CustomFundamentals.LongTermGrowth_Mean.latest,
-
-            # Financial metrics
-            'CashCashEquivalents_Total': CustomFundamentals.CashCashEquivalents_Total.latest,
-            'fcf': SharadarFundamentals.fcf.latest,
-            'int': CustomFundamentals.InterestExpense_NetofCapitalizedInterest.latest,
-
-            # Risk metrics
-            'beta60SPY': beta_spy,
-            'beta60IWM': beta_iwm,
-
-            # Technical indicators
-            'smav': SimpleMovingAverage(inputs=[USEquityPricing.volume], window_length=10),
-            'slope120': Slope(window_length=120, mask=tradable_filter).slope.zscore(mask=tradable_filter),
-            'slope220': Slope(window_length=220, mask=tradable_filter).slope.zscore(mask=tradable_filter),
-            'slope90': Slope(window_length=90, mask=tradable_filter).slope.zscore(mask=tradable_filter),
-            'slope30': Slope(window_length=30, mask=tradable_filter).slope.zscore(mask=tradable_filter),
-
-            'stk20w': StochasticOscillatorWeekly(),
-            'above_200dma': Above200DMA(mask=tradable_filter),
-            'walpha': WeightedAlpha(),
-
-            # Relative strength metrics
-            'RS140_QQQ': RelativeStrength(window_length=140, market_sid=qqq_asset.sid),
-            'RS160_QQQ': RelativeStrength(window_length=160, market_sid=qqq_asset.sid),
-            'RS180_QQQ': RelativeStrength(window_length=180, market_sid=qqq_asset.sid),
-
-            # Return metrics
-            'Ret60': Returns(window_length=60, mask=tradable_filter),
-            'Ret120': Returns(window_length=120, mask=tradable_filter),
-            'Ret220': Returns(window_length=220, mask=tradable_filter),
-
-            # Other factors
-            'publicdays': PublicSince(window_length=121),
-            'vol': Volatility(window_length=10, mask=tradable_filter),
-
-            # VIX signal
-            'vixflag': CustomFundamentals4.pred.latest,
-            'vixflag0': CustomFundamentals4.pred.latest,
-
-            # BC data
-            'bc1': CustomFundamentals9.bc1.latest,
-
-            # ML Factor
-            'MLfactor': MLFactor(
-                inputs=[
-                    Returns(window_length=90, mask=tradable_filter),
-                    CustomFundamentals.EnterpriseValueToEBITDA_DailyTimeSeriesRatio_,
-                    CustomFundamentals.LongTermGrowth_Mean,
-                    CustomFundamentals.CombinedAlphaModelSectorRank,
-                    CustomFundamentals.ForwardEnterpriseValueToOperatingCashFlow_DailyTimeSeriesRatio_,
-                ],
-                window_length=180,
-                mask=tradable_filter,
-                shift_target=10
-            ),
-
-            # Sentiment factors
-            'sentcomb': (
-                SumFactor(CustomFundamentals2.sentvad_neg, window_length=18).zscore() +
-                SumFactor(CustomFundamentals2.sent2sub, window_length=18).zscore() +
-                (1/SumFactor(CustomFundamentals2.sent2pol, window_length=18).zscore())
-            ),
-
-            'sentest': 1/SumFactor(CustomFundamentals2.sent2pol, window_length=18),
-        }
+        columns=columns
     )
+    print("[DEBUG] Pipeline created successfully")
 
     return pipe
 

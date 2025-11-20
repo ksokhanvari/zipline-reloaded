@@ -928,24 +928,24 @@ def make_pipeline():
             'int': CustomFundamentals.InterestExpense_NetofCapitalizedInterest.latest,
 
             # Risk metrics
-            'beta60SPY': SimpleBeta(target=zp_symbol('SPY'), regression_length=60).shift(),
-            'beta60IWM': SimpleBeta(target=zp_symbol('IWM'), regression_length=60).shift(),
+            'beta60SPY': SimpleBeta(target=zp_symbol('SPY'), regression_length=60),
+            'beta60IWM': SimpleBeta(target=zp_symbol('IWM'), regression_length=60),
 
             # Technical indicators
             'smav': SimpleMovingAverage(inputs=[USEquityPricing.volume], window_length=10),
-            'slope120': Slope(window_length=120, mask=tradable_filter).slope.zscore(mask=tradable_filter).shift(),
-            'slope220': Slope(window_length=220, mask=tradable_filter).slope.zscore(mask=tradable_filter).shift(),
-            'slope90': Slope(window_length=90, mask=tradable_filter).slope.zscore(mask=tradable_filter).shift(),
-            'slope30': Slope(window_length=30, mask=tradable_filter).slope.zscore(mask=tradable_filter).shift(),
+            'slope120': Slope(window_length=120, mask=tradable_filter).slope.zscore(mask=tradable_filter),
+            'slope220': Slope(window_length=220, mask=tradable_filter).slope.zscore(mask=tradable_filter),
+            'slope90': Slope(window_length=90, mask=tradable_filter).slope.zscore(mask=tradable_filter),
+            'slope30': Slope(window_length=30, mask=tradable_filter).slope.zscore(mask=tradable_filter),
 
             'stk20w': StochasticOscillatorWeekly(),
             'above_200dma': Above200DMA(mask=tradable_filter),
             'walpha': WeightedAlpha(),
 
             # Relative strength metrics
-            'RS140_QQQ': RelativeStrength(window_length=140, market_sid=zp_symbol('QQQ').sid).shift(),
-            'RS160_QQQ': RelativeStrength(window_length=160, market_sid=zp_symbol('QQQ').sid).shift(),
-            'RS180_QQQ': RelativeStrength(window_length=180, market_sid=zp_symbol('QQQ').sid).shift(),
+            'RS140_QQQ': RelativeStrength(window_length=140, market_sid=zp_symbol('QQQ').sid),
+            'RS160_QQQ': RelativeStrength(window_length=160, market_sid=zp_symbol('QQQ').sid),
+            'RS180_QQQ': RelativeStrength(window_length=180, market_sid=zp_symbol('QQQ').sid),
 
             # Return metrics
             'Ret60': Returns(window_length=60, mask=tradable_filter),
@@ -975,7 +975,7 @@ def make_pipeline():
                 window_length=180,
                 mask=tradable_filter,
                 shift_target=10
-            ).shift(),
+            ),
 
             # Sentiment factors
             'sentcomb': (

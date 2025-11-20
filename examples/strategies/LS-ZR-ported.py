@@ -130,7 +130,7 @@ SHORT_RESTRICTED_MONTHS = {1, 2, 3, 5, 7, 8, 9, 10, 11, 12}  # Months with reduc
 class CustomFundamentals(ms.Database):
     """Primary fundamentals database with core company financial data."""
 
-    CODE = "refe-fundamentals"
+    CODE = "fundamentals"
     LOOKBACK_WINDOW = 240
 
     # Company identifiers

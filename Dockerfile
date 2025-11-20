@@ -58,9 +58,17 @@ COPY extension.py /root/.zipline/extension.py
 # Copy all Jupyter Lab settings (dark theme, notebook, terminal, codemirror)
 COPY .jupyter/lab/user-settings /root/.jupyter/lab/user-settings
 
+# Copy Jupyter Lab overrides for default settings (50000 line scrollback, dark theme)
+COPY .jupyter/lab/settings /root/.jupyter/lab/settings
+
 # Set up Jupyter and analysis tools
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install jupyter jupyterlab notebook matplotlib pyfolio-reloaded alphalens-reloaded
+
+# Copy overrides to Jupyter Lab system settings (ensures 50000 line scrollback, dark theme)
+RUN JUPYTER_DATA_DIR=$(python -c "import jupyter_core.paths; print(jupyter_core.paths.jupyter_data_dir())") && \
+    mkdir -p "$JUPYTER_DATA_DIR/lab/settings" && \
+    cp /root/.jupyter/lab/settings/overrides.json "$JUPYTER_DATA_DIR/lab/settings/overrides.json"
 
 # Expose Jupyter port
 EXPOSE 8888

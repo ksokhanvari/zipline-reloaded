@@ -1,0 +1,18 @@
+{
+    "@jupyterlab/terminal-extension:plugin": {
+        "fontFamily": "monospace",
+        "fontSize": 13,
+        "lineHeight": 1,
+        "theme": "dark",
+        "screenReaderMode": false,
+        "shutdownOnClose": false,
+        "closeOnExit": true,
+        "pasteWithCtrlV": true,
+        "macOptionIsMeta": false,
+        "cursorBlink": true,
+        "scrollback": 50000
+    },
+    "@jupyterlab/apputils-extension:themes": {
+        "theme": "JupyterLab Dark"
+    }
+}

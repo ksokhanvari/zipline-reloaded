@@ -891,6 +891,13 @@ def make_pipeline():
     """
     Creates the stock selection pipeline.
     """
+    global ASSET_FINDER
+
+    # Get benchmark assets using asset_finder (available after initialize sets it)
+    spy_asset = ASSET_FINDER.lookup_symbol('SPY', as_of_date=None)
+    iwm_asset = ASSET_FINDER.lookup_symbol('IWM', as_of_date=None)
+    qqq_asset = ASSET_FINDER.lookup_symbol('QQQ', as_of_date=None)
+
     # Initial universe filter - top stocks by market cap
     tradable_filter = (CustomFundamentals.CompanyMarketCap.latest.top(UNIVERSE_SIZE))
 
@@ -928,8 +935,8 @@ def make_pipeline():
             'int': CustomFundamentals.InterestExpense_NetofCapitalizedInterest.latest,
 
             # Risk metrics
-            'beta60SPY': SimpleBeta(target=zp_symbol('SPY'), regression_length=60),
-            'beta60IWM': SimpleBeta(target=zp_symbol('IWM'), regression_length=60),
+            'beta60SPY': SimpleBeta(target=spy_asset, regression_length=60),
+            'beta60IWM': SimpleBeta(target=iwm_asset, regression_length=60),
 
             # Technical indicators
             'smav': SimpleMovingAverage(inputs=[USEquityPricing.volume], window_length=10),
@@ -943,9 +950,9 @@ def make_pipeline():
             'walpha': WeightedAlpha(),
 
             # Relative strength metrics
-            'RS140_QQQ': RelativeStrength(window_length=140, market_sid=zp_symbol('QQQ').sid),
-            'RS160_QQQ': RelativeStrength(window_length=160, market_sid=zp_symbol('QQQ').sid),
-            'RS180_QQQ': RelativeStrength(window_length=180, market_sid=zp_symbol('QQQ').sid),
+            'RS140_QQQ': RelativeStrength(window_length=140, market_sid=qqq_asset.sid),
+            'RS160_QQQ': RelativeStrength(window_length=160, market_sid=qqq_asset.sid),
+            'RS180_QQQ': RelativeStrength(window_length=180, market_sid=qqq_asset.sid),
 
             # Return metrics
             'Ret60': Returns(window_length=60, mask=tradable_filter),

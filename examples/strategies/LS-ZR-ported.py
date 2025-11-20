@@ -970,8 +970,8 @@ def make_pipeline():
 
     print("[DEBUG] Adding financial columns...")
     columns['CashCashEquivalents_Total'] = CustomFundamentals.CashCashEquivalents_Total.latest
-    # Commenting out SharadarFundamentals.fcf - needs special loader configuration
-    # columns['fcf'] = SharadarFundamentals.fcf.latest
+    # Use FOCF from CustomFundamentals instead of Sharadar fcf
+    columns['fcf'] = CustomFundamentals.FOCFExDividends_Discrete.latest
     columns['int'] = CustomFundamentals.InterestExpense_NetofCapitalizedInterest.latest
 
     print("[DEBUG] Adding beta columns...")
@@ -1102,17 +1102,16 @@ def process_universe(context, df, data):
     # Calculate dollar volume
     df['doll_vol'] = df['price'] * df['smav']
 
-    # Calculate cash return - commented out, fcf not available
-    # df['cash_return'] = (df['fcf'] - df['int']) / df['entval']
-    # df['cash_return'] = df['cash_return'].replace([np.inf, -np.inf], np.nan)
-    # df.dropna(subset=['cash_return'], inplace=True)
-    # Use a placeholder value for now
-    df['cash_return'] = 0.0
+    # Calculate cash return
+    df['cash_return'] = (df['fcf'] - df['int']) / df['entval']
+    df['cash_return'] = df['cash_return'].replace([np.inf, -np.inf], np.nan)
 
-    # Display sector returns - commented out since cash_return is placeholder
-    # sorted_df = df.groupby('sector')['cash_return'].agg(['mean']).sort_values(by='mean', ascending=False)
-    # if len(sorted_df) > 0:
-    #     print(sorted_df.iloc[0].name)
+    df.dropna(subset=['cash_return'], inplace=True)
+
+    # Display sector returns
+    sorted_df = df.groupby('sector')['cash_return'].agg(['mean']).sort_values(by='mean', ascending=False)
+    if len(sorted_df) > 0:
+        print(sorted_df.iloc[0].name)
 
     # Calculate momentum ranking
     df['myrs'] = df.slope120.rank() + df.RS140_QQQ.rank()

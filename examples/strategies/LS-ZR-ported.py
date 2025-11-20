@@ -1021,13 +1021,15 @@ def make_pipeline():
         shift_target=10
     )
 
-    print("[DEBUG] Adding sentiment factors...")
-    columns['sentcomb'] = (
-        SumFactor(CustomFundamentals2.sentvad_neg, window_length=18).zscore() +
-        SumFactor(CustomFundamentals2.sent2sub, window_length=18).zscore() +
-        (1/SumFactor(CustomFundamentals2.sent2pol, window_length=18).zscore())
-    )
-    columns['sentest'] = 1/SumFactor(CustomFundamentals2.sent2pol, window_length=18)
+    # Commenting out sentiment factors - SumFactor usage needs fixing
+    # The SumFactor class doesn't have inputs defined properly
+    print("[DEBUG] Skipping sentiment factors (need fixing)...")
+    # columns['sentcomb'] = (
+    #     SumFactor(CustomFundamentals2.sentvad_neg, window_length=18).zscore() +
+    #     SumFactor(CustomFundamentals2.sent2sub, window_length=18).zscore() +
+    #     (1/SumFactor(CustomFundamentals2.sent2pol, window_length=18).zscore())
+    # )
+    # columns['sentest'] = 1/SumFactor(CustomFundamentals2.sent2pol, window_length=18)
 
     print("[DEBUG] Creating ms.Pipeline...")
     pipe = ms.Pipeline(

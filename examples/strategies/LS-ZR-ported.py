@@ -61,7 +61,8 @@ from zipline.pipeline.factors import (Latest, Returns, RollingLinearRegressionOf
                                      AverageDollarVolume, RateOfChangePercentage, VWAP)
 from zipline.pipeline.classifiers import CustomClassifier
 from zipline.pipeline.filters import StaticAssets
-from zipline.pipeline.data.sharadar import SharadarFundamentals
+# Commented out - needs special loader configuration
+# from zipline.pipeline.data.sharadar import SharadarFundamentals
 from zipline.finance import commission, slippage
 
 # Multi-source module for custom databases
@@ -969,7 +970,8 @@ def make_pipeline():
 
     print("[DEBUG] Adding financial columns...")
     columns['CashCashEquivalents_Total'] = CustomFundamentals.CashCashEquivalents_Total.latest
-    columns['fcf'] = SharadarFundamentals.fcf.latest
+    # Commenting out SharadarFundamentals.fcf - needs special loader configuration
+    # columns['fcf'] = SharadarFundamentals.fcf.latest
     columns['int'] = CustomFundamentals.InterestExpense_NetofCapitalizedInterest.latest
 
     print("[DEBUG] Adding beta columns...")

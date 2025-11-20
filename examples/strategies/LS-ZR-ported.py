@@ -823,13 +823,20 @@ def initialize(context):
     """
     global ASSET_FINDER
 
+    print("[DEBUG] initialize() starting...")
+
     # Store asset finder reference for symbol lookup
     from zipline.data import bundles
     bundle = bundles.load('sharadar')
     ASSET_FINDER = bundle.asset_finder
+    print(f"[DEBUG] ASSET_FINDER set: {ASSET_FINDER}")
 
     # Attach our main stock selection pipeline
-    attach_pipeline(make_pipeline(), 'my_pipeline')
+    print("[DEBUG] Calling make_pipeline()...")
+    pipeline = make_pipeline()
+    print("[DEBUG] make_pipeline() returned successfully")
+    attach_pipeline(pipeline, 'my_pipeline')
+    print("[DEBUG] Pipeline attached")
 
     # Set the benchmark
     spy = symbol('SPY')
@@ -893,21 +900,53 @@ def make_pipeline():
     """
     global ASSET_FINDER
 
+    print("[DEBUG] make_pipeline() starting...")
+
     # Get benchmark assets using asset_finder (available after initialize sets it)
+    print("[DEBUG] Looking up SPY...")
     spy_asset = ASSET_FINDER.lookup_symbol('SPY', as_of_date=None)
+    print(f"[DEBUG] SPY asset: {spy_asset}, type: {type(spy_asset)}, sid: {spy_asset.sid if spy_asset else 'None'}")
+
+    print("[DEBUG] Looking up IWM...")
     iwm_asset = ASSET_FINDER.lookup_symbol('IWM', as_of_date=None)
+    print(f"[DEBUG] IWM asset: {iwm_asset}, type: {type(iwm_asset)}, sid: {iwm_asset.sid if iwm_asset else 'None'}")
+
+    print("[DEBUG] Looking up QQQ...")
     qqq_asset = ASSET_FINDER.lookup_symbol('QQQ', as_of_date=None)
+    print(f"[DEBUG] QQQ asset: {qqq_asset}, type: {type(qqq_asset)}, sid: {qqq_asset.sid if qqq_asset else 'None'}")
 
     # Initial universe filter - top stocks by market cap
+    print("[DEBUG] Creating tradable_filter...")
     tradable_filter = (CustomFundamentals.CompanyMarketCap.latest.top(UNIVERSE_SIZE))
+    print("[DEBUG] tradable_filter created")
 
     # Money flow factors
+    print("[DEBUG] Creating money flow factors...")
     money_flow_index = MoneyFlowIndexFactor(mask=tradable_filter, window_length=90)
     chaikin_money_flow = ChaikinMoneyFlowFactor(mask=tradable_filter, window_length=90)
     simple_money_flow = SimpleMoneyFlowFactor(mask=tradable_filter, window_length=90)
     volume_weighted_mf = VolumeWeightedMoneyFlowFactor(mask=tradable_filter, window_length=90)
+    print("[DEBUG] Money flow factors created")
+
+    # Create SimpleBeta factors with debug
+    print("[DEBUG] Creating SimpleBeta for SPY...")
+    try:
+        beta_spy = SimpleBeta(target=spy_asset, regression_length=60)
+        print(f"[DEBUG] SimpleBeta SPY created: {beta_spy}")
+    except Exception as e:
+        print(f"[DEBUG] ERROR creating SimpleBeta SPY: {e}")
+        raise
+
+    print("[DEBUG] Creating SimpleBeta for IWM...")
+    try:
+        beta_iwm = SimpleBeta(target=iwm_asset, regression_length=60)
+        print(f"[DEBUG] SimpleBeta IWM created: {beta_iwm}")
+    except Exception as e:
+        print(f"[DEBUG] ERROR creating SimpleBeta IWM: {e}")
+        raise
 
     # Build pipeline
+    print("[DEBUG] Building pipeline columns dict...")
     pipe = ms.Pipeline(
         screen=tradable_filter,
         columns={
@@ -935,8 +974,8 @@ def make_pipeline():
             'int': CustomFundamentals.InterestExpense_NetofCapitalizedInterest.latest,
 
             # Risk metrics
-            'beta60SPY': SimpleBeta(target=spy_asset, regression_length=60),
-            'beta60IWM': SimpleBeta(target=iwm_asset, regression_length=60),
+            'beta60SPY': beta_spy,
+            'beta60IWM': beta_iwm,
 
             # Technical indicators
             'smav': SimpleMovingAverage(inputs=[USEquityPricing.volume], window_length=10),

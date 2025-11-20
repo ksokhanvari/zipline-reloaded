@@ -629,16 +629,36 @@ def analyze_results(
 
 
 def _load_algorithm_from_file(filepath):
-    """Load algorithm module from Python file."""
+    """Load algorithm module from Python file.
+
+    Always loads a fresh copy of the module, clearing any cached version.
+    This ensures code changes are picked up without requiring kernel restart.
+    """
     filepath = Path(filepath)
 
     if not filepath.exists():
         raise FileNotFoundError(f"Algorithm file not found: {filepath}")
 
+    # Clear any cached version of the module to ensure fresh load
+    # This is important when the file has been modified
+    module_name = f"algo_module_{filepath.stem}"
+    if module_name in sys.modules:
+        del sys.modules[module_name]
+
     # Load module from file
-    spec = importlib.util.spec_from_file_location("algo_module", filepath)
+    spec = importlib.util.spec_from_file_location(module_name, filepath)
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+
+    # Add to sys.modules before exec to handle circular imports
+    sys.modules[module_name] = module
+
+    try:
+        spec.loader.exec_module(module)
+    except Exception:
+        # Clean up on failure
+        if module_name in sys.modules:
+            del sys.modules[module_name]
+        raise
 
     return module
 

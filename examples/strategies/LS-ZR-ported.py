@@ -1073,7 +1073,11 @@ def before_trading_start(context, data):
     print('IBM-vixdata', context.vixflag)
 
     # Get IWM 20 week Stochastic
-    df_iwm = data.history(symbol('IWM'), ['high', 'low', 'price'], 20*5, '1d')
+    iwm_sym = symbol('IWM')
+    iwm_high = data.history(iwm_sym, 'high', 20*5, '1d')
+    iwm_low = data.history(iwm_sym, 'low', 20*5, '1d')
+    iwm_close = data.history(iwm_sym, 'close', 20*5, '1d')
+    df_iwm = pd.DataFrame({'high': iwm_high, 'low': iwm_low, 'price': iwm_close})
     context.iwm_stk20w = compute_weekly_stochastic(df_iwm, lookback_weeks=20)
     print('IWM_stk20w', context.iwm_stk20w)
 

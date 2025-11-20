@@ -1002,12 +1002,14 @@ def make_pipeline():
     columns['publicdays'] = PublicSince(window_length=121)
     columns['vol'] = Volatility(window_length=10, mask=tradable_filter)
 
-    print("[DEBUG] Adding VIX columns...")
-    columns['vixflag'] = CustomFundamentals4.pred.latest
-    columns['vixflag0'] = CustomFundamentals4.pred.latest
+    # Commenting out VIX columns - vixdata database doesn't exist
+    print("[DEBUG] Skipping VIX columns (database not available)...")
+    # columns['vixflag'] = CustomFundamentals4.pred.latest
+    # columns['vixflag0'] = CustomFundamentals4.pred.latest
 
-    print("[DEBUG] Adding BC data...")
-    columns['bc1'] = CustomFundamentals9.bc1.latest
+    # Commenting out BC data - bcdata database doesn't exist
+    print("[DEBUG] Skipping BC data (database not available)...")
+    # columns['bc1'] = CustomFundamentals9.bc1.latest
 
     print("[DEBUG] Adding MLFactor...")
     columns['MLfactor'] = MLFactor(

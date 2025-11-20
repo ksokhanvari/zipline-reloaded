@@ -2,44 +2,225 @@
 
 ## Project Context for Claude
 
-## Overview
-Zipline-Reloaded is a professional-grade algorithmic trading backtesting platform built on the original Quantopian Zipline framework. This fork provides institutional-quality data integration with Sharadar and LSEG, multi-source fundamental analysis, and real-time monitoring capabilities.
+This document serves as the central repository of project architecture and information. A new Claude session should read this file first to understand the project structure, functionality, and conventions.
 
-## Key Information
-- **Python Version**: >= 3.10
-- **Main Dependencies**: pandas >= 2.0, SQLAlchemy >= 2.0, numpy >= 2.0, scikit-learn >= 1.0.0
-- **Primary Documentation**: `docs/HPC-toplevel-zipline-documentation.html`
-- **External Resources**:
-  - Zipline Docs: https://zipline.ml4trading.io
-  - LSEG Data: https://www.lseg.com/en/data-analytics
-  - Sharadar: https://data.nasdaq.com/databases/SFA
+---
+
+## Overview
+
+**Zipline-Reloaded** is a professional-grade algorithmic trading backtesting platform built on the original Quantopian Zipline framework. This fork by Hidden Point Capital provides:
+
+- **Institutional-quality data integration** with Sharadar (NASDAQ) and LSEG (London Stock Exchange Group)
+- **Multi-source fundamental analysis** combining multiple data providers in a single pipeline
+- **Real-time monitoring** via FlightLog streaming system
+- **Dockerized environment** for reproducible results
+
+### Target Audience
+- Institutional Quantitative Traders
+- Quantitative Researchers
+- Portfolio Managers
+- Hedge Fund Analysts
+
+---
+
+## Technical Stack
+
+### Core Technologies
+- **Python**: >= 3.10
+- **pandas**: >= 2.0
+- **SQLAlchemy**: >= 2.0
+- **numpy**: >= 2.0
+- **scikit-learn**: >= 1.0.0
+
+### Infrastructure
+- **Docker**: Containerized environment
+- **Jupyter**: Interactive notebook server
+- **SQLite**: Custom fundamentals storage
+- **HDF5**: Time-series data storage
+
+---
 
 ## Project Structure
-- `src/zipline/`: Main source code
-  - `algorithm.py`: Core algorithm execution
-  - `api.py`: Public API functions
-  - `data/`: Data ingestion and handling
-    - `bundles/sharadar_bundle.py`: Sharadar data bundle with incremental updates
-    - `custom/`: Custom fundamentals data integration
-  - `pipeline/`: Factor-based screening system
-    - `multi_source.py`: Multi-source data integration
-    - `data/sharadar.py`: Sharadar fundamentals (66+ columns)
-- `examples/`: Example notebooks and strategies
-  - `custom_data/`: Custom database examples
-  - `lseg_fundamentals/`: LSEG data loading examples
-- `notebooks/`: Jupyter notebooks
-- `docs/`: Documentation
-  - `HPC-toplevel-zipline-documentation.html`: **Main HTML documentation**
-  - `README.md`: Documentation index
-  - `QUICK_START_DATA.md`: Quick start guide
-  - `DATA_MANAGEMENT.md`: Bundle management, updates, cleanup
-  - `SHARADAR_FUNDAMENTALS_GUIDE.md`: Fundamentals in pipelines
-  - `SYMBOL_MAPPING.md`: Handle FB→META symbol changes
-  - `MULTI_SOURCE_DATA.md`: Combine Sharadar + LSEG data
-  - `FLIGHTLOG.md`: Real-time monitoring
-  - `DEVELOPMENT.md`: Docker build, development workflow
-- `tests/`: Test suite
-- `data/`: Output directory (persists)
+
+```
+zipline-reloaded/
+├── src/zipline/                    # Main source code
+│   ├── algorithm.py                # Core algorithm execution engine
+│   ├── api.py                      # Public API (order, symbol, etc.)
+│   ├── data/
+│   │   ├── bundles/
+│   │   │   ├── sharadar_bundle.py  # Sharadar data bundle with incremental updates
+│   │   │   └── core.py             # Bundle registry and management
+│   │   └── custom/
+│   │       ├── pipeline_integration.py  # CustomSQLiteLoader
+│   │       ├── db_manager.py       # Database utilities
+│   │       └── config.py           # Configuration constants
+│   ├── pipeline/
+│   │   ├── multi_source.py         # Multi-source data integration
+│   │   ├── engine.py               # Pipeline execution engine
+│   │   └── data/
+│   │       └── sharadar.py         # SharadarFundamentals (66+ columns)
+│   ├── finance/
+│   │   ├── execution.py            # Order execution
+│   │   └── trading.py              # Trading mechanics
+│   └── utils/
+│       ├── flightlog_client.py     # FlightLog TCP client
+│       └── progress.py             # Progress logging
+│
+├── examples/
+│   ├── custom_data/                # Custom database examples
+│   │   ├── backtest_helpers.py     # Shared backtest utilities
+│   │   └── create_fundamentals_db.py
+│   ├── lseg_fundamentals/          # LSEG data loading
+│   │   └── load_csv_fundamentals.ipynb
+│   └── strategies/                 # Strategy examples
+│
+├── notebooks/                      # Jupyter notebooks
+│   └── (mounted at /notebooks in container)
+│
+├── docs/                           # Documentation
+│   ├── HPC-toplevel-zipline-documentation.html  # Main HTML documentation
+│   ├── README.md                   # Documentation index
+│   ├── QUICK_START_DATA.md         # Quick start guide (5 min)
+│   ├── DATA_MANAGEMENT.md          # Bundle management, updates, cleanup
+│   ├── SHARADAR_FUNDAMENTALS_GUIDE.md
+│   ├── SYMBOL_MAPPING.md           # FB→META ticker changes
+│   ├── MULTI_SOURCE_DATA.md        # Combining data sources
+│   ├── FLIGHTLOG.md                # Real-time monitoring
+│   └── DEVELOPMENT.md              # Docker build optimization
+│
+├── scripts/
+│   └── flightlog.py                # FlightLog TCP server
+│
+├── tests/                          # Test suite
+├── data/                           # Output directory (persists)
+├── docker-compose.yml              # Docker services configuration
+├── Dockerfile                      # Container build instructions
+├── .env                            # Environment variables (API keys)
+└── CLAUDE.md                       # This file
+```
+
+---
+
+## Architecture
+
+### Data Flow
+```
+┌─────────────────────┐     ┌─────────────────────┐
+│  Sharadar Bundle    │     │  Custom SQLite DB   │
+│  (SF1 Fundamentals) │     │  (LSEG/Custom Data) │
+└──────────┬──────────┘     └──────────┬──────────┘
+           │                           │
+           ▼                           ▼
+    ┌────────────────────────────────────────┐
+    │      AutoLoader (Multi-Source)         │
+    │  - Routes columns to correct loader    │
+    │  - Handles SID translation             │
+    │  - Manages domain awareness            │
+    └──────────────┬─────────────────────────┘
+                   │
+                   ▼
+    ┌────────────────────────────────────────┐
+    │       SimplePipelineEngine             │
+    │  - Executes combined queries           │
+    │  - Returns unified DataFrame           │
+    └──────────────┬─────────────────────────┘
+                   │
+                   ▼
+    ┌────────────────────────────────────────┐
+    │          Trading Algorithm             │
+    │  - Use both sources in filters         │
+    │  - Build consensus signals             │
+    └────────────────────────────────────────┘
+```
+
+### Key Components
+
+#### 1. Sharadar Bundle (`src/zipline/data/bundles/sharadar_bundle.py`)
+- Downloads price and fundamental data from NASDAQ Data Link
+- Supports incremental updates (10-30 seconds vs 10-20 minutes)
+- Handles NaN permaticker values
+- Uses ARQ (As Reported Quarterly) dimension
+
+#### 2. Multi-Source System (`src/zipline/pipeline/multi_source.py`)
+- `AutoLoader`: Intelligent routing between data sources
+- `Database`: Base class for custom databases
+- `Column`: Type-safe column definitions
+- `setup_auto_loader()`: One-line configuration
+
+#### 3. Pipeline Engine (`src/zipline/pipeline/`)
+- Factor-based stock screening
+- Combines Sharadar + custom data
+- Returns filtered DataFrame for trading
+
+#### 4. FlightLog (`scripts/flightlog.py`, `src/zipline/utils/`)
+- Real-time log streaming via TCP
+- Color-coded log levels
+- Progress bars and portfolio metrics
+
+---
+
+## Data Sources
+
+### Sharadar Fundamentals
+
+**Provider**: NASDAQ Data Link
+**Coverage**: 8,000+ US equities (NYSE, NASDAQ, AMEX)
+**History**: 1998 to present
+**Metrics**: 66+ fundamental columns
+**Update**: Daily after market close
+
+#### Field Categories
+- **Income Statement**: revenue, netinc, ebitda, grossprofit, eps
+- **Balance Sheet**: assets, debt, equity, cashneq, receivables
+- **Cash Flow**: fcf, ncfo, ncfi, ncff, capex
+- **Valuation**: pe, pb, ps, marketcap, ev
+- **Profitability**: roe, roa, roic, grossmargin
+- **Per-Share**: eps, bvps, dps, fcfps
+
+#### High Availability Fields (95%+)
+```python
+from zipline.pipeline.data.sharadar import SharadarFundamentals
+
+fcf = SharadarFundamentals.fcf.latest           # Free cash flow
+marketcap = SharadarFundamentals.marketcap.latest
+pe = SharadarFundamentals.pe.latest
+revenue = SharadarFundamentals.revenue.latest
+netinc = SharadarFundamentals.netinc.latest
+assets = SharadarFundamentals.assets.latest
+equity = SharadarFundamentals.equity.latest
+```
+
+**Important**: Some fields like `roe` have 0% availability - calculate manually or use LSEG.
+
+### LSEG Data
+
+**Provider**: London Stock Exchange Group (formerly Refinitiv)
+**Coverage**: Millions of entities across 250 markets
+
+#### Available Data Types
+- **Entity Data**: Corporate structures, legal entity identifiers
+- **Ownership**: Investment manager holdings, insider data
+- **Smart Estimates**: Consensus analyst estimates (ROE, ROA, EPS)
+- **Alpha Models**: Combined factor scores, sector rankings
+- **Forward Metrics**: Forward PE, PEG ratios, target prices
+
+#### Integration Pattern
+```python
+from zipline.pipeline import multi_source as ms
+
+class LSEGFundamentals(ms.Database):
+    CODE = "lseg_fundamentals"  # Matches filename
+    LOOKBACK_WINDOW = 252
+
+    ReturnOnEquity_SmartEstimate = ms.Column(float)
+    CombinedAlphaModelSectorRank = ms.Column(float)
+    ForwardPEG = ms.Column(float)
+```
+
+**Database Location**: `~/.zipline/data/custom/lseg_fundamentals.sqlite`
+
+---
 
 ## Docker Environment
 
@@ -50,128 +231,105 @@ Zipline-Reloaded is a professional-grade algorithmic trading backtesting platfor
 | Disk Space | 50 GB | 100 GB |
 | CPU | 4 cores | 8+ cores |
 
-### BuildKit Configuration
-Docker BuildKit is **enabled** for faster builds:
-
-```bash
-export DOCKER_BUILDKIT=1
-export COMPOSE_DOCKER_CLI_BUILD=1
+### Services
+```yaml
+services:
+  zipline-jupyter:       # Main Jupyter server
+  flightlog:             # Log streaming server
 ```
 
 ### Volume Mounts
 ```yaml
 volumes:
   - ./data:/data                    # Strategy output
-  - zipline-data:/root/.zipline     # Bundles
+  - zipline-data:/root/.zipline     # Bundles and data
   - pip-cache:/root/.cache/pip      # Package cache
 ```
 
-### Important Paths
+### Important Container Paths
 ```
-/root/.zipline/bundles/sharadar/      # Sharadar bundle data
-/root/.zipline/data/custom/           # Custom databases
-/app/examples/                        # Examples directory
-/notebooks/                           # Jupyter notebooks
-```
-
----
-
-## Data Sources
-
-### Sharadar Fundamentals
-- **Coverage**: 8,000+ US equities (NYSE, NASDAQ, AMEX)
-- **History**: 1998 to present
-- **Metrics**: 66+ fundamental columns
-- **Update**: Daily after market close (10-30 seconds incremental)
-
-**High Availability Fields (95%+)**:
-```python
-from zipline.pipeline.data.sharadar import SharadarFundamentals
-
-# Cash Flow
-fcf = SharadarFundamentals.fcf.latest
-fcfps = SharadarFundamentals.fcfps.latest
-
-# Valuation
-marketcap = SharadarFundamentals.marketcap.latest
-pe = SharadarFundamentals.pe.latest
-pb = SharadarFundamentals.pb.latest
-
-# Income Statement
-revenue = SharadarFundamentals.revenue.latest
-ebitda = SharadarFundamentals.ebitda.latest
-netinc = SharadarFundamentals.netinc.latest
-eps = SharadarFundamentals.eps.latest
-
-# Balance Sheet
-assets = SharadarFundamentals.assets.latest
-debt = SharadarFundamentals.debt.latest
-equity = SharadarFundamentals.equity.latest
+/root/.zipline/bundles/sharadar/    # Sharadar bundle data
+/root/.zipline/data/custom/          # Custom SQLite databases
+/app/src/zipline/                    # Source code
+/app/examples/                       # Examples
+/notebooks/                          # Jupyter notebooks
 ```
 
-### LSEG Data
-- **Entity Data**: Millions of entities across 250 markets
-- **Ownership**: Investment manager holdings, insider data
-- **Smart Estimates**: Consensus analyst estimates
-- **Alpha Models**: Combined factor scores and sector rankings
-- **Delivery**: DataScope Select with API/SFTP options
-
-**Integration via Custom Database**:
-```python
-from zipline.pipeline import multi_source as ms
-
-class LSEGFundamentals(ms.Database):
-    CODE = "lseg_fundamentals"
-    LOOKBACK_WINDOW = 252
-
-    ReturnOnEquity_SmartEstimate = ms.Column(float)
-    CombinedAlphaModelSectorRank = ms.Column(float)
-    ForwardPEG = ms.Column(float)
+### BuildKit Configuration
+For faster builds (5-10x improvement):
+```bash
+export DOCKER_BUILDKIT=1
+export COMPOSE_DOCKER_CLI_BUILD=1
 ```
 
 ---
 
-## Multi-Source Data System
+## API Reference
 
-### Quick Start
+### Multi-Source Import
 ```python
 from zipline.pipeline import multi_source as ms
 
-# 1. Define Custom Database
-class CustomFundamentals(ms.Database):
-    CODE = "fundamentals"
-    LOOKBACK_WINDOW = 252
-    ROE = ms.Column(float)
-    PEG = ms.Column(float)
+# Available:
+ms.Pipeline           # Pipeline class
+ms.Database           # Custom database base class
+ms.Column             # Column definition
+ms.SharadarFundamentals  # Sharadar dataset
+ms.setup_auto_loader()   # AutoLoader setup
+```
 
-# 2. Create Pipeline mixing sources
-def make_pipeline():
-    s_fcf = ms.SharadarFundamentals.fcf.latest
-    c_roe = CustomFundamentals.ROE.latest
+### Backtest Pattern
+```python
+from zipline import run_algorithm
+from zipline.api import order_target_percent, symbol
+from zipline.pipeline import multi_source as ms
 
-    return ms.Pipeline(
-        columns={'s_fcf': s_fcf, 'c_roe': c_roe},
-        screen=(s_fcf > 0) & (c_roe > 15),
-    )
+def initialize(context):
+    attach_pipeline(make_pipeline(), 'my_pipeline')
 
-# 3. Run Backtest
+def before_trading_start(context, data):
+    context.output = pipeline_output('my_pipeline')
+
+def rebalance(context, data):
+    for stock in context.output.index:
+        order_target_percent(stock, 0.05)
+
 results = run_algorithm(
-    ...,
+    start=pd.Timestamp('2020-01-01', tz='UTC'),
+    end=pd.Timestamp('2024-01-01', tz='UTC'),
+    initialize=initialize,
+    before_trading_start=before_trading_start,
+    capital_base=1000000,
+    bundle='sharadar',
     custom_loader=ms.setup_auto_loader(),
 )
 ```
 
-### Database Schema
+### FlightLog Integration
+```python
+from zipline.utils.flightlog_client import enable_flightlog, log_to_flightlog
+from zipline.utils.progress import enable_progress_logging
+
+enable_flightlog(host='localhost', port=9020)
+enable_progress_logging(algo_name='My-Strategy', update_interval=5)
+
+def initialize(context):
+    log_to_flightlog('Strategy initialized', level='INFO')
+```
+
+### Custom Database Schema
 ```sql
 CREATE TABLE Price (
     Date TEXT NOT NULL,      -- YYYY-MM-DD format
-    Sid INTEGER NOT NULL,    -- Use bundle SIDs
-    [YourColumns...],
+    Sid INTEGER NOT NULL,    -- Bundle SIDs
+    [Column1] REAL,
+    [Column2] REAL,
     PRIMARY KEY (Date, Sid)
 );
-```
 
-**Location**: `~/.zipline/data/custom/{CODE}.sqlite`
+CREATE INDEX idx_date ON Price(Date);
+CREATE INDEX idx_sid ON Price(Sid);
+```
 
 ---
 
@@ -182,14 +340,14 @@ CREATE TABLE Price (
 # List bundles
 docker compose exec zipline-jupyter zipline bundles
 
-# Ingest/update data
+# Ingest/update data (incremental)
 docker compose exec zipline-jupyter zipline ingest -b sharadar
 
 # Clean old ingestions
 docker compose exec zipline-jupyter zipline clean -b sharadar --keep-last 2
 ```
 
-### Docker
+### Docker Operations
 ```bash
 # Start services
 docker compose up -d
@@ -209,7 +367,7 @@ docker exec -it zipline-reloaded-jupyter bash
 
 ### FlightLog
 ```bash
-# Start FlightLog (foreground, shows colors)
+# Start FlightLog (foreground with colors)
 docker compose run --rm flightlog
 
 # Filter progress bars
@@ -218,52 +376,44 @@ docker compose run --rm flightlog python /app/scripts/flightlog.py --filter-prog
 
 ---
 
-## FlightLog Integration
-
-```python
-from zipline.utils.progress import enable_progress_logging
-from zipline.utils.flightlog_client import enable_flightlog, log_to_flightlog
-
-# Enable FlightLog
-enable_flightlog(host='localhost', port=9020)
-
-# Enable progress logging
-enable_progress_logging(algo_name='My-Strategy', update_interval=5)
-
-# Log events in strategy
-def initialize(context):
-    log_to_flightlog('Strategy initialized', level='INFO')
-```
-
----
-
 ## Known Issues & Solutions
 
-### Issue 1: 504 Gateway Timeout on Ingest
+### 1. 504 Gateway Timeout on Ingest
 **Cause**: NASDAQ Data Link server overload
 **Solution**: Wait 5-10 minutes and retry
 
-### Issue 2: Pipeline Returns 0 Stocks
-**Cause**: Using empty Sharadar fields or wrong dimension
-**Solution**:
+### 2. Pipeline Returns 0 Stocks
+**Causes**:
+- Using empty Sharadar fields (e.g., `roe`)
+- Wrong dimension (MRQ instead of ARQ)
+- Filters too restrictive
+
+**Solutions**:
 - Use high-availability fields (fcf, pe, marketcap)
-- Use `ARQ` dimension (not `MRQ`)
+- Use `ARQ` dimension
+- Test pipeline first without backtest
 
-### Issue 3: NaN Permaticker Error
+### 3. NaN Permaticker Error
 **Cause**: Some assets have missing permaticker values
-**Status**: Fixed in sharadar_bundle.py
+**Status**: Fixed in sharadar_bundle.py (drops affected rows)
 
-### Issue 4: Import Errors
-**Solution**: Run inside Docker:
+### 4. Import Errors Outside Docker
+**Solution**: Run inside Docker container:
 ```bash
 docker exec zipline-reloaded-jupyter python /app/examples/...
+```
+
+### 5. "No such file: fundamentals.sqlite"
+**Solution**: Create the database first:
+```bash
+python examples/custom_data/create_fundamentals_db.py
 ```
 
 ---
 
 ## Symbol Mapping
 
-Handles ticker changes (FB→META, GOOG→GOOGL) automatically:
+Handles ticker changes (FB→META, GOOG→GOOGL) with temporal lookups:
 
 ```python
 from temporal_sid_mapper import TemporalSIDMapper
@@ -278,7 +428,7 @@ custom_data['Sid'] = mapper.map_dataframe_auto(
 
 ---
 
-## Git Workflow
+## Git Conventions
 
 ### Commit Message Format
 ```
@@ -291,50 +441,66 @@ Longer description if needed.
 Co-Authored-By: Claude <noreply@anthropic.com>
 ```
 
-Types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`
+**Types**: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`
 
 ### Current Branch
 `claude/continue-session-011-011CUzneiQ5d1tV3Y3r29tCA`
 
----
-
-## Target Audience
-
-- **Institutional Quantitative Traders**: Professional trading desks requiring production-grade backtesting
-- **Quantitative Researchers**: Testing factor-based strategies with point-in-time data
-- **Portfolio Managers**: Backtesting portfolio construction and risk management
-- **Hedge Fund Analysts**: Developing systematic alpha signals across multiple data sources
+### Main Branch
+`main`
 
 ---
 
-## Quick Reference
+## Documentation
 
-### One-Line Import
-```python
-from zipline.pipeline import multi_source as ms
-```
+### Primary Documentation
+- **HTML**: `docs/HPC-toplevel-zipline-documentation.html` (comprehensive, dark theme)
 
-This gives you:
-- `ms.Pipeline` - Pipeline class
-- `ms.Database` - Custom database base class
-- `ms.Column` - Column definition
-- `ms.SharadarFundamentals` - Sharadar datasets
-- `ms.setup_auto_loader()` - Automatic loader setup
+### Markdown Guides
+| Guide | Purpose | Time |
+|-------|---------|------|
+| QUICK_START_DATA.md | Get started fast | 5 min |
+| DATA_MANAGEMENT.md | Bundle management | 15 min |
+| SHARADAR_FUNDAMENTALS_GUIDE.md | Fundamentals in pipelines | 20 min |
+| SYMBOL_MAPPING.md | Handle symbol changes | 10 min |
+| MULTI_SOURCE_DATA.md | Combine data sources | 15 min |
+| FLIGHTLOG.md | Real-time monitoring | 10 min |
+| DEVELOPMENT.md | Development workflow | 10 min |
 
-### Key Documentation Files
-1. **Main HTML Doc**: `docs/HPC-toplevel-zipline-documentation.html`
-2. **Quick Start**: `docs/QUICK_START_DATA.md`
-3. **Multi-Source**: `docs/MULTI_SOURCE_DATA.md`
-4. **FlightLog**: `docs/FLIGHTLOG.md`
+---
 
-### Resource Requirements
+## Resource Requirements
+
 | Operation | Time | Storage | RAM |
 |-----------|------|---------|-----|
 | Initial download | 10-20 min | 10 GB | 16 GB |
 | Daily update | 10-30 sec | +50 MB | 4 GB |
+| Typical backtest | 1-5 min | - | 8 GB |
 
 ---
 
-**Document Version**: 6.0
+## External Resources
+
+- **Zipline Docs**: https://zipline.ml4trading.io
+- **Community Forum**: https://exchange.ml4trading.io
+- **Sharadar Data**: https://data.nasdaq.com/databases/SFA
+- **LSEG Data**: https://www.lseg.com/en/data-analytics
+- **NASDAQ Support**: connect@data.nasdaq.com
+
+---
+
+## Session Continuation Notes
+
+When continuing a session:
+
+1. **Check git status**: `git status` to see any pending changes
+2. **Check current branch**: Ensure on correct feature branch
+3. **Review recent commits**: `git log --oneline -10`
+4. **Check running containers**: `docker compose ps`
+5. **Review this file**: For project context and conventions
+
+---
+
+**Document Version**: 7.0
 **Last Updated**: 2025-11-19
 **Key Features**: Hidden Point Capital branding, Sharadar + LSEG integration, multi-source pipelines, FlightLog monitoring, comprehensive HTML documentation

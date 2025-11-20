@@ -421,6 +421,15 @@
             </div>
 
             <div class="nav-section">
+                <div class="nav-section-title">Backtesting</div>
+                <a href="#backtest-helpers" class="nav-item">Backtest Helpers</a>
+                <a href="#backtest-function" class="nav-item nav-subitem">backtest()</a>
+                <a href="#analyze-function" class="nav-item nav-subitem">analyze_results()</a>
+                <a href="#quick-backtest" class="nav-item nav-subitem">quick_backtest()</a>
+                <a href="#pyfolio-integration" class="nav-item">Pyfolio Integration</a>
+            </div>
+
+            <div class="nav-section">
                 <div class="nav-section-title">Monitoring</div>
                 <a href="#flightlog" class="nav-item">FlightLog</a>
                 <a href="#log-levels" class="nav-item">Log Levels</a>
@@ -1252,6 +1261,323 @@ custom_data = auto_mapper.auto_learn_and_map(
 
                 <h3>Mapping File Location</h3>
                 <code>/root/.zipline/data/custom/symbol_mappings.json</code>
+            </section>
+
+            <!-- Backtest Helpers -->
+            <section id="backtest-helpers" class="section">
+                <h2>Backtest Helpers <span class="badge badge-time">15 min</span></h2>
+
+                <p>Easy-to-use helper functions for running Zipline backtests and analyzing results with pyfolio. These utilities streamline the backtest workflow by handling file management, result saving, and performance analysis automatically.</p>
+
+                <h3>Key Features</h3>
+                <ul>
+                    <li><strong>Automatic File Management</strong>: Results saved to CSV, pickle, and metadata JSON</li>
+                    <li><strong>Pyfolio Integration</strong>: Full tearsheet generation with performance metrics</li>
+                    <li><strong>Custom Database Detection</strong>: Automatically configures loaders for Database classes</li>
+                    <li><strong>Reproducible Results</strong>: Metadata tracking for every backtest run</li>
+                </ul>
+
+                <h3>Quick Start</h3>
+                <pre><code>from backtest_helpers import backtest, analyze_results
+
+# Run backtest and save results
+backtest(
+    "my_strategy.py",              # Algorithm file
+    "my-strategy-v1",               # Name/identifier
+    bundle="sharadar",
+    start_date="2021-01-01",
+    end_date="2025-01-01",
+    capital_base=5000000,
+    filepath_or_buffer="results.csv"  # Output filename
+)
+
+# Analyze results with pyfolio tearsheet
+analyze_results("./backtest_results/results.csv", benchmark_symbol="SPY")</code></pre>
+
+                <div class="callout callout-info">
+                    <strong>Important:</strong> Jupyter notebooks don't automatically load bundle extensions. Register the sharadar bundle manually before running backtests:
+                    <pre style="margin-bottom: 0;"><code>from zipline.data.bundles import register
+from zipline.data.bundles.sharadar_bundle import sharadar_bundle
+
+register('sharadar', sharadar_bundle(tickers=None, incremental=True, include_funds=True))</code></pre>
+                </div>
+            </section>
+
+            <!-- backtest() Function -->
+            <section id="backtest-function" class="section">
+                <h2>backtest() Function</h2>
+
+                <p>Run a Zipline backtest and save results to disk with automatic metadata tracking.</p>
+
+                <h3>Function Signature</h3>
+                <pre><code>backtest(
+    algo_filename,           # Path to algorithm .py file
+    name,                    # Backtest identifier/name
+    bundle="sharadar",       # Data bundle name
+    data_frequency='daily',  # 'daily' or 'minute'
+    segment=None,            # Optional segment identifier
+    progress='D',            # Progress bar: 'D', 'W', 'M', or None
+    start_date="2020-01-01", # Start date (YYYY-MM-DD)
+    end_date="2023-12-31",   # End date (YYYY-MM-DD)
+    capital_base=100000,     # Starting capital
+    filepath_or_buffer=None, # Output filename (defaults to {name}.csv)
+    output_dir="./backtest_results",  # Output directory
+    save_pickle=True,        # Also save as pickle
+    **kwargs                 # Additional args for run_algorithm()
+) -> pd.DataFrame</code></pre>
+
+                <h3>What It Does</h3>
+                <ol>
+                    <li>Loads your algorithm from file</li>
+                    <li>Detects and configures custom database loaders automatically</li>
+                    <li>Runs the backtest with progress tracking</li>
+                    <li>Saves results to CSV and pickle</li>
+                    <li>Saves metadata JSON with configuration</li>
+                    <li>Prints summary statistics</li>
+                    <li>Returns performance DataFrame</li>
+                </ol>
+
+                <h3>Output Files</h3>
+                <pre><code>backtest_results/
+├── my-strategy-v1.csv      # CSV format (easy to read)
+├── my-strategy-v1.pkl      # Pickle format (preserves all data types)
+└── my-strategy-v1.json     # Metadata (config, timestamps, etc.)</code></pre>
+
+                <h3>Example Usage</h3>
+                <pre><code>perf = backtest(
+    "backtest_with_fundamentals.py",
+    "quality-strat-2023",
+    bundle="sharadar",
+    start_date="2023-01-01",
+    end_date="2023-12-31",
+    capital_base=1000000,
+    filepath_or_buffer="quality-2023.csv"
+)
+
+# perf is a DataFrame with columns:
+#  - portfolio_value
+#  - returns
+#  - positions
+#  - transactions
+#  - orders
+#  - sharpe, max_drawdown, etc.</code></pre>
+
+                <h3>Algorithm File Requirements</h3>
+                <p>Your algorithm file must define an <code>initialize</code> function. Other functions are optional:</p>
+                <pre><code>def initialize(context):
+    """Called once at start of backtest"""
+    context.my_var = 10
+    # ... setup code ...
+
+def handle_data(context, data):
+    """Called every bar (optional)"""
+    # ... trading logic ...
+
+def before_trading_start(context, data):
+    """Called before market open (optional)"""
+    # ... pre-market logic ...
+
+def analyze(context, perf):
+    """Called after backtest completes (optional)"""
+    # ... analysis code ...</code></pre>
+            </section>
+
+            <!-- analyze_results() Function -->
+            <section id="analyze-function" class="section">
+                <h2>analyze_results() Function</h2>
+
+                <p>Load saved backtest results and generate comprehensive pyfolio analysis with performance metrics and visualizations.</p>
+
+                <h3>Function Signature</h3>
+                <pre><code>analyze_results(
+    filepath_or_buffer,          # Path to CSV or pickle file
+    benchmark_symbol='SPY',      # Benchmark ticker
+    output_file=None,            # Save plots to file
+    live_start_date=None,        # Separate in-sample vs out-of-sample
+    show_plots=True,             # Display plots
+    save_plots=True,             # Save plots to disk
+    figsize=(14, 10),            # Figure size
+    return_dict=False,           # Return detailed results dict
+) -> dict (optional)</code></pre>
+
+                <h3>What It Does</h3>
+                <ol>
+                    <li>Loads results from CSV or pickle</li>
+                    <li>Extracts returns and metrics</li>
+                    <li>Generates pyfolio tearsheet (if installed)</li>
+                    <li>Creates performance plots:
+                        <ul>
+                            <li>Portfolio value over time</li>
+                            <li>Cumulative returns</li>
+                            <li>Drawdown chart</li>
+                            <li>Monthly returns heatmap</li>
+                        </ul>
+                    </li>
+                    <li>Calculates comprehensive metrics</li>
+                </ol>
+
+                <h3>Example Usage</h3>
+                <pre><code># Basic analysis
+analyze_results("./backtest_results/quality-2023.csv")
+
+# Get detailed results for custom analysis
+results = analyze_results(
+    "./backtest_results/quality-2023.csv",
+    benchmark_symbol="SPY",
+    live_start_date="2024-01-01",  # Out-of-sample starts here
+    return_dict=True
+)
+
+# Access components
+returns = results['returns']
+metrics = results['metrics']
+perf = results['perf']
+
+# Print metrics
+for metric, value in metrics.items():
+    print(f"{metric}: {value}")</code></pre>
+
+                <h3>Metrics Calculated</h3>
+                <table>
+                    <tr><th>Metric</th><th>Description</th></tr>
+                    <tr><td>Total Return</td><td>Cumulative return over period</td></tr>
+                    <tr><td>Annual Return</td><td>Annualized return (CAGR)</td></tr>
+                    <tr><td>Annual Volatility</td><td>Annualized standard deviation</td></tr>
+                    <tr><td>Sharpe Ratio</td><td>Risk-adjusted return (assumes 0% risk-free rate)</td></tr>
+                    <tr><td>Max Drawdown</td><td>Largest peak-to-trough decline</td></tr>
+                    <tr><td>Calmar Ratio</td><td>Annual return / max drawdown</td></tr>
+                    <tr><td>Win Rate</td><td>Percentage of positive return days</td></tr>
+                    <tr><td>Final Portfolio Value</td><td>Ending capital</td></tr>
+                </table>
+            </section>
+
+            <!-- quick_backtest() Function -->
+            <section id="quick-backtest" class="section">
+                <h2>quick_backtest() Function</h2>
+
+                <p>Convenience function to run a backtest and immediately analyze results in one step.</p>
+
+                <h3>Function Signature</h3>
+                <pre><code>quick_backtest(
+    algo_filename,
+    name=None,                   # Defaults to algo filename
+    start_date="2021-01-01",
+    end_date="2023-12-31",
+    capital_base=100000,
+    analyze=True,                # Run analysis after backtest
+    **kwargs
+) -> pd.DataFrame</code></pre>
+
+                <h3>Example Usage</h3>
+                <pre><code># Run and analyze in one step
+perf = quick_backtest(
+    "my_strategy.py",
+    start_date="2023-01-01",
+    end_date="2023-12-31",
+    capital_base=100000,
+    bundle="sharadar"
+)</code></pre>
+            </section>
+
+            <!-- Pyfolio Integration -->
+            <section id="pyfolio-integration" class="section">
+                <h2>Pyfolio Integration</h2>
+
+                <p>If <code>pyfolio-reloaded</code> is installed, you get full tearsheet analysis with comprehensive metrics.</p>
+
+                <h3>Install Pyfolio</h3>
+                <pre><code>pip install pyfolio-reloaded</code></pre>
+
+                <h3>Tearsheet Features</h3>
+                <ul>
+                    <li><strong>Returns analysis</strong>: Daily, monthly, yearly returns</li>
+                    <li><strong>Risk metrics</strong>: Sharpe, Sortino, Calmar ratios</li>
+                    <li><strong>Drawdown analysis</strong>: Underwater plot, top drawdowns</li>
+                    <li><strong>Rolling metrics</strong>: Rolling Sharpe, volatility</li>
+                    <li><strong>Monthly returns heatmap</strong></li>
+                    <li><strong>Distribution analysis</strong>: Return distribution, Q-Q plot</li>
+                    <li><strong>Worst periods</strong>: Worst 5 drawdowns with details</li>
+                </ul>
+
+                <div class="callout callout-success">
+                    <strong>Note:</strong> Even without pyfolio, basic plots and metrics are still generated. The helper functions fall back gracefully to built-in visualizations.
+                </div>
+
+                <h3>Multiple Scenarios Comparison</h3>
+                <pre><code># Define different test scenarios
+scenarios = [
+    {'name': 'bear-market', 'start': '2022-01-01', 'end': '2022-12-31'},
+    {'name': 'bull-market', 'start': '2023-01-01', 'end': '2023-12-31'},
+]
+
+results = {}
+for scenario in scenarios:
+    perf = backtest(
+        "my_strategy.py",
+        scenario['name'],
+        start_date=scenario['start'],
+        end_date=scenario['end'],
+        capital_base=100000,
+        filepath_or_buffer=f"{scenario['name']}.csv"
+    )
+    results[scenario['name']] = perf
+
+# Compare results
+for name, perf in results.items():
+    total_return = (perf['portfolio_value'].iloc[-1] / 100000 - 1) * 100
+    print(f"{name}: {total_return:.2f}%")</code></pre>
+
+                <h3>Custom Analysis</h3>
+                <pre><code># Load results for custom analysis
+results = analyze_results(
+    "./backtest_results/my-strategy.csv",
+    show_plots=False,
+    return_dict=True
+)
+
+# Access data
+returns = results['returns']
+perf = results['perf']
+metrics = results['metrics']
+
+# Custom plot: Rolling Sharpe ratio
+import matplotlib.pyplot as plt
+import numpy as np
+
+rolling_sharpe = (
+    returns.rolling(window=60)
+    .apply(lambda x: x.mean() / x.std() * np.sqrt(252) if x.std() > 0 else 0)
+)
+
+fig, ax = plt.subplots(figsize=(14, 6))
+ax.plot(rolling_sharpe.index, rolling_sharpe, linewidth=2)
+ax.axhline(y=0, color='black', linestyle='--', alpha=0.5)
+ax.axhline(y=1, color='green', linestyle='--', alpha=0.3, label='Sharpe = 1')
+ax.set_title('60-Day Rolling Sharpe Ratio', fontweight='bold')
+ax.set_ylabel('Sharpe Ratio')
+ax.legend()
+ax.grid(True, alpha=0.3)
+plt.show()</code></pre>
+
+                <h3>Best Practices</h3>
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <h4>Always Save Results</h4>
+                        <p>Running backtests is time-consuming. Always save results so you can re-analyze later without re-running.</p>
+                    </div>
+                    <div class="feature-card">
+                        <h4>Use Descriptive Names</h4>
+                        <p>Use clear names like "momentum-top20-monthly" instead of "test1" for easy identification.</p>
+                    </div>
+                    <div class="feature-card">
+                        <h4>Save Pickle for Complex Data</h4>
+                        <p>CSV files lose some data types. Pickle preserves everything including positions and transactions.</p>
+                    </div>
+                    <div class="feature-card">
+                        <h4>Separate In/Out-of-Sample</h4>
+                        <p>Use <code>live_start_date</code> to separate training and testing periods for more realistic performance evaluation.</p>
+                    </div>
+                </div>
             </section>
 
             <!-- FlightLog -->

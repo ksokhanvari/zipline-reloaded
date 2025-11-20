@@ -13,6 +13,9 @@ services:
       - zipline-data:/root/.zipline
       # Mount pip cache for faster rebuilds
       - pip-cache:/root/.cache/pip
+      # Mount examples for live editing with Cursor/VS Code
+      # Note: Local ./examples overrides container /app/examples - keep them in sync!
+      - ./examples:/app/examples
     environment:
       - ZIPLINE_ROOT=/root/.zipline
       - ZIPLINE_CUSTOM_DATA_DIR=/data/custom_databases

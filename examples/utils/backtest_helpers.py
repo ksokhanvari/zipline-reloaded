@@ -32,7 +32,17 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # Bundle registration (must be before other zipline imports)
-from utils.register_bundles import ensure_bundles_registered
+# Handle import from different locations
+try:
+    from register_bundles import ensure_bundles_registered
+except ImportError:
+    try:
+        from utils.register_bundles import ensure_bundles_registered
+    except ImportError:
+        # If register_bundles not available, define a no-op
+        def ensure_bundles_registered():
+            pass
+
 ensure_bundles_registered()
 
 from zipline import run_algorithm

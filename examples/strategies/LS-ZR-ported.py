@@ -892,7 +892,7 @@ def make_pipeline():
     Creates the stock selection pipeline.
     """
     # Initial universe filter - top stocks by market cap
-    tradable_filter = (CustomFundamentals.CompanyMarketCap.latest.shift().top(UNIVERSE_SIZE))
+    tradable_filter = (CustomFundamentals.CompanyMarketCap.latest.top(UNIVERSE_SIZE))
 
     # Money flow factors
     money_flow_index = MoneyFlowIndexFactor(mask=tradable_filter, window_length=90)
@@ -910,22 +910,22 @@ def make_pipeline():
             'sector': CustomFundamentals.GICSSectorName.latest,
 
             # Market data
-            'market_cap': CustomFundamentals.CompanyMarketCap.latest.shift().shift(),
-            'entval': CustomFundamentals.EnterpriseValue_DailyTimeSeries_.latest.shift(),
-            'price': USEquityPricing.close.latest.shift(),
-            'volume': USEquityPricing.volume.latest.shift(),
-            'fs_price': CustomFundamentals.RefPriceClose.latest.shift(),
-            'fs_volume': CustomFundamentals.RefVolume.latest.shift(),
+            'market_cap': CustomFundamentals.CompanyMarketCap.latest,
+            'entval': CustomFundamentals.EnterpriseValue_DailyTimeSeries_.latest,
+            'price': USEquityPricing.close.latest,
+            'volume': USEquityPricing.volume.latest,
+            'fs_price': CustomFundamentals.RefPriceClose.latest,
+            'fs_volume': CustomFundamentals.RefVolume.latest,
             'sumvolume': SumVolume(window_length=3),
 
             # Earnings and growth metrics
-            'eps_ActualSurprise_prev_Q_percent': CustomFundamentals.EarningsPerShare_ActualSurprise.latest.shift(),
-            'eps_gr_mean': CustomFundamentals.LongTermGrowth_Mean.latest.shift(),
+            'eps_ActualSurprise_prev_Q_percent': CustomFundamentals.EarningsPerShare_ActualSurprise.latest,
+            'eps_gr_mean': CustomFundamentals.LongTermGrowth_Mean.latest,
 
             # Financial metrics
-            'CashCashEquivalents_Total': CustomFundamentals.CashCashEquivalents_Total.latest.shift(),
+            'CashCashEquivalents_Total': CustomFundamentals.CashCashEquivalents_Total.latest,
             'fcf': SharadarFundamentals.fcf.latest,
-            'int': CustomFundamentals.InterestExpense_NetofCapitalizedInterest.latest.shift(),
+            'int': CustomFundamentals.InterestExpense_NetofCapitalizedInterest.latest,
 
             # Risk metrics
             'beta60SPY': SimpleBeta(target=zp_symbol('SPY'), regression_length=60).shift(),
@@ -957,7 +957,7 @@ def make_pipeline():
             'vol': Volatility(window_length=10, mask=tradable_filter),
 
             # VIX signal
-            'vixflag': CustomFundamentals4.pred.latest.shift(),
+            'vixflag': CustomFundamentals4.pred.latest,
             'vixflag0': CustomFundamentals4.pred.latest,
 
             # BC data

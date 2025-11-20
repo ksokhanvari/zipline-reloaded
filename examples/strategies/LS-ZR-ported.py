@@ -61,7 +61,7 @@ from zipline.pipeline.factors import (Latest, Returns, RollingLinearRegressionOf
                                      AverageDollarVolume, RateOfChangePercentage, VWAP)
 from zipline.pipeline.classifiers import CustomClassifier
 from zipline.pipeline.filters import StaticAssets
-from zipline.pipeline import sharadar
+from zipline.pipeline.data.sharadar import SharadarFundamentals
 from zipline.finance import commission, slippage
 
 # Multi-source module for custom databases
@@ -894,9 +894,6 @@ def make_pipeline():
     # Initial universe filter - top stocks by market cap
     tradable_filter = (CustomFundamentals.CompanyMarketCap.latest.shift().top(UNIVERSE_SIZE))
 
-    # Sharadar fundamentals
-    s_fundamentals = sharadar.Fundamentals.slice('MRQ', period_offset=0)
-
     # Money flow factors
     money_flow_index = MoneyFlowIndexFactor(mask=tradable_filter, window_length=90)
     chaikin_money_flow = ChaikinMoneyFlowFactor(mask=tradable_filter, window_length=90)
@@ -927,7 +924,7 @@ def make_pipeline():
 
             # Financial metrics
             'CashCashEquivalents_Total': CustomFundamentals.CashCashEquivalents_Total.latest.shift(),
-            'fcf': s_fundamentals.FCF.latest,
+            'fcf': SharadarFundamentals.fcf.latest,
             'int': CustomFundamentals.InterestExpense_NetofCapitalizedInterest.latest.shift(),
 
             # Risk metrics

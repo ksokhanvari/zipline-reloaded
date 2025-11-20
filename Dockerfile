@@ -50,14 +50,13 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     pip install -e . --no-build-isolation
 
 # Create necessary directories
-RUN mkdir -p /notebooks /data /root/.zipline /scripts /root/.jupyter/lab/user-settings/@jupyterlab/notebook-extension
+RUN mkdir -p /notebooks /data /root/.zipline /scripts
 
 # Copy extension.py to register custom bundles
 COPY extension.py /root/.zipline/extension.py
 
-# Copy Jupyter Lab settings for consistent notebook rendering
-COPY .jupyter/lab/user-settings/@jupyterlab/notebook-extension/tracker.jupyterlab-settings \
-     /root/.jupyter/lab/user-settings/@jupyterlab/notebook-extension/tracker.jupyterlab-settings
+# Copy all Jupyter Lab settings (dark theme, notebook, terminal, codemirror)
+COPY .jupyter/lab/user-settings /root/.jupyter/lab/user-settings
 
 # Set up Jupyter and analysis tools
 RUN --mount=type=cache,target=/root/.cache/pip \

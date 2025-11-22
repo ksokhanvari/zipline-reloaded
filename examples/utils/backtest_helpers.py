@@ -49,119 +49,7 @@ from zipline import run_algorithm
 from zipline.data.bundles import load as load_bundle
 from zipline.utils.calendar_utils import get_calendar
 from zipline.data.custom import CustomSQLiteLoader
-
-
-def _setup_custom_loaders(algo_module):
-    """
-    Detect Database classes in the algorithm module and create custom loaders.
-
-    Parameters
-    ----------
-    algo_module : module
-        Loaded algorithm module
-
-    Returns
-    -------
-    dict or None
-        Dictionary mapping BoundColumns to CustomSQLiteLoader instances,
-        or None if no Database classes found
-    """
-    try:
-        from zipline.pipeline.data.db import Database
-        from zipline.pipeline.data.dataset import BoundColumn
-    except ImportError:
-        # Database class not available, no custom loaders needed
-        return None
-
-    # Use a custom dict that matches columns by dataset and name
-    # This handles domain-aware columns (e.g., FundamentalsDataSet<US>.ROE)
-    class LoaderDict(dict):
-        """
-        Dict that matches BoundColumns by dataset and column name.
-
-        This handles the case where columns are registered without a domain
-        (FundamentalsDataSet.ROE) but looked up with a domain
-        (FundamentalsDataSet<US>.ROE).
-        """
-        def get(self, key, default=None):
-            # First try exact match
-            if key in self:
-                return self[key]
-
-            # If key is a BoundColumn, try matching by dataset name and column name
-            if hasattr(key, 'dataset') and hasattr(key, 'name'):
-                # Extract dataset name without domain (remove <DOMAIN> part)
-                key_dataset_name = str(key.dataset).split('<')[0]
-                key_col_name = key.name
-
-                # Search for a matching column in our registered columns
-                for registered_col, loader in self.items():
-                    if hasattr(registered_col, 'dataset') and hasattr(registered_col, 'name'):
-                        reg_dataset_name = str(registered_col.dataset).split('<')[0]
-                        reg_col_name = registered_col.name
-
-                        # Match by dataset name and column name
-                        if key_dataset_name == reg_dataset_name and key_col_name == reg_col_name:
-                            return loader
-
-            # No match found
-            raise KeyError(key)
-
-    custom_loader_dict = LoaderDict()
-
-    # Scan module for Database subclasses
-    database_classes = []
-    for attr_name in dir(algo_module):
-        try:
-            attr = getattr(algo_module, attr_name)
-
-            # Check if it's a class
-            if not isinstance(attr, type):
-                continue
-
-            # Check if it's a Database subclass (but not Database itself)
-            if issubclass(attr, Database) and attr is not Database:
-                database_classes.append((attr_name, attr))
-        except (TypeError, AttributeError):
-            continue
-
-    for attr_name, attr in database_classes:
-        # Get the database CODE
-        code = getattr(attr, 'CODE', None)
-        if not code:
-            continue
-
-        # Create a CustomSQLiteLoader for this database
-        loader = CustomSQLiteLoader(code)
-
-        # Scan the Database class directly for BoundColumn instances
-        # The metaclass copies these from the dataset_class, so they're the actual
-        # columns referenced in the algorithm code
-        for col_name in dir(attr):
-            # Skip private/special attributes and class attributes
-            if col_name.startswith('_') or col_name in ('CODE', 'LOOKBACK_WINDOW'):
-                continue
-            try:
-                col = getattr(attr, col_name)
-
-                # Use duck typing: check if it has the attributes of a BoundColumn
-                # This is more robust than isinstance
-                is_bound_column = (
-                    hasattr(col, 'dtype') and
-                    hasattr(col, 'dataset') and
-                    hasattr(col, 'name') and
-                    not callable(col)
-                )
-
-                if is_bound_column:
-                    custom_loader_dict[col] = loader
-            except (AttributeError, TypeError):
-                continue
-
-    if custom_loader_dict:
-        return custom_loader_dict
-    else:
-        return None
+from zipline.pipeline.loaders.auto_loader import setup_auto_loader
 
 
 def backtest(
@@ -283,16 +171,19 @@ def backtest(
     print()
     print()
 
-    # Set up custom loaders for Database classes
-    print("Detecting custom databases...")
-    custom_loader = _setup_custom_loaders(algo_module)
-    if custom_loader:
-        print("✓ Custom loaders configured")
-        # Add to kwargs if not already specified
-        if 'custom_loader' not in kwargs:
-            kwargs['custom_loader'] = custom_loader
+    # Set up auto loader for both custom databases and Sharadar fundamentals
+    print("Setting up auto loader...")
+    if 'custom_loader' not in kwargs:
+        import os
+        custom_db_dir = os.environ.get('ZIPLINE_CUSTOM_DATA_DIR', None)
+        kwargs['custom_loader'] = setup_auto_loader(
+            bundle_name=bundle,
+            custom_db_dir=custom_db_dir,
+            enable_sid_translation=True,
+        )
+        print("✓ Auto loader configured (Sharadar + custom databases)")
     else:
-        print("  No custom databases found")
+        print("  Using provided custom_loader")
     print()
 
     # Load bundle

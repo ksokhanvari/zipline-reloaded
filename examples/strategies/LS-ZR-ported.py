@@ -61,8 +61,8 @@ from zipline.pipeline.factors import (Latest, Returns, RollingLinearRegressionOf
                                      AverageDollarVolume, RateOfChangePercentage, VWAP)
 from zipline.pipeline.classifiers import CustomClassifier
 from zipline.pipeline.filters import StaticAssets
-# Commented out - needs special loader configuration
-# from zipline.pipeline.data.sharadar import SharadarFundamentals
+# Sharadar fundamentals for FCF
+from zipline.pipeline.data.sharadar import SharadarFundamentals
 from zipline.finance import commission, slippage
 
 # Multi-source module for custom databases
@@ -210,6 +210,7 @@ class CustomFundamentals(ms.Database):
     # Prediction columns
     pred = ms.Column(float)
     forcast = ms.Column(float)
+    bc1 = ms.Column(float)  # BC signal
 
 class CustomFundamentals2(ms.Database):
     """Sentiment data database."""
@@ -639,6 +640,16 @@ class SumFactor(CustomFactor):
         out[:] = np.sum(factordata, axis=0)
 
 
+class PreviousValue(CustomFactor):
+    """Returns the previous day's value (1-day lag)"""
+    window_length = 2
+    window_safe = True
+
+    def compute(self, today, assets, out, data):
+        # data[0] is previous day, data[1] is current day
+        out[:] = data[0]
+
+
 class MLFactor(CustomFactor):
     """Machine learning factor that predicts future returns"""
     params = ('shift_target',)
@@ -676,6 +687,15 @@ class MLFactor(CustomFactor):
 
         X = X.reshape(n_time * n_stocks, n_factors)
         print('X post reshape', X.shape)
+
+        # Guard against empty arrays (no samples after filtering)
+        if X.shape[0] == 0:
+            import logging
+            logging.info(f'MLFactor EMPTY ARRAY: date={today}, n_time={n_time}, n_stocks={n_stocks}, shape={X.shape}')
+            print(f'WARNING: No samples after filtering on {today}, returning zeros')
+            out[:] = 0.0
+            return
+
         X = self.imputer.fit_transform(X)
         X = self.scaler.fit_transform(X)
 
@@ -918,7 +938,7 @@ def make_pipeline():
 
     # Initial universe filter - top stocks by market cap
     print("[DEBUG] Creating tradable_filter...")
-    tradable_filter = (CustomFundamentals.CompanyMarketCap.latest.top(UNIVERSE_SIZE))
+    tradable_filter = (CustomFundamentals.CompanyMarketCap.latest.top(UNIVERSE_SIZE)) | StaticAssets([symbol('IBM')])
     print("[DEBUG] tradable_filter created")
 
     # Money flow factors
@@ -970,7 +990,9 @@ def make_pipeline():
 
     print("[DEBUG] Adding financial columns...")
     columns['CashCashEquivalents_Total'] = CustomFundamentals.CashCashEquivalents_Total.latest
-    # Use FOCF from CustomFundamentals instead of Sharadar fcf
+    # Use Sharadar FCF
+    #columns['fcf'] = SharadarFundamentals.fcf.latest
+    # Commented out - using Sharadar FCF instead
     columns['fcf'] = CustomFundamentals.FOCFExDividends_Discrete.latest
     columns['int'] = CustomFundamentals.InterestExpense_NetofCapitalizedInterest.latest
 
@@ -1002,28 +1024,27 @@ def make_pipeline():
     columns['publicdays'] = PublicSince(window_length=121)
     columns['vol'] = Volatility(window_length=10, mask=tradable_filter)
 
-    # Commenting out VIX columns - vixdata database doesn't exist
-    print("[DEBUG] Skipping VIX columns (database not available)...")
-    # columns['vixflag'] = CustomFundamentals4.pred.latest
-    # columns['vixflag0'] = CustomFundamentals4.pred.latest
+    # VIX and BC signals (loaded via IBM carrier in fundamentals database)
+    print("[DEBUG] Adding VIX and BC signal columns...")
+    columns['vixflag'] =  PreviousValue(inputs=[CustomFundamentals.pred])
+    columns['vixflag0'] = CustomFundamentals.pred.latest  # Previous day's VIX flag
 
-    # Commenting out BC data - bcdata database doesn't exist
-    print("[DEBUG] Skipping BC data (database not available)...")
-    # columns['bc1'] = CustomFundamentals9.bc1.latest
+     
+    columns['bc1'] = CustomFundamentals.bc1.latest
 
-    print("[DEBUG] Adding MLFactor...")
-    columns['MLfactor'] = MLFactor(
-        inputs=[
-            Returns(window_length=90, mask=tradable_filter),
-            CustomFundamentals.EnterpriseValueToEBITDA_DailyTimeSeriesRatio_,
-            CustomFundamentals.LongTermGrowth_Mean,
-            CustomFundamentals.CombinedAlphaModelSectorRank,
-            CustomFundamentals.ForwardEnterpriseValueToOperatingCashFlow_DailyTimeSeriesRatio_,
-        ],
-        window_length=180,
-        mask=tradable_filter,
-        shift_target=10
-    )
+    # print("[DEBUG] Adding MLFactor...")
+    # columns['MLfactor'] = MLFactor(
+    #     inputs=[
+    #         Returns(window_length=90, mask=tradable_filter),
+    #         CustomFundamentals.EnterpriseValueToEBITDA_DailyTimeSeriesRatio_,
+    #         CustomFundamentals.LongTermGrowth_Mean,
+    #         CustomFundamentals.CombinedAlphaModelSectorRank,
+    #         CustomFundamentals.ForwardEnterpriseValueToOperatingCashFlow_DailyTimeSeriesRatio_,
+    #     ],
+    #     window_length=180,
+    #     mask=tradable_filter,
+    #     shift_target=10
+    # )
 
     # Commenting out sentiment factors - SumFactor usage needs fixing
     # The SumFactor class doesn't have inputs defined properly
@@ -1056,19 +1077,34 @@ def before_trading_start(context, data):
     print(f"Raw stock universe size {df.shape}")
     print(get_datetime(timezone("America/Los_Angeles")))
 
+    # DEBUG: Check if IBM is in the pipeline output
+    log_to_flightlog(f"[DEBUG] IBM SID: {context.ibm_sid}", level='INFO')
+    log_to_flightlog(f"[DEBUG] IBM in pipeline index: {context.ibm_sid in df.index}", level='INFO')
+
+    # DEBUG: Check available columns
+    if 'vixflag' in df.columns:
+        log_to_flightlog(f"[DEBUG] vixflag column exists, dtype: {df['vixflag'].dtype}", level='INFO')
+        log_to_flightlog(f"[DEBUG] vixflag non-null count: {df['vixflag'].notna().sum()}", level='INFO')
+        log_to_flightlog(f"[DEBUG] vixflag sample values: {df['vixflag'].dropna().head(5).tolist()}", level='INFO')
+    else:
+        log_to_flightlog("[DEBUG] WARNING: vixflag column NOT in pipeline output!", level='WARNING')
+
+    if 'bc1' in df.columns:
+        log_to_flightlog(f"[DEBUG] bc1 column exists, dtype: {df['bc1'].dtype}", level='INFO')
+    else:
+        log_to_flightlog("[DEBUG] WARNING: bc1 column NOT in pipeline output!", level='WARNING')
+
     # Update market condition indicators
     update_market_indicators(context, data)
 
     # Update VIX signal
     context.vixflag_prev = context.vixflag
-    try:
-        context.vixflag = df.loc[context.ibm_sid].vixflag.copy()
-        context.vixflag0 = df.loc[context.ibm_sid].vixflag0.copy()
-        context.bc1 = df.loc[context.ibm_sid].bc1.copy()
-    except:
-        context.vixflag = 0
-        context.vixflag0 = 0
-        context.bc1 = 0
+    
+    context.vixflag = df.loc[context.ibm_sid].vixflag.copy()
+    context.vixflag0 = df.loc[context.ibm_sid].vixflag0.copy()
+    context.bc1 = df.loc[context.ibm_sid].bc1.copy()
+    log_to_flightlog(f"[DEBUG] Successfully read IBM signals: vixflag={context.vixflag}, bc1={context.bc1}", level='INFO')
+
 
     print('IBM-vixdata', context.vixflag)
 
@@ -1131,7 +1167,7 @@ def process_universe(context, df, data):
             context.season = 0
 
         df['estrank'] = (
-            df['MLfactor'].rank() +
+            #df['MLfactor'].rank() +
             (df['entval'].rank() * 2) +
             (df['cash_return'].rank()) +
             df['eps_gr_mean'].rank() * (4 if context.season == 1 else 1) +
@@ -1287,7 +1323,7 @@ def initial_allocation(context, data):
     """Handle initial portfolio allocation."""
     spyprice_1 = context.price_history_spy100.iloc[-1]
     spyprice_2 = context.price_history_spy100.iloc[-2]
-
+    
     if context.iwm_w == 0:
         context.iwm_w = -0.4
 
@@ -1402,6 +1438,8 @@ def regular_allocation(context, data):
 
     order_target_percent(context.spysym, total_wl * spy_weight_factor)
 
+    print(f'Total SPY weight: {total_wl * spy_weight_factor:.4f}')
+    print(f'Total port long weight: {total_wl * port_weight_factor:.4f}')
     print(f'Total long weight: {total_wl:.4f}')
 
     # Short weights
@@ -1663,20 +1701,23 @@ def compute_trend(context, data):
     context.longfact_last = context.longfact
 
     if context.vixflag <= 0:
-        print('Trend mode: 1.5')
+        log_to_flightlog(f'[DEBUG] Trend mode: AGGRESSIVE, vixflag={context.vixflag} <= 0, longfact=1.5', level='INFO')
         context.vix_uptrend_flag = True
         context.longfact = 1.5
 
         if get_datetime().date().month in SHORT_RESTRICTED_MONTHS:
             context.shortfact = 0.45
+            log_to_flightlog(f'[DEBUG] Month {get_datetime().date().month} in SHORT_RESTRICTED, shortfact=0.45', level='INFO')
         else:
             context.shortfact = 0.9
+            log_to_flightlog(f'[DEBUG] Month {get_datetime().date().month} NOT in SHORT_RESTRICTED, shortfact=0.9', level='INFO')
         context.clip = 1.2
 
     else:
-        print('Trend mode: 1')
+        log_to_flightlog(f'[DEBUG] Trend mode: DEFENSIVE, vixflag={context.vixflag} > 0', level='INFO')
         context.vix_uptrend_flag = False
         context.longfact = 0.0 if context.spy_below80ma else abs(context.iwm_w)
+        log_to_flightlog(f'[DEBUG] spy_below80ma={context.spy_below80ma}, longfact={context.longfact}', level='INFO')
         context.shortfact = 0.5
         context.clip = 1.6
 

@@ -24,7 +24,7 @@ class AutoSymbolMapper:
     for all future loads.
     """
 
-    def __init__(self, asset_finder, mapping_file='/root/.zipline/data/custom/symbol_mappings.json'):
+    def __init__(self, asset_finder, mapping_file='/data/custom_databases/symbol_mappings.json'):
         """
         Initialize auto mapper.
 

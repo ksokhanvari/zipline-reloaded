@@ -99,7 +99,7 @@ def build_pipeline_loaders():
 
     fundamentals_loader = CustomSQLiteLoader(
         db_code=CustomFundamentals.CODE,
-        db_dir=Path('/root/.zipline/data/custom')
+        db_dir=Path('/data/custom_databases')
     )
 
     # Build loader map

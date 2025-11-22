@@ -50,7 +50,7 @@ Or import and use programmatically:
 REQUIREMENTS
 ============
 - Zipline Reloaded with custom data support
-- Custom fundamentals database at /root/.zipline/data/custom/fundamentals.sqlite
+- Custom fundamentals database at /data/custom_databases/fundamentals.sqlite
 - Sharadar bundle data
 - See load_csv_fundamentals.ipynb for database creation
 
@@ -112,7 +112,7 @@ REBALANCE_FREQ = 'weekly'  # weekly, monthly, or daily
 
 # Database Configuration
 DB_NAME = "fundamentals"   # Must match load_csv_fundamentals.ipynb
-DB_DIR = Path('/root/.zipline/data/custom')
+DB_DIR = Path('/data/custom_databases')
 
 # Bundle Configuration
 BUNDLE_NAME = 'sharadar'

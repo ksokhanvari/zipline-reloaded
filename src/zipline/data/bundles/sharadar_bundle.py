@@ -1375,9 +1375,8 @@ def download_sharadar_fundamentals(
     - Ratios: roe, roa, pe, pb, etc.
     - Per-share: eps, bvps, sps, etc.
 
-    IMPORTANT: We use dimension='ARQ' (As-Reported Quarterly) for point-in-time correctness.
-    This ensures we only access data that was actually available on each historical date,
-    preventing look-ahead bias.
+    NOTE: Currently using dimension='MRQ' (Most Recent Quarterly) which includes restated values.
+    For point-in-time correctness (no look-ahead bias), switch back to 'ARQ' (As-Reported Quarterly).
 
     PERMATICKER: SF1 includes 'permaticker' which we use as SID for consistency with
     pricing data. This ensures perfect alignment even when ticker symbols change.
@@ -1421,11 +1420,11 @@ def download_sharadar_fundamentals(
     if sf1_data.empty:
         return sf1_data
 
-    # Filter to ARQ dimension (As-Reported Quarterly) for point-in-time correctness
+    # Filter to MRQ dimension (Most Recent Quarterly) - includes restated values
     if 'dimension' in sf1_data.columns:
         original_count = len(sf1_data)
-        sf1_data = sf1_data[sf1_data['dimension'] == 'ARQ'].copy()
-        print(f"  Filtered to ARQ dimension: {len(sf1_data):,} records (from {original_count:,})")
+        sf1_data = sf1_data[sf1_data['dimension'] == 'MRQ'].copy()
+        print(f"  Filtered to MRQ dimension: {len(sf1_data):,} records (from {original_count:,})")
     else:
         print("  ⚠️  No 'dimension' column found - using all data")
 

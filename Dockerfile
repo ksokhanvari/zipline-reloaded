@@ -70,6 +70,13 @@ RUN JUPYTER_DATA_DIR=$(python -c "import jupyter_core.paths; print(jupyter_core.
     mkdir -p "$JUPYTER_DATA_DIR/lab/settings" && \
     cp /root/.jupyter/lab/settings/overrides.json "$JUPYTER_DATA_DIR/lab/settings/overrides.json"
 
+# Copy FlightLog commands for IPython magic
+COPY jupyter_config/flightlog_commands.py /usr/local/lib/python3.11/site-packages/flightlog_commands.py
+
+# Set up IPython startup to auto-load FlightLog commands
+RUN mkdir -p /root/.ipython/profile_default/startup && \
+    echo "# Auto-load FlightLog commands\ntry:\n    get_ipython().run_line_magic('load_ext', 'flightlog_commands')\nexcept:\n    pass" > /root/.ipython/profile_default/startup/00-flightlog.py
+
 # Expose Jupyter port
 EXPOSE 8888
 

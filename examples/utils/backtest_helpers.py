@@ -31,6 +31,205 @@ from datetime import datetime
 import warnings
 warnings.filterwarnings('ignore')
 
+# FlightLog integration for print redirection
+# Port 9020: Log info (structured logging)
+# Port 9021: Print statements (stdout redirection)
+_flightlog_log_enabled = False
+_flightlog_print_enabled = False
+_flightlog_log_handler = None
+_flightlog_print_handler = None
+
+def _connect_flightlog():
+    """Connect to flightlog servers. Called at backtest start time."""
+    global _flightlog_log_enabled, _flightlog_print_enabled
+    global _flightlog_log_handler, _flightlog_print_handler
+
+    # Check if flightlog script exists
+    flightlog_paths = [
+        '/app/scripts/flightlog.py',
+        'scripts/flightlog.py',
+        '../scripts/flightlog.py',
+    ]
+
+    flightlog_exists = any(os.path.exists(p) for p in flightlog_paths)
+
+    if not flightlog_exists:
+        return False
+
+    import logging
+    import logging.handlers
+
+    # Hosts to try for port 9020 (log info)
+    # localhost first for JupyterLab terminals in same container
+    log_hosts = [
+        'localhost',              # JupyterLab terminal in same container
+        'flightlog',              # docker-compose service name
+        'zipline-flightlog',      # container name
+        'host.docker.internal',
+    ]
+
+    # Hosts to try for port 9021 (print statements)
+    # localhost first for JupyterLab terminals in same container
+    print_hosts = [
+        'localhost',              # JupyterLab terminal in same container
+        'flightlog-print',        # docker-compose service name
+        'zipline-flightlog-print', # container name
+        'host.docker.internal',
+    ]
+
+    # Connect to port 9020 for log info
+    for host in log_hosts:
+        try:
+            _flightlog_log_handler = logging.handlers.SocketHandler(host, 9020)
+            _flightlog_log_handler.setLevel(logging.INFO)
+
+            # Test connection
+            test_record = logging.LogRecord(
+                name='backtest.log',
+                level=logging.INFO,
+                pathname='',
+                lineno=0,
+                msg='FlightLog LOG channel connected',
+                args=(),
+                exc_info=None
+            )
+            _flightlog_log_handler.emit(test_record)
+            _flightlog_log_enabled = True
+            print(f"FlightLog LOG connected to {host}:9020")
+            break
+        except:
+            if _flightlog_log_handler:
+                _flightlog_log_handler.close()
+            _flightlog_log_handler = None
+            continue
+
+    # Connect to port 9021 for print statements
+    for host in print_hosts:
+        try:
+            _flightlog_print_handler = logging.handlers.SocketHandler(host, 9021)
+            _flightlog_print_handler.setLevel(logging.INFO)
+
+            # Test connection
+            test_record = logging.LogRecord(
+                name='backtest.print',
+                level=logging.INFO,
+                pathname='',
+                lineno=0,
+                msg='FlightLog PRINT channel connected',
+                args=(),
+                exc_info=None
+            )
+            _flightlog_print_handler.emit(test_record)
+            _flightlog_print_enabled = True
+            print(f"FlightLog PRINT connected to {host}:9021")
+            break
+        except:
+            if _flightlog_print_handler:
+                _flightlog_print_handler.close()
+            _flightlog_print_handler = None
+            continue
+
+    if not _flightlog_log_enabled and not _flightlog_print_enabled:
+        print("FlightLog connection failed: Could not connect to any host")
+        return False
+
+    return _flightlog_log_enabled or _flightlog_print_enabled
+
+def _disconnect_flightlog():
+    """Disconnect from flightlog servers."""
+    global _flightlog_log_enabled, _flightlog_print_enabled
+    global _flightlog_log_handler, _flightlog_print_handler
+
+    if _flightlog_log_handler is not None:
+        try:
+            _flightlog_log_handler.close()
+        except:
+            pass
+        _flightlog_log_handler = None
+    _flightlog_log_enabled = False
+
+    if _flightlog_print_handler is not None:
+        try:
+            _flightlog_print_handler.close()
+        except:
+            pass
+        _flightlog_print_handler = None
+    _flightlog_print_enabled = False
+
+def log_to_flightlog(message, level='INFO'):
+    """Send structured log message to port 9020."""
+    global _flightlog_log_enabled, _flightlog_log_handler
+
+    if not _flightlog_log_enabled or _flightlog_log_handler is None:
+        return
+
+    import logging
+    try:
+        level_map = {
+            'DEBUG': logging.DEBUG,
+            'INFO': logging.INFO,
+            'WARNING': logging.WARNING,
+            'ERROR': logging.ERROR,
+            'CRITICAL': logging.CRITICAL
+        }
+        log_level = level_map.get(level.upper(), logging.INFO)
+
+        record = logging.LogRecord(
+            name='backtest.log',
+            level=log_level,
+            pathname='',
+            lineno=0,
+            msg=message,
+            args=(),
+            exc_info=None
+        )
+        _flightlog_log_handler.emit(record)
+    except:
+        pass
+
+def print_to_flightlog(message):
+    """Send print statement to port 9021."""
+    global _flightlog_print_enabled, _flightlog_print_handler
+
+    if not _flightlog_print_enabled or _flightlog_print_handler is None:
+        return
+
+    import logging
+    try:
+        record = logging.LogRecord(
+            name='backtest.print',
+            level=logging.INFO,
+            pathname='',
+            lineno=0,
+            msg=message,
+            args=(),
+            exc_info=None
+        )
+        _flightlog_print_handler.emit(record)
+    except:
+        pass
+
+class FlightLogPrintRedirector:
+    """Redirects print statements to flightlog port 9021 only (suppresses notebook output)."""
+
+    def __init__(self, original_stdout, suppress_stdout=True):
+        self.original_stdout = original_stdout
+        self.suppress_stdout = suppress_stdout
+
+    def write(self, text):
+        # Send to flightlog print channel (port 9021) if enabled
+        if _flightlog_print_enabled and text.strip():
+            print_to_flightlog(text.strip())
+            # Only write to notebook if we're NOT suppressing stdout
+            if not self.suppress_stdout:
+                self.original_stdout.write(text)
+        else:
+            # FlightLog not connected - always write to stdout
+            self.original_stdout.write(text)
+
+    def flush(self):
+        self.original_stdout.flush()
+
 # Bundle registration (must be before other zipline imports)
 # Handle import from different locations
 try:
@@ -50,6 +249,7 @@ from zipline.data.bundles import load as load_bundle
 from zipline.utils.calendar_utils import get_calendar
 from zipline.data.custom import CustomSQLiteLoader
 from zipline.pipeline.loaders.auto_loader import setup_auto_loader
+from zipline.utils.progress import enable_progress_logging
 
 
 def backtest(
@@ -117,6 +317,16 @@ def backtest(
     ...     filepath_or_buffer="momentum_results.csv"
     ... )
     """
+    # Connect to FlightLog servers FIRST (before any prints)
+    _connect_flightlog()
+
+    # Enable FlightLog print redirection if print channel connected
+    # ALL prints go to port 9021, none to notebook
+    original_stdout = None
+    if _flightlog_print_enabled:
+        original_stdout = sys.stdout
+        sys.stdout = FlightLogPrintRedirector(original_stdout)
+
     print("=" * 80)
     print("BACKTEST CONFIGURATION")
     print("=" * 80)
@@ -207,6 +417,44 @@ def backtest(
     print(f"Start time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print()
 
+    # Log backtest start to log channel (port 9020)
+    log_to_flightlog("Backtest started")
+
+    # Enable progress logging (update daily)
+    # Extract strategy name from algo_filename for clearer display
+    algo_display_name = Path(algo_filename).stem  # e.g., "LS-ZR-ported" from "/app/examples/strategies/LS-ZR-ported.py"
+
+    # Configure progress logger to use LOG channel (port 9020) instead of stdout
+    # This keeps progress separate from print clutter on port 9021
+    import logging
+    progress_logger = logging.getLogger('zipline.progress')
+    progress_logger.handlers.clear()
+    progress_logger.setLevel(logging.INFO)
+    progress_logger.propagate = False
+
+    # If LOG channel is connected, send progress there
+    if _flightlog_log_enabled and _flightlog_log_handler is not None:
+        progress_logger.addHandler(_flightlog_log_handler)
+    else:
+        # Fallback to original stdout (before redirection) if no LOG channel
+        handler = logging.StreamHandler(original_stdout if original_stdout else sys.stdout)
+        handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s'))
+        progress_logger.addHandler(handler)
+
+    # Import and call enable_progress_logging - it will use the logger we just configured
+    from zipline.utils.progress import BacktestProgressLogger, _global_progress_logger
+    import zipline.utils.progress as progress_module
+
+    # Create progress logger instance that uses our pre-configured logger
+    progress_module._global_progress_logger = BacktestProgressLogger(
+        algo_name=algo_display_name,
+        update_interval=1,  # Show progress every trading day
+        show_metrics=True,
+        logger=progress_logger  # Use our configured logger
+    )
+
+    print(f"Progress logging enabled for '{algo_display_name}'")
+
     try:
         perf = run_algorithm(
             start=start_date,
@@ -235,6 +483,12 @@ def backtest(
         print("=" * 80)
         print(f"Error: {e}")
         raise
+    finally:
+        # Restore original stdout and disconnect flightlog
+        if original_stdout is not None:
+            sys.stdout = original_stdout
+        log_to_flightlog("Backtest completed")
+        _disconnect_flightlog()
 
     # Add metadata columns
     perf['backtest_name'] = name

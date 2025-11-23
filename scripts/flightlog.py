@@ -66,10 +66,6 @@ class ColoredFormatter(logging.Formatter):
                 # Color the level name
                 record.levelname = f"{self.COLORS[levelname]}{levelname}{self.RESET}"
 
-                # Make algorithm logs bold
-                if record.name == 'algorithm':
-                    record.msg = f"{self.BOLD}{record.msg}{self.RESET}"
-
         return super().format(record)
 
 

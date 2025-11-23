@@ -39,9 +39,29 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: zipline-flightlog
-    command: python /app/scripts/flightlog.py --host 0.0.0.0 --file /logs/flightlog.log
+    command: python /app/scripts/flightlog.py --host 0.0.0.0 --port 9020 --file /logs/flightlog.log
     ports:
       - "${FLIGHTLOG_PORT:-9020}:9020"
+    volumes:
+      # Mount logs directory for persistent log files
+      - ./logs:/logs
+    environment:
+      - PYTHONUNBUFFERED=1
+    networks:
+      - zipline-network
+    # Auto-start with docker compose up
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+
+  flightlog-print:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: zipline-flightlog-print
+    command: python /app/scripts/flightlog.py --host 0.0.0.0 --port 9021 --file /logs/flightlog-print.log
+    ports:
+      - "9021:9021"
     volumes:
       # Mount logs directory for persistent log files
       - ./logs:/logs

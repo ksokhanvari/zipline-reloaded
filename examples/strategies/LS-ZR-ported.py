@@ -88,6 +88,9 @@ SYM_SID_CACHE_DICT = {}
 # Asset finder reference (set during initialization)
 ASSET_FINDER = None
 
+# Sharadar sector cache for performance (loaded once at initialization)
+SHARADAR_SECTOR_CACHE = {}
+
 # Portfolio Construction Parameters
 UNIVERSE_SIZE = 1500        # Top N stocks by market cap to consider initially
 FILTERED_UNIVERSE_SIZE = 500 # Final universe size after screening
@@ -844,20 +847,15 @@ def initialize(context):
     """
     global ASSET_FINDER
 
-    print("[DEBUG] initialize() starting...")
 
     # Store asset finder reference for symbol lookup
     from zipline.data import bundles
     bundle = bundles.load('sharadar')
     ASSET_FINDER = bundle.asset_finder
-    print(f"[DEBUG] ASSET_FINDER set: {ASSET_FINDER}")
 
     # Attach our main stock selection pipeline
-    print("[DEBUG] Calling make_pipeline()...")
     pipeline = make_pipeline()
-    print("[DEBUG] make_pipeline() returned successfully")
     attach_pipeline(pipeline, 'my_pipeline')
-    print("[DEBUG] Pipeline attached")
 
     # Set the benchmark
     spy = symbol('SPY')
@@ -914,6 +912,21 @@ def initialize(context):
     except:
         print("FlightLog not available - continuing without real-time monitoring")
 
+    # Load Sharadar sector cache once for performance
+    global SHARADAR_SECTOR_CACHE
+    try:
+        import sqlite3
+        db_path = '/data/custom_databases/fundamentals.sqlite'
+        conn = sqlite3.connect(db_path)
+        sharadar_df = pd.read_sql("SELECT ticker, sector FROM SharadarTickers", conn)
+        conn.close()
+        # Convert to dict for O(1) lookup
+        SHARADAR_SECTOR_CACHE = dict(zip(sharadar_df['ticker'], sharadar_df['sector']))
+        print(f"[INFO] Loaded {len(SHARADAR_SECTOR_CACHE)} Sharadar sectors into cache")
+    except Exception as e:
+        print(f"[WARNING] Could not load Sharadar sector cache: {e}")
+        SHARADAR_SECTOR_CACHE = {}
+
 
 def make_pipeline():
     """
@@ -921,61 +934,43 @@ def make_pipeline():
     """
     global ASSET_FINDER
 
-    print("[DEBUG] make_pipeline() starting...")
 
     # Get benchmark assets using asset_finder (available after initialize sets it)
-    print("[DEBUG] Looking up SPY...")
     spy_asset = ASSET_FINDER.lookup_symbol('SPY', as_of_date=None)
-    print(f"[DEBUG] SPY asset: {spy_asset}, type: {type(spy_asset)}, sid: {spy_asset.sid if spy_asset else 'None'}")
 
-    print("[DEBUG] Looking up IWM...")
     iwm_asset = ASSET_FINDER.lookup_symbol('IWM', as_of_date=None)
-    print(f"[DEBUG] IWM asset: {iwm_asset}, type: {type(iwm_asset)}, sid: {iwm_asset.sid if iwm_asset else 'None'}")
 
-    print("[DEBUG] Looking up QQQ...")
     qqq_asset = ASSET_FINDER.lookup_symbol('QQQ', as_of_date=None)
-    print(f"[DEBUG] QQQ asset: {qqq_asset}, type: {type(qqq_asset)}, sid: {qqq_asset.sid if qqq_asset else 'None'}")
 
     # Initial universe filter - top stocks by market cap
-    print("[DEBUG] Creating tradable_filter...")
     tradable_filter = (CustomFundamentals.CompanyMarketCap.latest.top(UNIVERSE_SIZE)) | StaticAssets([symbol('IBM')])
-    print("[DEBUG] tradable_filter created")
 
     # Money flow factors
-    print("[DEBUG] Creating money flow factors...")
     money_flow_index = MoneyFlowIndexFactor(mask=tradable_filter, window_length=90)
     chaikin_money_flow = ChaikinMoneyFlowFactor(mask=tradable_filter, window_length=90)
     simple_money_flow = SimpleMoneyFlowFactor(mask=tradable_filter, window_length=90)
     volume_weighted_mf = VolumeWeightedMoneyFlowFactor(mask=tradable_filter, window_length=90)
-    print("[DEBUG] Money flow factors created")
 
     # Create SimpleBeta factors with debug
-    print("[DEBUG] Creating SimpleBeta for SPY...")
     try:
         beta_spy = SimpleBeta(target=spy_asset, regression_length=60)
-        print(f"[DEBUG] SimpleBeta SPY created: {beta_spy}")
     except Exception as e:
-        print(f"[DEBUG] ERROR creating SimpleBeta SPY: {e}")
         raise
 
-    print("[DEBUG] Creating SimpleBeta for IWM...")
     try:
         beta_iwm = SimpleBeta(target=iwm_asset, regression_length=60)
-        print(f"[DEBUG] SimpleBeta IWM created: {beta_iwm}")
     except Exception as e:
-        print(f"[DEBUG] ERROR creating SimpleBeta IWM: {e}")
         raise
 
     # Build pipeline columns one by one for debugging
-    print("[DEBUG] Building pipeline columns dict...")
     columns = {}
 
-    print("[DEBUG] Adding company info columns...")
     columns['name'] = CustomFundamentals.Symbol.latest
     columns['compname'] = CustomFundamentals.CompanyCommonName.latest
+    # Note: sector is loaded from Sharadar tickers in filter_symbols_sectors_universe()
+    # We keep this as fallback in case Sharadar data is not available
     columns['sector'] = CustomFundamentals.GICSSectorName.latest
 
-    print("[DEBUG] Adding market data columns...")
     columns['market_cap'] = CustomFundamentals.CompanyMarketCap.latest
     columns['entval'] = CustomFundamentals.EnterpriseValue_DailyTimeSeries_.latest
     columns['price'] = USEquityPricing.close.latest
@@ -984,24 +979,22 @@ def make_pipeline():
     columns['fs_volume'] = CustomFundamentals.RefVolume.latest
     columns['sumvolume'] = SumVolume(window_length=3)
 
-    print("[DEBUG] Adding earnings columns...")
     columns['eps_ActualSurprise_prev_Q_percent'] = CustomFundamentals.EarningsPerShare_ActualSurprise.latest
     columns['eps_gr_mean'] = CustomFundamentals.LongTermGrowth_Mean.latest
 
-    print("[DEBUG] Adding financial columns...")
     columns['CashCashEquivalents_Total'] = CustomFundamentals.CashCashEquivalents_Total.latest
     # Use Sharadar FCF
-    #columns['fcf'] = SharadarFundamentals.fcf.latest
+    columns['fcf'] = SharadarFundamentals.fcf.latest
     # Commented out - using Sharadar FCF instead
-    columns['fcf'] = CustomFundamentals.FOCFExDividends_Discrete.latest
+    #columns['fcf'] = CustomFundamentals.FOCFExDividends_Discrete.latest
     columns['int'] = CustomFundamentals.InterestExpense_NetofCapitalizedInterest.latest
 
-    print("[DEBUG] Adding beta columns...")
     columns['beta60SPY'] = beta_spy
     columns['beta60IWM'] = beta_iwm
 
-    print("[DEBUG] Adding technical indicators...")
     columns['smav'] = SimpleMovingAverage(inputs=[USEquityPricing.volume], window_length=10)
+    # Note: .shift() on computed factors isn't directly supported
+    # Using the factors without shift for now - the data is already 1-day lagged from fundamentals
     columns['slope120'] = Slope(window_length=120, mask=tradable_filter).slope.zscore(mask=tradable_filter)
     columns['slope220'] = Slope(window_length=220, mask=tradable_filter).slope.zscore(mask=tradable_filter)
     columns['slope90'] = Slope(window_length=90, mask=tradable_filter).slope.zscore(mask=tradable_filter)
@@ -1010,29 +1003,23 @@ def make_pipeline():
     columns['above_200dma'] = Above200DMA(mask=tradable_filter)
     columns['walpha'] = WeightedAlpha()
 
-    print("[DEBUG] Adding relative strength columns...")
     columns['RS140_QQQ'] = RelativeStrength(window_length=140, market_sid=qqq_asset.sid)
     columns['RS160_QQQ'] = RelativeStrength(window_length=160, market_sid=qqq_asset.sid)
     columns['RS180_QQQ'] = RelativeStrength(window_length=180, market_sid=qqq_asset.sid)
 
-    print("[DEBUG] Adding return columns...")
     columns['Ret60'] = Returns(window_length=60, mask=tradable_filter)
     columns['Ret120'] = Returns(window_length=120, mask=tradable_filter)
     columns['Ret220'] = Returns(window_length=220, mask=tradable_filter)
 
-    print("[DEBUG] Adding other factors...")
     columns['publicdays'] = PublicSince(window_length=121)
     columns['vol'] = Volatility(window_length=10, mask=tradable_filter)
 
     # VIX and BC signals (loaded via IBM carrier in fundamentals database)
-    print("[DEBUG] Adding VIX and BC signal columns...")
-    columns['vixflag'] =  PreviousValue(inputs=[CustomFundamentals.pred])
-    columns['vixflag0'] = CustomFundamentals.pred.latest  # Previous day's VIX flag
+    columns['vixflag'] = PreviousValue(inputs=[CustomFundamentals.pred])  # Previous day's VIX flag
+    columns['vixflag0'] = CustomFundamentals.pred.latest  # Current day's VIX flag
 
-     
     columns['bc1'] = CustomFundamentals.bc1.latest
 
-    # print("[DEBUG] Adding MLFactor...")
     # columns['MLfactor'] = MLFactor(
     #     inputs=[
     #         Returns(window_length=90, mask=tradable_filter),
@@ -1048,7 +1035,6 @@ def make_pipeline():
 
     # Commenting out sentiment factors - SumFactor usage needs fixing
     # The SumFactor class doesn't have inputs defined properly
-    print("[DEBUG] Skipping sentiment factors (need fixing)...")
     # columns['sentcomb'] = (
     #     SumFactor(CustomFundamentals2.sentvad_neg, window_length=18).zscore() +
     #     SumFactor(CustomFundamentals2.sent2sub, window_length=18).zscore() +
@@ -1056,12 +1042,10 @@ def make_pipeline():
     # )
     # columns['sentest'] = 1/SumFactor(CustomFundamentals2.sent2pol, window_length=18)
 
-    print("[DEBUG] Creating ms.Pipeline...")
     pipe = ms.Pipeline(
         screen=tradable_filter,
         columns=columns
     )
-    print("[DEBUG] Pipeline created successfully")
 
     return pipe
 
@@ -1074,25 +1058,15 @@ def before_trading_start(context, data):
     # Get pipeline output
     df = pipeline_output('my_pipeline')
 
+    # Filter to tradeable stocks - keep as list of assets
+    all_selected = df.index
+    tradeable = [stock for stock in all_selected if data.can_trade(stock)]
+
+    # Store the filtered DataFrame (not the list)
+    df = df.loc[tradeable]
+
     print(f"Raw stock universe size {df.shape}")
     print(get_datetime(timezone("America/Los_Angeles")))
-
-    # DEBUG: Check if IBM is in the pipeline output
-    log_to_flightlog(f"[DEBUG] IBM SID: {context.ibm_sid}", level='INFO')
-    log_to_flightlog(f"[DEBUG] IBM in pipeline index: {context.ibm_sid in df.index}", level='INFO')
-
-    # DEBUG: Check available columns
-    if 'vixflag' in df.columns:
-        log_to_flightlog(f"[DEBUG] vixflag column exists, dtype: {df['vixflag'].dtype}", level='INFO')
-        log_to_flightlog(f"[DEBUG] vixflag non-null count: {df['vixflag'].notna().sum()}", level='INFO')
-        log_to_flightlog(f"[DEBUG] vixflag sample values: {df['vixflag'].dropna().head(5).tolist()}", level='INFO')
-    else:
-        log_to_flightlog("[DEBUG] WARNING: vixflag column NOT in pipeline output!", level='WARNING')
-
-    if 'bc1' in df.columns:
-        log_to_flightlog(f"[DEBUG] bc1 column exists, dtype: {df['bc1'].dtype}", level='INFO')
-    else:
-        log_to_flightlog("[DEBUG] WARNING: bc1 column NOT in pipeline output!", level='WARNING')
 
     # Update market condition indicators
     update_market_indicators(context, data)
@@ -1103,13 +1077,12 @@ def before_trading_start(context, data):
     context.vixflag = df.loc[context.ibm_sid].vixflag.copy()
     context.vixflag0 = df.loc[context.ibm_sid].vixflag0.copy()
     context.bc1 = df.loc[context.ibm_sid].bc1.copy()
-    log_to_flightlog(f"[DEBUG] Successfully read IBM signals: vixflag={context.vixflag}, bc1={context.bc1}", level='INFO')
 
 
     print('IBM-vixdata', context.vixflag)
 
     # Get IWM 20 week Stochastic
-    iwm_sym = symbol('IWM')
+    iwm_sym = context.iwm_sid  # Use the IWM sid from context (set in initialize_sids)
     iwm_high = data.history(iwm_sym, 'high', 20*5, '1d')
     iwm_low = data.history(iwm_sym, 'low', 20*5, '1d')
     iwm_close = data.history(iwm_sym, 'close', 20*5, '1d')
@@ -1143,6 +1116,7 @@ def process_universe(context, df, data):
     df['cash_return'] = df['cash_return'].replace([np.inf, -np.inf], np.nan)
 
     df.dropna(subset=['cash_return'], inplace=True)
+    df = df[df['cash_return'] != 0]
 
     # Display sector returns
     sorted_df = df.groupby('sector')['cash_return'].agg(['mean']).sort_values(by='mean', ascending=False)
@@ -1573,9 +1547,22 @@ def initialize_sids(context, data):
 
 def filter_symbols_sectors_universe(df):
     """Filter universe by sectors and stocks."""
+    global SHARADAR_SECTOR_CACHE
+
     current_date = get_datetime().date()
     current_year = current_date.year
     current_month = current_date.month
+
+    # Replace GICS sector with Sharadar sector using cached dict (O(1) lookup)
+    if SHARADAR_SECTOR_CACHE:
+        # Get ticker symbol from the index (which contains Asset objects)
+        def get_sharadar_sector(asset):
+            ticker = asset.symbol if hasattr(asset, 'symbol') else str(asset)
+            return SHARADAR_SECTOR_CACHE.get(ticker)
+
+        # Map Sharadar sectors and replace GICS where available
+        sharadar_sectors = df.index.map(get_sharadar_sector)
+        df['sector'] = sharadar_sectors.where(sharadar_sectors.notna(), df['sector'])
 
     to_drop = []
     if (current_year > 2022) or (current_year == 2022 and current_month >= 6):
@@ -1594,7 +1581,9 @@ def filter_symbols_sectors_universe(df):
     for stock_name in to_drop:
         df = df[df['name'] != stock_name]
 
-    df = df[df['sector'] != 'Financials']
+    # Filter out Financial Services sector (Sharadar sector name)
+    # Also filter legacy GICS "Financials" in case Sharadar sector wasn't loaded
+    df = df[~df['sector'].fillna('Unknown').isin(['Financial Services', 'Financials'])]
 
     # Limit Energy and Real Estate
     df_energy = df[df['sector'] == 'Energy'].sort_values(by='market_cap', ascending=False)[:20]
@@ -1615,11 +1604,13 @@ def get_normalized_weights(context, data, target):
     """Normalize position weights."""
     context.longs[target].fillna(value=0.001, inplace=True)
     context.shorts[target].fillna(value=0.001, inplace=True)
-
+    # Display sector statistics
     df1 = context.longs.groupby('sector')[target].agg(['median', 'mean', 'count'])
     print('Mean of target', target)
     print(df1)
-
+    print('Length of target column:', len(context.longs[[target]]), 'Sum:', context.longs[[target]].sum())
+    
+   
     # Normalize long weights
     longs_mcw = abs(context.longs[[target]]) / abs(context.longs[[target]]).sum()
     longs_mcw[longs_mcw[target] >= MAX_POSITION_SIZE_LONG] = MAX_POSITION_SIZE_LONG
@@ -1673,22 +1664,23 @@ def GenerateMomentumList(context, data, etf_list, momlength):
 
 def RemoveSectors(context, etf, dfs, prt_str):
     """Remove stocks from specific sectors."""
+    # Sharadar sector names
     etf_sector_map = {
-        context.sector_etf_dict.get('XLB'): 'Materials',
-        context.sector_etf_dict.get('XLY'): 'Consumer Discretionary',
-        context.sector_etf_dict.get('XLF'): 'Financials',
-        context.sector_etf_dict.get('XLP'): 'Consumer Staples',
-        context.sector_etf_dict.get('XLV'): 'Health Care',
+        context.sector_etf_dict.get('XLB'): 'Basic Materials',
+        context.sector_etf_dict.get('XLY'): 'Consumer Cyclical',
+        context.sector_etf_dict.get('XLF'): 'Financial Services',
+        context.sector_etf_dict.get('XLP'): 'Consumer Defensive',
+        context.sector_etf_dict.get('XLV'): 'Healthcare',
         context.sector_etf_dict.get('XLU'): 'Utilities',
         context.sector_etf_dict.get('IYZ'): 'Communication Services',
         context.sector_etf_dict.get('XLE'): 'Energy',
         context.sector_etf_dict.get('XLI'): 'Industrials',
-        context.sector_etf_dict.get('XLK'): 'Information Technology',
+        context.sector_etf_dict.get('XLK'): 'Technology',
     }
 
     if etf in etf_sector_map:
         sector_to_remove = etf_sector_map[etf]
-        dfs = dfs[dfs['sector'] != sector_to_remove]
+        dfs = dfs[dfs['sector'].fillna('Unknown') != sector_to_remove]
         print(prt_str % etf)
 
     return dfs
@@ -1701,23 +1693,18 @@ def compute_trend(context, data):
     context.longfact_last = context.longfact
 
     if context.vixflag <= 0:
-        log_to_flightlog(f'[DEBUG] Trend mode: AGGRESSIVE, vixflag={context.vixflag} <= 0, longfact=1.5', level='INFO')
         context.vix_uptrend_flag = True
         context.longfact = 1.5
 
         if get_datetime().date().month in SHORT_RESTRICTED_MONTHS:
             context.shortfact = 0.45
-            log_to_flightlog(f'[DEBUG] Month {get_datetime().date().month} in SHORT_RESTRICTED, shortfact=0.45', level='INFO')
         else:
             context.shortfact = 0.9
-            log_to_flightlog(f'[DEBUG] Month {get_datetime().date().month} NOT in SHORT_RESTRICTED, shortfact=0.9', level='INFO')
         context.clip = 1.2
 
     else:
-        log_to_flightlog(f'[DEBUG] Trend mode: DEFENSIVE, vixflag={context.vixflag} > 0', level='INFO')
         context.vix_uptrend_flag = False
         context.longfact = 0.0 if context.spy_below80ma else abs(context.iwm_w)
-        log_to_flightlog(f'[DEBUG] spy_below80ma={context.spy_below80ma}, longfact={context.longfact}', level='INFO')
         context.shortfact = 0.5
         context.clip = 1.6
 

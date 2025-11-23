@@ -7,27 +7,67 @@ FlightLog is a real-time log streaming system that displays backtest logs in a s
 ## Features
 
 - Color-coded log levels (green INFO, yellow WARNING, red ERROR)
-- Bold algorithm logs for your strategy messages
-- Real-time streaming via TCP socket (port 9020)
+- Real-time streaming via TCP socket
+- **Channel separation**: LOG channel (9020) for progress/algorithm logs, PRINT channel (9021) for print output
 - Progress bar support with portfolio metrics
 - Filtering options to show only what you need
-- No duplicate messages across multiple backtests
+- **IPython magic commands** for easy server management
+- Automatic stdout redirection to keep notebooks clean
 
 ---
 
 ## Quick Start
 
-### Step 1: Start FlightLog Server
+### Step 1: Start FlightLog Servers
 
-```bash
-# Start in foreground (shows colors)
-docker compose run --rm flightlog
+**Option A: Using IPython Magic (Recommended)**
 
-# Or in background
-docker compose up -d flightlog
+In your Jupyter notebook:
+```python
+%load_ext flightlog_commands
+%flightlog both
 ```
 
-### Step 2: Enable FlightLog in Your Strategy
+This starts both servers:
+- Port 9020: LOG channel (progress bars, algorithm logs)
+- Port 9021: PRINT channel (all print output)
+
+**Option B: Using Docker Compose**
+
+```bash
+# Terminal 1: LOG channel
+docker compose run --rm flightlog python /app/scripts/flightlog.py --port 9020
+
+# Terminal 2: PRINT channel
+docker compose run --rm flightlog python /app/scripts/flightlog.py --port 9021
+```
+
+### Step 2: Run Your Backtest with backtest_helpers
+
+The `backtest()` function in `backtest_helpers.py` automatically handles FlightLog integration:
+
+```python
+from examples.utils.backtest_helpers import backtest
+
+# Run backtest - FlightLog is automatically configured
+results = backtest(
+    algo_filename='/app/examples/strategies/LS-ZR-ported.py',
+    start='2023-01-01',
+    end='2024-01-01',
+    capital_base=1000000,
+    bundle='sharadar'
+)
+```
+
+The backtest helper will:
+- Connect to LOG channel (9020) for progress and `log_to_flightlog()` calls
+- Connect to PRINT channel (9021) for all print output
+- Suppress print output in notebook when FlightLog is connected
+- Show daily progress updates with strategy name
+
+### Step 3: Manual Setup (Alternative)
+
+If not using backtest_helpers:
 
 ```python
 import logging
@@ -47,7 +87,7 @@ enable_progress_logging(algo_name='My-Strategy', update_interval=5)
 result = run_algorithm(...)
 ```
 
-### Step 3: Log Important Events
+### Step 4: Log Important Events
 
 ```python
 def initialize(context):
@@ -55,6 +95,54 @@ def initialize(context):
 
 def rebalance(context, data):
     log_to_flightlog('Portfolio rebalanced', level='INFO')
+```
+
+---
+
+## IPython Magic Commands
+
+The `flightlog_commands` extension provides convenient magic commands:
+
+```python
+# Load the extension (auto-loaded on startup)
+%load_ext flightlog_commands
+
+# Available commands
+%flightlog log      # Start LOG server on port 9020
+%flightlog print    # Start PRINT server on port 9021
+%flightlog both     # Start both servers
+%flightlog status   # Check server status
+%flightlog stop     # Stop all servers
+```
+
+You can also import functions directly:
+```python
+from flightlog_commands import start_log_server, start_print_server, start_both, status, stop_servers
+```
+
+---
+
+## Channel Separation
+
+FlightLog uses two channels to separate different types of output:
+
+| Channel | Port | Purpose |
+|---------|------|---------|
+| LOG | 9020 | Progress bars, `log_to_flightlog()` calls, algorithm logs |
+| PRINT | 9021 | All print statements (redirected from notebook) |
+
+**Benefits:**
+- Keep your notebook clean - print output goes to FlightLog
+- Separate important logs from debug clutter
+- Run different filter options on each channel
+
+**Terminal Setup:**
+```bash
+# Terminal 1: Important logs only
+python scripts/flightlog.py --port 9020
+
+# Terminal 2: All print output
+python scripts/flightlog.py --port 9021
 ```
 
 ---

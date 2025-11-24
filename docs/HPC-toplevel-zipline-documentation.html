@@ -1584,16 +1584,64 @@ plt.show()</code></pre>
             <section id="flightlog" class="section">
                 <h2>FlightLog <span class="badge badge-time">10 min</span></h2>
 
-                <p>Real-time log streaming system that displays backtest logs in a separate terminal.</p>
+                <p>Real-time log streaming system that displays backtest logs in a separate terminal, with channel separation for clean output.</p>
 
-                <h3>Start FlightLog</h3>
-                <pre><code># Start in foreground (shows colors)
-docker compose run --rm flightlog
+                <h3>Channel Separation</h3>
+                <table>
+                    <tr>
+                        <th>Channel</th>
+                        <th>Port</th>
+                        <th>Purpose</th>
+                    </tr>
+                    <tr>
+                        <td>LOG</td>
+                        <td>9020</td>
+                        <td>Progress bars, log_to_flightlog() calls, algorithm logs</td>
+                    </tr>
+                    <tr>
+                        <td>PRINT</td>
+                        <td>9021</td>
+                        <td>All print statements (redirected from notebook)</td>
+                    </tr>
+                </table>
 
-# Or in background
-docker compose up -d flightlog</code></pre>
+                <h3>Start FlightLog - IPython Magic (Recommended)</h3>
+                <pre><code># In Jupyter notebook cell
+%load_ext flightlog_commands
+%flightlog both
 
-                <h3>Enable in Strategy</h3>
+# Available commands:
+# %flightlog log      - Start LOG server on port 9020
+# %flightlog print    - Start PRINT server on port 9021
+# %flightlog both     - Start both servers
+# %flightlog status   - Check server status
+# %flightlog stop     - Stop all servers</code></pre>
+
+                <h3>Start FlightLog - Docker Compose</h3>
+                <pre><code># Terminal 1: LOG channel (important logs)
+docker compose run --rm flightlog python /app/scripts/flightlog.py --port 9020
+
+# Terminal 2: PRINT channel (all print output)
+docker compose run --rm flightlog python /app/scripts/flightlog.py --port 9021</code></pre>
+
+                <h3>Using backtest_helpers (Automatic Integration)</h3>
+                <pre><code>from examples.utils.backtest_helpers import backtest
+
+# FlightLog is automatically configured
+results = backtest(
+    algo_filename='/app/examples/strategies/LS-ZR-ported.py',
+    start='2023-01-01',
+    end='2024-01-01',
+    capital_base=1000000,
+    bundle='sharadar'
+)
+
+# Benefits:
+# - Connects to both LOG (9020) and PRINT (9021) channels
+# - Suppresses print output in notebook when FlightLog connected
+# - Shows daily progress updates with strategy name</code></pre>
+
+                <h3>Manual Setup (Alternative)</h3>
                 <pre><code>import logging
 from zipline.utils.flightlog_client import enable_flightlog, log_to_flightlog
 from zipline.utils.progress import enable_progress_logging

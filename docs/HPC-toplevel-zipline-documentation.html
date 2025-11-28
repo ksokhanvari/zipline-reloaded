@@ -1618,11 +1618,36 @@ plt.show()</code></pre>
 # %flightlog stop     - Stop all servers</code></pre>
 
                 <h3>Start FlightLog - Docker Compose</h3>
-                <pre><code># Terminal 1: LOG channel (important logs)
+                <pre><code># Option 1: Simple (LOG channel only)
+docker compose run --rm flightlog
+
+# Option 2: Two-channel setup (recommended for debugging)
+# Terminal 1: LOG channel (important logs)
 docker compose run --rm flightlog python /app/scripts/flightlog.py --port 9020
 
 # Terminal 2: PRINT channel (all print output)
 docker compose run --rm flightlog python /app/scripts/flightlog.py --port 9021</code></pre>
+
+                <h3>Start FlightLog - Docker Exec (If Container Running)</h3>
+                <pre><code># LOG channel (port 9020)
+docker exec -it zipline-reloaded-jupyter python /app/scripts/flightlog.py --port 9020
+
+# PRINT channel (port 9021)
+docker exec -it zipline-reloaded-jupyter python /app/scripts/flightlog.py --port 9021</code></pre>
+
+                <h3>FlightLog Options</h3>
+                <pre><code># Hide progress bars (algorithm logs only)
+docker compose run --rm flightlog python /app/scripts/flightlog.py --filter-progress
+
+# Save to file
+docker compose run --rm flightlog python /app/scripts/flightlog.py --file /logs/backtest.log
+
+# Different log level
+docker compose run --rm flightlog python /app/scripts/flightlog.py --level DEBUG
+
+# Fix port already in use
+lsof -i :9020
+kill -9 &lt;PID&gt;</code></pre>
 
                 <h3>Using backtest_helpers (Automatic Integration)</h3>
                 <pre><code>from examples.utils.backtest_helpers import backtest

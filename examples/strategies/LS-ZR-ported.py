@@ -92,7 +92,7 @@ ASSET_FINDER = None
 SHARADAR_SECTOR_CACHE = {}
 
 # Portfolio Construction Parameters
-UNIVERSE_SIZE = 1500        # Top N stocks by market cap to consider initially
+UNIVERSE_SIZE = 150      # Top N stocks by market cap to consider initially
 FILTERED_UNIVERSE_SIZE = 500 # Final universe size after screening
 TOP_MOMENTUM_STOCKS = 20     # Number of momentum stocks to include
 LONG_PORTFOLIO_SIZE = 50    # Total number of long positions
@@ -936,11 +936,7 @@ def make_pipeline():
 
 
     # Get benchmark assets using asset_finder (available after initialize sets it)
-    spy_asset = ASSET_FINDER.lookup_symbol('SPY', as_of_date=None)
-
-    iwm_asset = ASSET_FINDER.lookup_symbol('IWM', as_of_date=None)
-
-    qqq_asset = ASSET_FINDER.lookup_symbol('QQQ', as_of_date=None)
+   
 
     # Initial universe filter - top stocks by market cap
     tradable_filter = (CustomFundamentals.CompanyMarketCap.latest.top(UNIVERSE_SIZE)) | StaticAssets([symbol('IBM')])
@@ -952,15 +948,9 @@ def make_pipeline():
     volume_weighted_mf = VolumeWeightedMoneyFlowFactor(mask=tradable_filter, window_length=90)
 
     # Create SimpleBeta factors with debug
-    try:
-        beta_spy = SimpleBeta(target=spy_asset, regression_length=60)
-    except Exception as e:
-        raise
-
-    try:
-        beta_iwm = SimpleBeta(target=iwm_asset, regression_length=60)
-    except Exception as e:
-        raise
+    beta_spy = SimpleBeta(target=spy_asset, regression_length=60)
+    beta_iwm = SimpleBeta(target=iwm_asset, regression_length=60)
+    
 
     # Build pipeline columns one by one for debugging
     columns = {}
@@ -1059,11 +1049,11 @@ def before_trading_start(context, data):
     df = pipeline_output('my_pipeline')
 
     # Filter to tradeable stocks - keep as list of assets
-    all_selected = df.index
-    tradeable = [stock for stock in all_selected if data.can_trade(stock)]
+    # all_selected = df.index
+    # tradeable = [stock for stock in all_selected if data.can_trade(stock)]
 
-    # Store the filtered DataFrame (not the list)
-    df = df.loc[tradeable]
+    # # Store the filtered DataFrame (not the list)
+    # df = df.loc[tradeable]
 
     print(f"Raw stock universe size {df.shape}")
     print(get_datetime(timezone("America/Los_Angeles")))

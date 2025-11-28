@@ -265,6 +265,8 @@ def backtest(
     filepath_or_buffer=None,
     output_dir="./backtest_results",
     save_pickle=True,
+    algo_name=None,
+    output_file=None,
     **kwargs
 ):
     """
@@ -297,6 +299,10 @@ def backtest(
         Directory to save results
     save_pickle : bool, default True
         Also save results as pickle for full state preservation
+    algo_name : str, optional
+        Algorithm name for logging/progress display. If None, uses algo filename stem
+    output_file : str, optional
+        Custom output filename (overrides filepath_or_buffer). If None, uses filepath_or_buffer
     **kwargs : dict
         Additional arguments passed to run_algorithm()
 
@@ -314,7 +320,8 @@ def backtest(
     ...     start_date="2021-01-01",
     ...     end_date="2023-12-31",
     ...     capital_base=1000000,
-    ...     filepath_or_buffer="momentum_results.csv"
+    ...     algo_name="Momentum-Strategy",
+    ...     output_file="momentum_2021_2023.pkl"
     ... )
     """
     # Connect to FlightLog servers FIRST (before any prints)
@@ -347,8 +354,10 @@ def backtest(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Determine output filename
-    if filepath_or_buffer is None:
+    # Determine output filename (output_file overrides filepath_or_buffer)
+    if output_file is not None:
+        filepath_or_buffer = output_file
+    elif filepath_or_buffer is None:
         filepath_or_buffer = f"{name}.csv"
 
     # Make sure it's in the output directory
@@ -421,8 +430,11 @@ def backtest(
     log_to_flightlog("Backtest started")
 
     # Enable progress logging (update daily)
-    # Extract strategy name from algo_filename for clearer display
-    algo_display_name = Path(algo_filename).stem  # e.g., "LS-ZR-ported" from "/app/examples/strategies/LS-ZR-ported.py"
+    # Use algo_name if provided, otherwise extract strategy name from algo_filename
+    if algo_name is None:
+        algo_display_name = Path(algo_filename).stem  # e.g., "LS-ZR-ported" from "/app/examples/strategies/LS-ZR-ported.py"
+    else:
+        algo_display_name = algo_name
 
     # Configure progress logger to use LOG channel (port 9020) instead of stdout
     # This keeps progress separate from print clutter on port 9021
@@ -455,6 +467,10 @@ def backtest(
 
     print(f"Progress logging enabled for '{algo_display_name}'")
 
+    # Filter out our custom parameters from kwargs before passing to run_algorithm
+    # run_algorithm doesn't know about algo_name or output_file
+    run_algo_kwargs = {k: v for k, v in kwargs.items() if k not in ['algo_name', 'output_file']}
+
     try:
         perf = run_algorithm(
             start=start_date,
@@ -466,7 +482,7 @@ def backtest(
             capital_base=capital_base,
             data_frequency=data_frequency,
             bundle=bundle,
-            **kwargs
+            **run_algo_kwargs
         )
 
         print()

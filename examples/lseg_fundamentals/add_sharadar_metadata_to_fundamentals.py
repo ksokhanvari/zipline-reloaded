@@ -83,11 +83,17 @@ def load_sharadar_tickers(bundle_name='sharadar'):
 
     print(f"Loaded {len(tickers)} tickers")
 
-    # IMPORTANT: Deduplicate tickers - keep only active (non-delisted) entries
-    # Sharadar has multiple entries per ticker (active + historical delisted)
+    # IMPORTANT: Deduplicate tickers - keep only one entry per ticker
+    # Sharadar has multiple entries per ticker:
+    # 1. Active + historical delisted entries (different isdelisted values)
+    # 2. Multiple active entries with same ticker (same isdelisted='N')
     if 'isdelisted' in tickers.columns:
-        # Prefer non-delisted entries
-        tickers = tickers.sort_values('isdelisted')  # False comes before True
+        # Sort: non-delisted first (N before Y), then by index
+        tickers = tickers.sort_values(['isdelisted', tickers.index.name or 'index'])
+        tickers = tickers.drop_duplicates(subset='ticker', keep='first')
+        print(f"After deduplication: {len(tickers)} unique tickers")
+    else:
+        # Fallback: just deduplicate by ticker
         tickers = tickers.drop_duplicates(subset='ticker', keep='first')
         print(f"After deduplication: {len(tickers)} unique tickers")
 

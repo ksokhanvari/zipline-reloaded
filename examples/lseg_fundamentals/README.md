@@ -9,6 +9,106 @@ The LSEG fundamentals data provides comprehensive financial metrics, but lacks m
 - **LSEG Fundamentals**: 38+ financial metrics from LSEG/Refinitiv
 - **Sharadar Metadata**: Exchange, category, ADR status, sector, industry, market cap scale
 
+## Directory Structure
+
+```
+examples/lseg_fundamentals/
+├── README.md                                          # This file - comprehensive documentation
+│
+├── CSV Enrichment Tools (Recommended Workflow)
+│   ├── add_sharadar_metadata_to_fundamentals.py     # CLI script for CSV enrichment
+│   ├── add_sharadar_metadata_to_fundamentals.ipynb  # Interactive notebook with 9 charts
+│   └── add_sharadar_metadata_to_fundamentals_full.ipynb  # Backup with embedded functions
+│
+├── Database Table Tools (Alternative Workflow)
+│   ├── add_sharadar_tickers.ipynb                   # Create SharadarTickersDaily table
+│   └── add_sharadar_tickers_fast.ipynb              # Optimized version for large datasets
+│
+├── Database Management Tools
+│   ├── load_csv_fundamentals.ipynb                  # Load enriched CSV to fundamentals.sqlite
+│   ├── create_fundamentals_db.py                    # Create fundamentals database schema
+│   └── remap_fundamentals_sids.py                   # Remap SIDs after asset db changes
+│
+├── Research & Analysis
+│   └── research_with_fundamentals.ipynb             # Example fundamentals research notebook
+│
+└── __pycache__/
+    └── add_sharadar_metadata_to_fundamentals.cpython-311.pyc  # Compiled Python cache
+```
+
+### File Descriptions
+
+#### **CSV Enrichment Tools** (Recommended)
+
+1. **`add_sharadar_metadata_to_fundamentals.py`** (286 lines)
+   - **Purpose**: Standalone CLI script to enrich LSEG CSV with Sharadar metadata
+   - **Key Features**:
+     - Loads Sharadar metadata from bundle's `tickers.h5`
+     - **CRITICAL**: Enhanced deduplication handling (60,303 → 30,801 unique tickers)
+     - Handles both active/delisted duplicates AND multiple active entries per ticker
+     - Adds 9 metadata columns with `sharadar_` prefix
+     - Reports matching statistics (95.6% match rate)
+     - Optional preview mode
+   - **Single Source of Truth**: Notebook imports functions from this script
+   - **Usage**: See CLI examples below
+
+2. **`add_sharadar_metadata_to_fundamentals.ipynb`** (32 cells)
+   - **Purpose**: Interactive Jupyter notebook with full visualizations
+   - **Key Features**:
+     - Imports functions from `.py` script (no code duplication)
+     - **9 chart cells**: exchange dist, category dist, ADR pie, sector dist, market cap scale, etc.
+     - Comprehensive data analysis and statistics
+     - Section 10: AAPL data example (last 10 rows with all 47 columns)
+     - Live progress tracking and matching statistics
+   - **Note**: This is the ACTIVE version with all charts and imports
+
+3. **`add_sharadar_metadata_to_fundamentals_full.ipynb`** (31 cells)
+   - **Purpose**: Backup version with embedded functions (pre-import pattern)
+   - **Status**: Archived for reference
+   - **Note**: Use main `.ipynb` instead (imports from script)
+
+#### **Database Table Tools** (Alternative)
+
+4. **`add_sharadar_tickers.ipynb`**
+   - **Purpose**: Create `SharadarTickersDaily` table in fundamentals.sqlite
+   - **Approach**: Symbol × Date cross-product (~241M rows for full universe)
+   - **Features**:
+     - Memory-efficient chunked processing
+     - Creates indexes for fast queries (Symbol, Date, Symbol+Date)
+     - Point-in-time correct (metadata repeated across all dates)
+   - **Use Case**: When you want separate normalized table for joins
+
+5. **`add_sharadar_tickers_fast.ipynb`**
+   - **Purpose**: Optimized version with faster chunking
+   - **Difference**: Better memory management for very large datasets
+
+#### **Database Management Tools**
+
+6. **`load_csv_fundamentals.ipynb`**
+   - **Purpose**: Load LSEG fundamentals CSV into SQLite database
+   - **Compatible With**: Both plain CSV and enriched CSV (with metadata columns)
+   - **Creates Tables**:
+     - `Price` - pricing data
+     - `Valuation` - valuation metrics
+     - `Income` - income statement
+     - `BalanceSheet` - balance sheet
+     - `CashFlow` - cash flow statement
+   - **Features**: Data validation, indexing, integrity checks
+
+7. **`create_fundamentals_db.py`**
+   - **Purpose**: Create fundamentals database schema programmatically
+   - **Use Case**: When you need to recreate DB structure from scratch
+
+8. **`remap_fundamentals_sids.py`**
+   - **Purpose**: Remap Security IDs after asset database changes
+   - **Use Case**: When you re-ingest bundles and SIDs change
+
+#### **Research & Analysis**
+
+9. **`research_with_fundamentals.ipynb`**
+   - **Purpose**: Example notebook showing how to query and analyze fundamentals
+   - **Use Case**: Template for your own fundamentals-based research
+
 ## Contents
 
 ### 1. CSV Enrichment (Recommended for Simple Workflows)
@@ -218,17 +318,34 @@ See `examples/strategies/sharadar_filters.py` for custom filters using `Sharadar
 
 ### Deduplication Issue (FIXED)
 
-**Problem**: Sharadar `tickers.h5` contains duplicate entries per ticker (active + delisted), causing row doubling during merge (16.9M rows instead of 9.0M expected).
+**Problem**: Sharadar `tickers.h5` contains duplicate entries per ticker, causing row doubling during merge (16.9M rows instead of 9.0M expected, and duplicate Date+Symbol rows in output).
 
-**Solution**: Both notebooks and script now include deduplication logic:
+**Root Cause**:
+- Sharadar has 105,766 total ticker entries but only 60,303 unique tickers
+- Two types of duplicates:
+  1. Active vs delisted entries (different `isdelisted` values: True/False)
+  2. Multiple active entries for same ticker (both `isdelisted='N'`)
+- Example: AAPL had 2 entries, BOTH with `isdelisted='N'`
+
+**Solution**: Enhanced deduplication logic in both script and notebook:
 
 ```python
 if 'isdelisted' in tickers.columns:
-    tickers = tickers.sort_values('isdelisted')  # False comes before True
+    # Sort: non-delisted first (N before Y), then by index for stable ordering
+    tickers = tickers.sort_values(['isdelisted', tickers.index.name or 'index'])
     tickers = tickers.drop_duplicates(subset='ticker', keep='first')
+    print(f"After deduplication: {len(tickers)} unique tickers")
+else:
+    # Fallback: just deduplicate by ticker
+    tickers = tickers.drop_duplicates(subset='ticker', keep='first')
+    print(f"After deduplication: {len(tickers)} unique tickers")
 ```
 
-This ensures only one entry per ticker (preferring active over delisted).
+**Result**: 60,303 raw entries → 30,801 unique tickers (~50% reduction). This ensures:
+- Only one entry per ticker
+- Prefers active (non-delisted) entries
+- Stable ordering when multiple entries have same `isdelisted` value
+- **NO duplicate Date+Symbol rows** in enriched output
 
 ### Sharadar Bundle Requirements
 
@@ -298,5 +415,5 @@ For issues or questions:
 ---
 
 **Author**: Kamran Sokhanvari / Hidden Point Capital
-**Last Updated**: 2025-11-27
-**Version**: 1.0.0
+**Last Updated**: 2025-11-29
+**Version**: 1.1.0 - Added comprehensive directory structure and enhanced deduplication

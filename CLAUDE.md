@@ -501,9 +501,111 @@ When continuing a session:
 
 ---
 
-**Document Version**: 7.0
-**Last Updated**: 2025-11-19
-**Key Features**: Hidden Point Capital branding, Sharadar + LSEG integration, multi-source pipelines, FlightLog monitoring, comprehensive HTML documentation
+## Recent Session: LSEG Fundamentals + Sharadar Metadata Integration (2025-11-27 to 2025-11-29)
+
+### Summary
+
+Completed comprehensive integration of LSEG fundamentals with Sharadar ticker metadata for universe filtering in Zipline strategies. The work involved creating a CSV enrichment workflow and fixing critical data quality issues.
+
+### Key Accomplishments
+
+1. **Created CSV Enrichment Tools**:
+   - `add_sharadar_metadata_to_fundamentals.py` - CLI script (286 lines)
+   - `add_sharadar_metadata_to_fundamentals.ipynb` - Interactive notebook with 9 visualizations (32 cells)
+   - Single source of truth pattern: notebook imports from script
+
+2. **Fixed Critical Deduplication Issue**:
+   - **Problem**: Sharadar tickers.h5 had 105,766 entries but only 60,303 unique tickers
+   - **Cause**: Two types of duplicates:
+     - Active vs delisted entries (different `isdelisted` values)
+     - Multiple active entries for same ticker (both `isdelisted='N'`)
+   - **Result**: Merge created 16.9M rows instead of 9.0M, with duplicate Date+Symbol combinations
+   - **Solution**: Enhanced deduplication sorting by `['isdelisted', index]`
+   - **Outcome**: 60,303 → 30,801 unique tickers, NO duplicate rows
+
+3. **Added 9 Metadata Columns**:
+   - `sharadar_exchange` - NYSE, NASDAQ, NYSEMKT, etc.
+   - `sharadar_category` - Domestic Common Stock, ADR, ETF, etc.
+   - `sharadar_is_adr` - 1=ADR, 0=Non-ADR
+   - `sharadar_location` - Company location
+   - `sharadar_sector` - Sharadar sector classification
+   - `sharadar_industry` - Sharadar industry classification
+   - `sharadar_sicsector` - SIC sector
+   - `sharadar_sicindustry` - SIC industry
+   - `sharadar_scalemarketcap` - 1-6 (Nano to Mega cap)
+
+4. **Comprehensive Documentation**:
+   - Updated `examples/lseg_fundamentals/README.md` with:
+     - Complete directory structure and file descriptions
+     - Two workflows: CSV enrichment (recommended) vs database table approach
+     - Pipeline integration examples
+     - Detailed deduplication explanation
+     - Troubleshooting section
+   - All files committed and pushed to GitHub
+
+### Files Modified
+
+**Primary Files**:
+- `examples/lseg_fundamentals/add_sharadar_metadata_to_fundamentals.py` - Script with deduplication fix
+- `examples/lseg_fundamentals/add_sharadar_metadata_to_fundamentals.ipynb` - Notebook with 9 charts, imports from script
+- `examples/lseg_fundamentals/add_sharadar_metadata_to_fundamentals_full.ipynb` - Backup with embedded functions
+- `examples/lseg_fundamentals/README.md` - Comprehensive documentation with directory structure
+
+**Key Code Pattern** (add_sharadar_metadata_to_fundamentals.py:86-99):
+```python
+# CRITICAL: Enhanced deduplication handles both types of duplicates
+if 'isdelisted' in tickers.columns:
+    # Sort: non-delisted first (N before Y), then by index for stable ordering
+    tickers = tickers.sort_values(['isdelisted', tickers.index.name or 'index'])
+    tickers = tickers.drop_duplicates(subset='ticker', keep='first')
+    print(f"After deduplication: {len(tickers)} unique tickers")
+else:
+    # Fallback: just deduplicate by ticker
+    tickers = tickers.drop_duplicates(subset='ticker', keep='first')
+    print(f"After deduplication: {len(tickers)} unique tickers")
+```
+
+### Data Quality Statistics
+
+- **LSEG Fundamentals**: 9,010,487 rows, 4,440 symbols, 4,012 dates (2008-2025)
+- **Sharadar Metadata**: 60,303 raw entries → 30,801 unique tickers after deduplication
+- **Match Rate**: 95.6% (8,616,181 of 9,010,487 rows matched)
+- **Output**: Enriched CSV with 47 columns (38 original + 9 metadata)
+
+### Technical Decisions
+
+1. **Single Source of Truth**: Notebook imports functions from Python script to avoid code duplication and ensure fixes propagate
+2. **Stable Deduplication**: Sort by `['isdelisted', index]` ensures reproducible results when multiple entries have same delisted status
+3. **Preserved Visualizations**: Kept all 9 chart cells in notebook for data analysis
+4. **CSV Enrichment Over Database Table**: Recommended workflow adds metadata columns to CSV before database load (simpler, no joins needed)
+
+### Important Notes for Future Sessions
+
+1. **Deduplication is Critical**: Always use the enhanced deduplication when loading Sharadar tickers
+2. **Verification**: After enrichment, check for duplicate Date+Symbol rows (should be none)
+3. **Match Rate**: Expect ~95.6% match rate between LSEG and Sharadar data
+4. **Docker Sync**: Remember to copy updated notebooks to Docker container
+5. **Import Pattern**: Notebook cell 5 imports from script - update script, not notebook functions
+
+### Git Commits (Branch: claude/continue-session-011-011CUzneiQ5d1tV3Y3r29tCA)
+
+- `34b870fb` - fix: Improve deduplication to handle multiple active ticker entries
+- `f224fd84` - fix: Use USEquityPricingLoader.without_fx() for proper initialization
+- `266237a4` - docs: Update documentation to reflect proper custom_loader approach
+- Earlier commits on LS-ZR strategy porting and FlightLog integration
+
+### Next Steps (if continuing this work)
+
+1. Test enriched CSV loading into fundamentals.sqlite with `load_csv_fundamentals.ipynb`
+2. Verify Pipeline integration with metadata columns
+3. Create example strategy using `sharadar_exchange`, `sharadar_category`, `sharadar_is_adr` filters
+4. Consider extending to other data sources (QuantRocket entities, ownership data)
+
+---
+
+**Document Version**: 8.0
+**Last Updated**: 2025-11-29
+**Key Features**: Hidden Point Capital branding, Sharadar + LSEG integration, multi-source pipelines, FlightLog monitoring, comprehensive HTML documentation, LSEG fundamentals enrichment with Sharadar metadata
 - redo using these " 1. CashCashEquivalents_Total
    2. CombinedAlphaModelRegionRank
    3. CombinedAlphaModelSectorRank

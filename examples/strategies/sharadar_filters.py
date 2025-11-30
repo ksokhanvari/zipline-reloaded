@@ -21,20 +21,25 @@ import numpy as np
 
 
 class SharadarTickers(DataSet):
-    """Sharadar ticker metadata for universe filtering."""
+    """Sharadar ticker metadata for universe filtering.
+
+    NOTE: These columns are in the fundamentals database with 'sharadar_' prefix
+    from the LSEG fundamentals enrichment process.
+    """
 
     CODE = "fundamentals"
     LOOKBACK_WINDOW = 1  # Metadata is static, doesn't change daily
 
-    exchange = Column(object, missing_value='')
-    category = Column(object, missing_value='')
-    is_adr = Column(bool)
-    location = Column(object, missing_value='')
-    sector = Column(object, missing_value='')
-    industry = Column(object, missing_value='')
-    sicsector = Column(object, missing_value='')
-    sicindustry = Column(object, missing_value='')
-    scalemarketcap = Column(object, missing_value='')
+    # Column names match the database (sharadar_ prefix)
+    sharadar_exchange = Column(object, missing_value='')
+    sharadar_category = Column(object, missing_value='')
+    sharadar_is_adr = Column(bool)
+    sharadar_location = Column(object, missing_value='')
+    sharadar_sector = Column(object, missing_value='')
+    sharadar_industry = Column(object, missing_value='')
+    sharadar_sicsector = Column(object, missing_value='')
+    sharadar_sicindustry = Column(object, missing_value='')
+    sharadar_scalemarketcap = Column(object, missing_value='')
 
 
 class ExchangeFilter(CustomFilter):
@@ -43,7 +48,7 @@ class ExchangeFilter(CustomFilter):
 
     Returns True if stock is listed on one of the major US exchanges.
     """
-    inputs = [SharadarTickers.exchange]
+    inputs = [SharadarTickers.sharadar_exchange]
     window_length = 1
 
     def compute(self, today, assets, out, exchange):
@@ -59,7 +64,7 @@ class CategoryFilter(CustomFilter):
 
     Returns True if category is 'Domestic Common Stock'.
     """
-    inputs = [SharadarTickers.category]
+    inputs = [SharadarTickers.sharadar_category]
     window_length = 1
 
     def compute(self, today, assets, out, category):
@@ -74,7 +79,7 @@ class ADRFilter(CustomFilter):
     Returns True if stock is NOT an ADR (i.e., domestic stock).
     Use this filter directly without the ~ operator.
     """
-    inputs = [SharadarTickers.is_adr]
+    inputs = [SharadarTickers.sharadar_is_adr]
     window_length = 1
 
     def compute(self, today, assets, out, is_adr):
@@ -91,7 +96,7 @@ class SectorFilter(CustomFilter):
     sectors : list of str
         List of sectors to include (e.g., ['Technology', 'Healthcare'])
     """
-    inputs = [SharadarTickers.sector]
+    inputs = [SharadarTickers.sharadar_sector]
     window_length = 1
     params = {'sectors': []}
 
@@ -123,7 +128,7 @@ class ScaleMarketCapFilter(CustomFilter):
     max_scale : int
         Maximum market cap scale (1-6)
     """
-    inputs = [SharadarTickers.scalemarketcap]
+    inputs = [SharadarTickers.sharadar_scalemarketcap]
     window_length = 1
     params = {'min_scale': 1, 'max_scale': 6}
 

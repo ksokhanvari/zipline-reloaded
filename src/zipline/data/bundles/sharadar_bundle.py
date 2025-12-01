@@ -1060,6 +1060,8 @@ def download_sharadar_table(
                 filters['calendardate.gte'] = start_date
             if end_date:
                 filters['calendardate.lte'] = end_date
+            # Filter to MRQ dimension at API level for efficiency
+            filters['dimension'] = 'MRQ'
         else:
             # SEP, SFP, ACTIONS use 'date'
             if start_date:
@@ -1258,6 +1260,8 @@ def download_sharadar_bulk_export(
             params['calendardate.gte'] = start_date
         if end_date:
             params['calendardate.lte'] = end_date
+        # Filter to MRQ dimension
+        params['dimension'] = 'MRQ'
     else:
         # SEP, SFP, ACTIONS use 'date'
         if start_date:

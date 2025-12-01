@@ -65,8 +65,20 @@ from zipline.pipeline.filters import StaticAssets
 from zipline.pipeline.data.sharadar import SharadarFundamentals
 from zipline.finance import commission, slippage
 
-# Multi-source module for custom databases
-from zipline.pipeline import multi_source as ms
+# Database pattern for custom data
+from zipline.pipeline.data.db import Database, Column
+
+# Auto loader for multi-source data
+from zipline.pipeline.loaders.auto_loader import setup_auto_loader
+
+# Import universe filtering tools
+import sys
+sys.path.insert(0, '/app/examples/strategies')
+from sharadar_filters import (
+    ExchangeFilter,
+    CategoryFilter,
+    ADRFilter,
+)
 
 # FlightLog for real-time monitoring (Zipline-Reloaded version)
 from zipline.utils.flightlog_client import enable_flightlog, log_to_flightlog
@@ -130,241 +142,246 @@ SHORT_RESTRICTED_MONTHS = {1, 2, 3, 5, 7, 8, 9, 10, 11, 12}  # Months with reduc
 # DATABASE DEFINITIONS (Multi-Source Pattern)
 #################################################
 
-class CustomFundamentals(ms.Database):
+class CustomFundamentals(Database):
     """Primary fundamentals database with core company financial data."""
 
     CODE = "fundamentals"
     LOOKBACK_WINDOW = 240
 
-    # Company identifiers
-    Symbol = ms.Column(object)
-    Inobjectument = ms.Column(object)
-    CompanyCommonName = ms.Column(object)
-    GICSSectorName = ms.Column(object)
+    # Company identifiers (TEXT columns use str type)
+    Symbol = Column(str)
+    Inobjectument = Column(str)
+    CompanyCommonName = Column(str)
+    GICSSectorName = Column(str)
 
     # Price and volume reference data
-    RefPriceClose = ms.Column(float)
-    RefVolume = ms.Column(float)
+    RefPriceClose = Column(float)
+    RefVolume = Column(float)
 
     # Valuation metrics
-    EnterpriseValue_DailyTimeSeries_ = ms.Column(float)
-    CompanyMarketCap = ms.Column(float)
+    EnterpriseValue_DailyTimeSeries_ = Column(float)
+    CompanyMarketCap = Column(float)
 
     # Cash flow metrics
-    FOCFExDividends_Discrete = ms.Column(float)
-    InterestExpense_NetofCapitalizedInterest = ms.Column(float)
-    CashFlowComponent_Current = ms.Column(float)
-    CashFlowPerShare_BrokerEstimate = ms.Column(float)
-    FreeCashFlowPerShare_BrokerEstimate = ms.Column(float)
+    FOCFExDividends_Discrete = Column(float)
+    InterestExpense_NetofCapitalizedInterest = Column(float)
+    CashFlowComponent_Current = Column(float)
+    CashFlowPerShare_BrokerEstimate = Column(float)
+    FreeCashFlowPerShare_BrokerEstimate = Column(float)
 
     # Debt metrics
-    Debt_Total = ms.Column(float)
-    CashCashEquivalents_Total = ms.Column(float)
+    Debt_Total = Column(float)
+    CashCashEquivalents_Total = Column(float)
 
     # Earnings metrics
-    EarningsPerShare_Actual = ms.Column(float)
-    EarningsPerShare_SmartEstimate_prev_Q = ms.Column(float)
-    EarningsPerShare_ActualSurprise = ms.Column(float)
-    EarningsPerShare_SmartEstimate_current_Q = ms.Column(float)
-    EPS_SurpirsePrct_prev_Q = ms.Column(float)
+    EarningsPerShare_Actual = Column(float)
+    EarningsPerShare_SmartEstimate_prev_Q = Column(float)
+    EarningsPerShare_ActualSurprise = Column(float)
+    EarningsPerShare_SmartEstimate_current_Q = Column(float)
+    EPS_SurpirsePrct_prev_Q = Column(float)
 
     # Growth and target metrics
-    LongTermGrowth_Mean = ms.Column(float)
-    PriceTarget_Median = ms.Column(float)
-    Estpricegrowth_percent = ms.Column(float)
+    LongTermGrowth_Mean = Column(float)
+    PriceTarget_Median = Column(float)
+    Estpricegrowth_percent = Column(float)
 
     # Alpha model rankings
-    CombinedAlphaModelSectorRank = ms.Column(float)
-    CombinedAlphaModelSectorRankChange = ms.Column(float)
-    CombinedAlphaModelRegionRank = ms.Column(float)
-    EarningsQualityRegionRank_Current = ms.Column(float)
+    CombinedAlphaModelSectorRank = Column(float)
+    CombinedAlphaModelSectorRankChange = Column(float)
+    CombinedAlphaModelRegionRank = Column(float)
+    EarningsQualityRegionRank_Current = Column(float)
 
     # Valuation ratios
-    EnterpriseValueToEBIT_DailyTimeSeriesRatio_= ms.Column(float)
-    EnterpriseValueToEBITDA_DailyTimeSeriesRatio_= ms.Column(float)
-    EnterpriseValueToSales_DailyTimeSeriesRatio_ = ms.Column(float)
-    ForwardPEG_DailyTimeSeriesRatio_= ms.Column(float)
-    PriceEarningsToGrowthRatio_SmartEstimate_= ms.Column(float)
-    ForwardPriceToCashFlowPerShare_DailyTimeSeriesRatio_ = ms.Column(float)
-    ForwardPriceToSalesPerShare_DailyTimeSeriesRatio_ = ms.Column(float)
-    ForwardEnterpriseValueToOperatingCashFlow_DailyTimeSeriesRatio_ = ms.Column(float)
+    EnterpriseValueToEBIT_DailyTimeSeriesRatio_= Column(float)
+    EnterpriseValueToEBITDA_DailyTimeSeriesRatio_= Column(float)
+    EnterpriseValueToSales_DailyTimeSeriesRatio_ = Column(float)
+    ForwardPEG_DailyTimeSeriesRatio_= Column(float)
+    PriceEarningsToGrowthRatio_SmartEstimate_= Column(float)
+    ForwardPriceToCashFlowPerShare_DailyTimeSeriesRatio_ = Column(float)
+    ForwardPriceToSalesPerShare_DailyTimeSeriesRatio_ = Column(float)
+    ForwardEnterpriseValueToOperatingCashFlow_DailyTimeSeriesRatio_ = Column(float)
 
     # Other metrics
-    TradeDate = ms.Column(object)
-    Dividend_Per_Share_SmartEstimate= ms.Column(float)
-    ReturnOnInvestedCapital_BrokerEstimate = ms.Column(float)
+    TradeDate = Column(str)
+    Dividend_Per_Share_SmartEstimate= Column(float)
+    ReturnOnInvestedCapital_BrokerEstimate = Column(float)
 
     # Analyst metrics
-    Recommendation_NumberOfTotal = ms.Column(float)
-    Recommendation_Median_1_5_= ms.Column(float)
-    Recommendation_NumberOfStrongBuy = ms.Column(float)
-    Recommendation_NumberOfBuy = ms.Column(float)
-    Recommendation_Mean_1_5_ = ms.Column(float)
-    ReturnOnCapitalEmployed_Mean = ms.Column(float)
+    Recommendation_NumberOfTotal = Column(float)
+    Recommendation_Median_1_5_= Column(float)
+    Recommendation_NumberOfStrongBuy = Column(float)
+    Recommendation_NumberOfBuy = Column(float)
+    Recommendation_Mean_1_5_ = Column(float)
+    ReturnOnCapitalEmployed_Mean = Column(float)
 
     # Return metrics
-    ReturnOnEquity_SmartEstimat = ms.Column(float)
-    ReturnOnAssets_SmartEstimate = ms.Column(float)
+    ReturnOnEquity_SmartEstimat = Column(float)
+    ReturnOnAssets_SmartEstimate = Column(float)
 
     # Profitability metrics
-    GrossProfitMargin_ = ms.Column(float)
-    GrossProfitMargin_ActualSurprise = ms.Column(float)
+    GrossProfitMargin_ = Column(float)
+    GrossProfitMargin_ActualSurprise = Column(float)
 
     # Prediction columns
-    pred = ms.Column(float)
-    forcast = ms.Column(float)
-    bc1 = ms.Column(float)  # BC signal
+    pred = Column(float)
+    forcast = Column(float)
+    bc1 = Column(float)  # BC signal
 
-class CustomFundamentals2(ms.Database):
+    # Sharadar metadata columns for universe filtering (TEXT columns use str type)
+    sharadar_exchange = Column(str)
+    sharadar_category = Column(str)
+    sharadar_is_adr = Column(float)
+
+class CustomFundamentals2(Database):
     """Sentiment data database."""
 
     CODE = "refe-fundamentals-sent"
     LOOKBACK_WINDOW = 200
 
-    sent2pol = ms.Column(float)
-    sent2sub = ms.Column(float)
-    sentvad = ms.Column(float)
-    sentvad_neg = ms.Column(float)
-    ChatGPT = ms.Column(float)
-    SentVal1 = ms.Column(float)
-    SentVal2 = ms.Column(float)
-    SentVal3 = ms.Column(float)
-    SentVal4 = ms.Column(float)
+    sent2pol = Column(float)
+    sent2sub = Column(float)
+    sentvad = Column(float)
+    sentvad_neg = Column(float)
+    ChatGPT = Column(float)
+    SentVal1 = Column(float)
+    SentVal2 = Column(float)
+    SentVal3 = Column(float)
+    SentVal4 = Column(float)
 
-class CustomFundamentals3(ms.Database):
+class CustomFundamentals3(Database):
     """Alternative sentiment metrics database."""
 
     CODE = "refe-fundamentals-alex"
     LOOKBACK_WINDOW = 200
 
-    Sentiment = ms.Column(float)
-    Confidence = ms.Column(float)
-    Novelty = ms.Column(float)
-    Relevance = ms.Column(float)
-    MarketImpactScore = ms.Column(float)
-    Prob_POS = ms.Column(float)
-    Prob_NTR = ms.Column(float)
-    Prob_NEG = ms.Column(float)
-    pred = ms.Column(float)
+    Sentiment = Column(float)
+    Confidence = Column(float)
+    Novelty = Column(float)
+    Relevance = Column(float)
+    MarketImpactScore = Column(float)
+    Prob_POS = Column(float)
+    Prob_NTR = Column(float)
+    Prob_NEG = Column(float)
+    pred = Column(float)
 
-class CustomFundamentals4(ms.Database):
+class CustomFundamentals4(Database):
     """VIX data database."""
 
     CODE = "vixdata"
     LOOKBACK_WINDOW = 200
 
-    pred = ms.Column(float)
+    pred = Column(float)
 
 
-class CustomFundamentals5(ms.Database):
+class CustomFundamentals5(Database):
     """Revenue surprise database."""
 
     CODE = "refe-fund-test-revesur"
     LOOKBACK_WINDOW = 240
 
-    Revenue_ActualSurprise = ms.Column(float)
+    Revenue_ActualSurprise = Column(float)
 
-class CustomFundamentals6(ms.Database):
+class CustomFundamentals6(Database):
     """Earnings calendar database."""
 
     CODE = "refe-fundamentals-ecal"
     LOOKBACK_WINDOW = 240
 
-    Earn_Date = ms.Column(object)
-    Earn_Collection_Date = ms.Column(object)
+    Earn_Date = Column(str)
+    Earn_Collection_Date = Column(str)
 
-class CustomFundamentals7(ms.Database):
+class CustomFundamentals7(Database):
     """Financial ratios database."""
 
     CODE = "refe-fundamentals-finratios"
     LOOKBACK_WINDOW = 240
 
-    # Identifiers
-    period = ms.Column(object)
-    companyName = ms.Column(object)
-    calendarYear = ms.Column(float)
+    # Identifiers (TEXT columns use str type)
+    period = Column(str)
+    companyName = Column(str)
+    calendarYear = Column(float)
 
     # Liquidity ratios
-    currentRatio = ms.Column(float)
-    quickRatio = ms.Column(float)
-    cashRatio = ms.Column(float)
+    currentRatio = Column(float)
+    quickRatio = Column(float)
+    cashRatio = Column(float)
 
     # Efficiency ratios
-    daysOfSalesOutstanding = ms.Column(float)
-    daysOfInventoryOutstanding = ms.Column(float)
-    operatingCycle = ms.Column(float)
-    daysOfPayablesOutstanding = ms.Column(float)
-    cashConversionCycle = ms.Column(float)
-    receivablesTurnover = ms.Column(float)
-    payablesTurnover = ms.Column(float)
-    inventoryTurnover = ms.Column(float)
-    fixedAssetTurnover = ms.Column(float)
-    assetTurnover = ms.Column(float)
+    daysOfSalesOutstanding = Column(float)
+    daysOfInventoryOutstanding = Column(float)
+    operatingCycle = Column(float)
+    daysOfPayablesOutstanding = Column(float)
+    cashConversionCycle = Column(float)
+    receivablesTurnover = Column(float)
+    payablesTurnover = Column(float)
+    inventoryTurnover = Column(float)
+    fixedAssetTurnover = Column(float)
+    assetTurnover = Column(float)
 
     # Profitability ratios
-    grossProfitMargin = ms.Column(float)
-    operatingProfitMargin = ms.Column(float)
-    pretaxProfitMargin = ms.Column(float)
-    netProfitMargin = ms.Column(float)
-    effectiveTaxRate = ms.Column(float)
-    returnOnAssets = ms.Column(float)
-    returnOnEquity = ms.Column(float)
-    returnOnCapitalEmployed = ms.Column(float)
-    netIncomePerEBT = ms.Column(float)
-    ebtPerEbit = ms.Column(float)
-    ebitPerRevenue = ms.Column(float)
+    grossProfitMargin = Column(float)
+    operatingProfitMargin = Column(float)
+    pretaxProfitMargin = Column(float)
+    netProfitMargin = Column(float)
+    effectiveTaxRate = Column(float)
+    returnOnAssets = Column(float)
+    returnOnEquity = Column(float)
+    returnOnCapitalEmployed = Column(float)
+    netIncomePerEBT = Column(float)
+    ebtPerEbit = Column(float)
+    ebitPerRevenue = Column(float)
 
     # Debt ratios
-    debtRatio = ms.Column(float)
-    debtEquityRatio = ms.Column(float)
-    longTermDebtToCapitalization = ms.Column(float)
-    totalDebtToCapitalization = ms.Column(float)
-    interestCoverage = ms.Column(float)
-    cashFlowToDebtRatio = ms.Column(float)
-    companyEquityMultiplier = ms.Column(float)
+    debtRatio = Column(float)
+    debtEquityRatio = Column(float)
+    longTermDebtToCapitalization = Column(float)
+    totalDebtToCapitalization = Column(float)
+    interestCoverage = Column(float)
+    cashFlowToDebtRatio = Column(float)
+    companyEquityMultiplier = Column(float)
 
     # Cash flow ratios
-    operatingCashFlowPerShare = ms.Column(float)
-    freeCashFlowPerShare = ms.Column(float)
-    cashPerShare = ms.Column(float)
-    payoutRatio = ms.Column(float)
-    operatingCashFlowSalesRatio = ms.Column(float)
-    freeCashFlowOperatingCashFlowRatio = ms.Column(float)
-    cashFlowCoverageRatios = ms.Column(float)
-    shortTermCoverageRatios = ms.Column(float)
-    capitalExpenditureCoverageRatio = ms.Column(float)
-    dividendPaidAndCapexCoverageRatio = ms.Column(float)
-    dividendPayoutRatio = ms.Column(float)
+    operatingCashFlowPerShare = Column(float)
+    freeCashFlowPerShare = Column(float)
+    cashPerShare = Column(float)
+    payoutRatio = Column(float)
+    operatingCashFlowSalesRatio = Column(float)
+    freeCashFlowOperatingCashFlowRatio = Column(float)
+    cashFlowCoverageRatios = Column(float)
+    shortTermCoverageRatios = Column(float)
+    capitalExpenditureCoverageRatio = Column(float)
+    dividendPaidAndCapexCoverageRatio = Column(float)
+    dividendPayoutRatio = Column(float)
 
     # Valuation ratios
-    priceBookValueRatio = ms.Column(float)
-    priceToBookRatio = ms.Column(float)
-    priceToSalesRatio = ms.Column(float)
-    priceEarningsRatio = ms.Column(float)
-    priceToFreeCashFlowsRatio = ms.Column(float)
-    priceToOperatingCashFlowsRatio = ms.Column(float)
-    priceCashFlowRatio = ms.Column(float)
-    priceEarningsToGrowthRatio = ms.Column(float)
-    priceSalesRatio = ms.Column(float)
-    dividendYield = ms.Column(float)
-    enterpriseValueMultiple = ms.Column(float)
-    priceFairValue = ms.Column(float)
+    priceBookValueRatio = Column(float)
+    priceToBookRatio = Column(float)
+    priceToSalesRatio = Column(float)
+    priceEarningsRatio = Column(float)
+    priceToFreeCashFlowsRatio = Column(float)
+    priceToOperatingCashFlowsRatio = Column(float)
+    priceCashFlowRatio = Column(float)
+    priceEarningsToGrowthRatio = Column(float)
+    priceSalesRatio = Column(float)
+    dividendYield = Column(float)
+    enterpriseValueMultiple = Column(float)
+    priceFairValue = Column(float)
 
-class CustomFundamentals8(ms.Database):
+class CustomFundamentals8(Database):
     """Forward EV/FCF database."""
 
     CODE = "refe-fundamentals-eps"
     LOOKBACK_WINDOW = 240
 
-    ForwardEVFreeCashFlow_SmartEstimate_ = ms.Column(float)
+    ForwardEVFreeCashFlow_SmartEstimate_ = Column(float)
 
-class CustomFundamentals9(ms.Database):
+class CustomFundamentals9(Database):
     """BC data database."""
 
     CODE = "bcdata"
     LOOKBACK_WINDOW = 200
 
-    bc1 = ms.Column(float)
+    bc1 = Column(float)
 
 
 #################################################
@@ -846,7 +863,7 @@ def initialize(context):
     Initialize the trading algorithm.
     """
     global ASSET_FINDER
-
+    global METADATA_CACHE
 
     # Store asset finder reference for symbol lookup
     from zipline.data import bundles
@@ -913,19 +930,20 @@ def initialize(context):
         print("FlightLog not available - continuing without real-time monitoring")
 
     # Load Sharadar sector cache once for performance
-    global SHARADAR_SECTOR_CACHE
-    try:
-        import sqlite3
-        db_path = '/data/custom_databases/fundamentals.sqlite'
-        conn = sqlite3.connect(db_path)
-        sharadar_df = pd.read_sql("SELECT ticker, sector FROM SharadarTickers", conn)
-        conn.close()
-        # Convert to dict for O(1) lookup
-        SHARADAR_SECTOR_CACHE = dict(zip(sharadar_df['ticker'], sharadar_df['sector']))
-        print(f"[INFO] Loaded {len(SHARADAR_SECTOR_CACHE)} Sharadar sectors into cache")
-    except Exception as e:
-        print(f"[WARNING] Could not load Sharadar sector cache: {e}")
-        SHARADAR_SECTOR_CACHE = {}
+    # DISABLED: Not needed - sector data comes from Pipeline
+    # global SHARADAR_SECTOR_CACHE
+    # try:
+    #     import sqlite3
+    #     db_path = '/data/custom_databases/fundamentals.sqlite'
+    #     conn = sqlite3.connect(db_path)
+    #     sharadar_df = pd.read_sql("SELECT ticker, sector FROM SharadarTickers", conn)
+    #     conn.close()
+    #     # Convert to dict for O(1) lookup
+    #     SHARADAR_SECTOR_CACHE = dict(zip(sharadar_df['ticker'], sharadar_df['sector']))
+    #     print(f"[INFO] Loaded {len(SHARADAR_SECTOR_CACHE)} Sharadar sectors into cache")
+    # except Exception as e:
+    #     print(f"[WARNING] Could not load Sharadar sector cache: {e}")
+    #     SHARADAR_SECTOR_CACHE = {}
 
 
 def make_pipeline():
@@ -936,10 +954,39 @@ def make_pipeline():
 
 
     # Get benchmark assets using asset_finder (available after initialize sets it)
-   
+    spy_asset = symbol('SPY')
+    iwm_asset = symbol('IWM')
+    qqq_asset = symbol('QQQ')
 
-    # Initial universe filter - top stocks by market cap
-    tradable_filter = (CustomFundamentals.CompanyMarketCap.latest.top(UNIVERSE_SIZE)) | StaticAssets([symbol('IBM')])
+    # UNIVERSE FILTERING using CustomFilter classes from sharadar_filters.py
+    # This approach uses the metadata columns loaded from the fundamentals database
+    # which are now correctly stored as TEXT type (after database reload)
+
+    # Step 1: Get top stocks by enterprise value OR market cap (wider universe to account for filtering)
+    # Using enterprise value as primary metric (similar to original strategy)
+    # Fall back to market cap for stocks without enterprise value
+    enterprise_value_filter = CustomFundamentals.EnterpriseValue_DailyTimeSeries_.latest.top(UNIVERSE_SIZE * 3)
+    market_cap_filter = CustomFundamentals.CompanyMarketCap.latest.top(UNIVERSE_SIZE * 3)
+
+    # Combine: prefer enterprise value, but include market cap leaders as well
+    size_filter = enterprise_value_filter | market_cap_filter
+
+    # Step 2: Apply universe filters using CustomFilter classes
+    # Pass the metadata columns from CustomFundamentals to each filter
+    exchange_filter = ExchangeFilter(CustomFundamentals.sharadar_exchange)  # NYSE, NASDAQ, NYSEMKT only
+    category_filter = CategoryFilter(CustomFundamentals.sharadar_category)  # Domestic Common Stock only
+    adr_filter = ADRFilter(CustomFundamentals.sharadar_is_adr)  # Excludes ADRs (returns True for non-ADRs)
+
+    # Step 3: Combine all filters
+    us_equities_universe = (
+        size_filter &
+        exchange_filter &
+        category_filter &
+        adr_filter
+    )
+
+    # Step 4: Add benchmark assets (SPY, IBM, etc.)
+    tradable_filter = us_equities_universe | StaticAssets([symbol('IBM')])
 
     # Money flow factors
     money_flow_index = MoneyFlowIndexFactor(mask=tradable_filter, window_length=90)
@@ -960,6 +1007,11 @@ def make_pipeline():
     # Note: sector is loaded from Sharadar tickers in filter_symbols_sectors_universe()
     # We keep this as fallback in case Sharadar data is not available
     columns['sector'] = CustomFundamentals.GICSSectorName.latest
+
+    # Add Sharadar metadata columns for universe filtering
+    columns['sharadar_exchange'] = CustomFundamentals.sharadar_exchange.latest
+    columns['sharadar_category'] = CustomFundamentals.sharadar_category.latest
+    columns['sharadar_is_adr'] = CustomFundamentals.sharadar_is_adr.latest
 
     columns['market_cap'] = CustomFundamentals.CompanyMarketCap.latest
     columns['entval'] = CustomFundamentals.EnterpriseValue_DailyTimeSeries_.latest
@@ -1032,7 +1084,7 @@ def make_pipeline():
     # )
     # columns['sentest'] = 1/SumFactor(CustomFundamentals2.sent2pol, window_length=18)
 
-    pipe = ms.Pipeline(
+    pipe = Pipeline(
         screen=tradable_filter,
         columns=columns
     )
@@ -1095,6 +1147,19 @@ def before_trading_start(context, data):
 
 def process_universe(context, df, data):
     """Process the universe of stocks and generate alpha signals."""
+
+    # NOTE: Universe filtering is now done in the Pipeline using CustomFilter classes
+    # The metadata columns (sharadar_exchange, sharadar_category, sharadar_is_adr)
+    # are loaded correctly as TEXT from the database and filtered in make_pipeline()
+
+    # Just verify the filtering worked (optional diagnostic output)
+    initial_size = len(df)
+    if 'sharadar_exchange' in df.columns:
+        print(f"Universe size after Pipeline filters: {initial_size} stocks")
+        print(f"Exchanges: {df['sharadar_exchange'].value_counts().to_dict()}")
+    else:
+        print(f"Universe size: {initial_size} stocks (metadata columns not in Pipeline output)")
+
     # Remove excluded sectors
     df = filter_symbols_sectors_universe(df)
 
@@ -1397,10 +1462,16 @@ def regular_allocation(context, data):
     total_wl = 0
     for sid_val, w in zip(longs, longs_mcw['cash_return'].values):
         w = abs(w)
-        order_target_percent(sid_val, w * port_weight_factor)
+        # Check tradeability before ordering
+        if data.can_trade(sid_val):
+            order_target_percent(sid_val, w * port_weight_factor)
+        else:
+            print(f"  WARNING: Cannot trade {sid_val} - skipping")
         total_wl = total_wl + w
 
-    order_target_percent(context.spysym, total_wl * spy_weight_factor)
+    # Order SPY (index ETF - typically always tradeable)
+    if data.can_trade(context.spysym):
+        order_target_percent(context.spysym, total_wl * spy_weight_factor)
 
     print(f'Total SPY weight: {total_wl * spy_weight_factor:.4f}')
     print(f'Total port long weight: {total_wl * port_weight_factor:.4f}')
@@ -1438,11 +1509,11 @@ def regular_allocation(context, data):
     # Execute IWM short
     if (context.vix_uptrend_flag and context.spy_below80ma):
         iwm_w = min(-1 * 0.384 * total_wl, total_ws)
-        place_short_orders(context, context.short_symbol_weights, iwm_w)
+        place_short_orders(context, data, context.short_symbol_weights, iwm_w)
         print(f'SPY below MA80 - IWM weight {iwm_w:.4f}')
         context.iwm_w = iwm_w
     else:
-        place_short_orders(context, context.short_symbol_weights, total_ws)
+        place_short_orders(context, data, context.short_symbol_weights, total_ws)
         print(f'IWM weight {total_ws:.4f}')
         context.iwm_w = total_ws
 
@@ -1472,10 +1543,15 @@ def exit_positions(context, data):
     for sid_val in getting_the_boot:
         if context.verbose == 1:
             print('Exiting', sid_val)
-        try:
-            order_target(sid_val, 0)
-        except Exception as e:
-            print(f'Failed to exit {sid_val}:', e)
+        # Check tradeability before trying to exit
+        if data.can_trade(sid_val):
+            try:
+                order_target(sid_val, 0)
+            except Exception as e:
+                print(f'Failed to exit {sid_val}:', e)
+        else:
+            # Can't trade - likely delisted, will auto-liquidate
+            print(f'  WARNING: Cannot exit {sid_val} - not tradeable (likely delisted)')
 
     return
 
@@ -1573,7 +1649,8 @@ def filter_symbols_sectors_universe(df):
 
     # Filter out Financial Services sector (Sharadar sector name)
     # Also filter legacy GICS "Financials" in case Sharadar sector wasn't loaded
-    df = df[~df['sector'].fillna('Unknown').isin(['Financial Services', 'Financials'])]
+    # Convert to string to avoid categorical dtype issues with fillna
+    df = df[~df['sector'].astype(str).replace('nan', 'Unknown').isin(['Financial Services', 'Financials'])]
 
     # Limit Energy and Real Estate
     df_energy = df[df['sector'] == 'Energy'].sort_values(by='market_cap', ascending=False)[:20]
@@ -1630,14 +1707,18 @@ def print_positions(port, port_w, target, factor=1):
     return
 
 
-def place_short_orders(context, symbol_weights, total_weight):
+def place_short_orders(context, data, symbol_weights, total_weight):
     """Place short orders."""
     sum_of_weights = sum(symbol_weights.values())
 
     for sym, weight in symbol_weights.items():
         target_percent = (weight / sum_of_weights) * total_weight
         print(f"Executing short target {sym}, {target_percent * context.shortfact:.4f}")
-        order_target_percent(sym, target_percent * context.shortfact)
+        # Check tradeability before ordering
+        if data.can_trade(sym):
+            order_target_percent(sym, target_percent * context.shortfact)
+        else:
+            print(f"  WARNING: Cannot trade {sym} - skipping short order")
 
     return
 
@@ -1670,7 +1751,8 @@ def RemoveSectors(context, etf, dfs, prt_str):
 
     if etf in etf_sector_map:
         sector_to_remove = etf_sector_map[etf]
-        dfs = dfs[dfs['sector'].fillna('Unknown') != sector_to_remove]
+        # Convert to string to avoid categorical dtype issues with fillna
+        dfs = dfs[dfs['sector'].astype(str).replace('nan', 'Unknown') != sector_to_remove]
         print(prt_str % etf)
 
     return dfs
@@ -1808,7 +1890,11 @@ if __name__ == '__main__':
         analyze=analyze,
         capital_base=CAPITAL,
         bundle='sharadar',
-        custom_loader=ms.setup_auto_loader(),  # Auto-detect custom databases
+        custom_loader=setup_auto_loader(
+            bundle_name='sharadar',
+            custom_db_dir='/data/custom_databases',
+            enable_sid_translation=True
+        ),
     )
 
     print("\n" + "="*80)

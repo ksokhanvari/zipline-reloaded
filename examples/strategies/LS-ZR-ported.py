@@ -1025,10 +1025,10 @@ def make_pipeline():
     columns['eps_gr_mean'] = CustomFundamentals.LongTermGrowth_Mean.latest
 
     columns['CashCashEquivalents_Total'] = CustomFundamentals.CashCashEquivalents_Total.latest
-    # Use Sharadar FCF
+    # Use Sharadar FCF to match QuantRocket implementation
     columns['fcf'] = SharadarFundamentals.fcf.latest
-    # Commented out - using Sharadar FCF instead
-    #columns['fcf'] = CustomFundamentals.FOCFExDividends_Discrete.latest
+    # OLD: Was using LSEG FCF (different data source)
+    # columns['fcf'] = CustomFundamentals.FOCFExDividends_Discrete.latest
     columns['int'] = CustomFundamentals.InterestExpense_NetofCapitalizedInterest.latest
 
     columns['beta60SPY'] = beta_spy

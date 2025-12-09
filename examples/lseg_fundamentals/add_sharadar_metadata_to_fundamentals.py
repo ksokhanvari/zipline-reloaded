@@ -148,7 +148,10 @@ def generate_output_filename(input_csv, suffix='_with_metadata'):
 
 def load_sharadar_tickers(bundle_name='sharadar'):
     """
-    Load Sharadar ticker metadata from the bundle.
+    Load Sharadar ticker metadata by downloading from NASDAQ Data Link API.
+
+    Note: The Sharadar bundle no longer saves tickers.h5 file. This function
+    downloads TICKERS table directly from NASDAQ Data Link.
 
     Parameters
     ----------
@@ -160,39 +163,48 @@ def load_sharadar_tickers(bundle_name='sharadar'):
     pd.DataFrame
         DataFrame with columns: ticker, exchange, category, location,
         sector, industry, sicsector, sicindustry, scalemarketcap, is_adr
+
+    Raises
+    ------
+    ValueError
+        If NASDAQ_DATA_LINK_API_KEY environment variable is not set
     """
-    print(f"Loading Sharadar tickers from bundle: {bundle_name}")
+    print(f"Loading Sharadar tickers metadata...")
 
-    # Find the most recent bundle ingestion
-    bundle_dir = Path.home() / '.zipline' / 'data' / bundle_name
+    # Get API key from environment
+    import os
+    api_key = os.environ.get('NASDAQ_DATA_LINK_API_KEY')
 
-    if not bundle_dir.exists():
-        # Try Docker path
-        bundle_dir = Path('/root/.zipline/data') / bundle_name
-
-    if not bundle_dir.exists():
-        raise FileNotFoundError(
-            f"Sharadar bundle '{bundle_name}' not found. "
-            f"Please ingest the bundle first with: zipline ingest -b {bundle_name}"
+    if not api_key:
+        raise ValueError(
+            "NASDAQ_DATA_LINK_API_KEY environment variable not set. "
+            "Please set it to your NASDAQ Data Link API key."
         )
 
-    # Get most recent ingestion
-    ingestions = sorted([d for d in bundle_dir.iterdir() if d.is_dir()],
-                       reverse=True)
+    print("  Downloading TICKERS table from NASDAQ Data Link API...")
 
-    if not ingestions:
-        raise FileNotFoundError(f"No ingestions found in {bundle_dir}")
+    # Download TICKERS table using nasdaqdatalink
+    try:
+        import nasdaqdatalink
+    except ImportError:
+        raise ImportError(
+            "nasdaqdatalink package not installed. "
+            "Install with: pip install nasdaq-data-link"
+        )
 
-    latest_ingestion = ingestions[0]
-    tickers_file = latest_ingestion / 'fundamentals' / 'tickers.h5'
+    # Set API key
+    nasdaqdatalink.ApiConfig.api_key = api_key
 
-    if not tickers_file.exists():
-        raise FileNotFoundError(f"Tickers file not found: {tickers_file}")
-
-    print(f"Loading from: {tickers_file}")
-
-    # Load tickers
-    tickers = pd.read_hdf(tickers_file, key='tickers')
+    # Download TICKERS table
+    # Columns: ticker, name, exchange, isdelisted, category, cusips, permaticker,
+    #          location, lastupdated, firstadded, firstpricedate, lastpricedate,
+    #          firstquarter, lastquarter, secfilings, companysite, sector, industry,
+    #          scalemarketcap, scalerevenue, relatedtickers, currency, siccode,
+    #          famasector, famaindustry, sicindustry, sicsector
+    tickers = nasdaqdatalink.get_table(
+        'SHARADAR/TICKERS',
+        paginate=True
+    )
 
     print(f"Loaded {len(tickers)} tickers")
 

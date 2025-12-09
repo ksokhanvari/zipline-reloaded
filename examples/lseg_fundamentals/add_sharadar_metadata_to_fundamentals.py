@@ -7,10 +7,26 @@ This script enriches your LSEG fundamentals CSV with Sharadar ticker metadata
 so that all information is available in a single database table for Pipeline filtering.
 
 Usage:
+    # Auto-detect newest CSV file in /data/csv/ directory
+    python add_sharadar_metadata_to_fundamentals.py
+
+    # Specify input and output files explicitly
     python add_sharadar_metadata_to_fundamentals.py \
-        --input lseg_fundamentals.csv \
-        --output lseg_fundamentals_with_metadata.csv \
-        --sharadar-bundle sharadar
+        --input /data/csv/20091231_20251118.csv \
+        --output /data/csv/20091231_20251118_with_metadata.csv
+
+    # Auto-detect from custom directory
+    python add_sharadar_metadata_to_fundamentals.py \
+        --csv-dir /path/to/csv/files/
+
+    # Specify input only (output auto-generated with "_with_metadata" suffix)
+    python add_sharadar_metadata_to_fundamentals.py \
+        --input /data/csv/20091231_20251118.csv
+
+Auto-Detection:
+    - If --input is not provided, searches for CSV files in /data/csv/ directory
+    - Selects file with newest end date (format: YYYYMMDD_YYYYMMDD.csv)
+    - If --output is not provided, adds "_with_metadata" suffix to input filename
 
 The output CSV will have these additional columns:
     - sharadar_exchange: Exchange (NYSE, NASDAQ, NYSEMKT, etc.)
@@ -31,6 +47,103 @@ import sys
 import pandas as pd
 import numpy as np
 from pathlib import Path
+import re
+
+
+def find_newest_csv(directory='/data/csv/', pattern='*_*.csv'):
+    """
+    Find the CSV file with the newest date in the filename.
+
+    Assumes filename format: YYYYMMDD_YYYYMMDD.csv
+    Returns the file with the most recent end date (second date).
+
+    Parameters
+    ----------
+    directory : str
+        Directory to search for CSV files
+    pattern : str
+        Glob pattern for CSV files (default: *_*.csv)
+
+    Returns
+    -------
+    str or None
+        Path to newest CSV file, or None if no files found
+
+    Examples
+    --------
+    >>> find_newest_csv('/data/csv/')
+    '/data/csv/20091231_20251118.csv'
+    """
+    csv_dir = Path(directory)
+
+    if not csv_dir.exists():
+        print(f"Warning: Directory {csv_dir} does not exist")
+        return None
+
+    # Find all CSV files matching pattern
+    csv_files = list(csv_dir.glob(pattern))
+
+    if not csv_files:
+        print(f"Warning: No CSV files found in {csv_dir} matching pattern {pattern}")
+        return None
+
+    print(f"Found {len(csv_files)} CSV files in {csv_dir}")
+
+    # Extract dates from filenames
+    # Pattern: YYYYMMDD_YYYYMMDD.csv
+    date_pattern = r'(\d{8})_(\d{8})\.csv'
+
+    files_with_dates = []
+    for csv_file in csv_files:
+        match = re.search(date_pattern, csv_file.name)
+        if match:
+            start_date = match.group(1)
+            end_date = match.group(2)
+            files_with_dates.append((csv_file, start_date, end_date))
+            print(f"  {csv_file.name}: {start_date} to {end_date}")
+
+    if not files_with_dates:
+        print(f"Warning: No files with date pattern YYYYMMDD_YYYYMMDD.csv found")
+        # Return the first file as fallback
+        return str(csv_files[0])
+
+    # Sort by end date (most recent last)
+    files_with_dates.sort(key=lambda x: x[2])
+
+    newest_file = files_with_dates[-1][0]
+    newest_start = files_with_dates[-1][1]
+    newest_end = files_with_dates[-1][2]
+
+    print(f"\nNewest file: {newest_file.name} ({newest_start} to {newest_end})")
+
+    return str(newest_file)
+
+
+def generate_output_filename(input_csv, suffix='_with_metadata'):
+    """
+    Generate output filename by adding suffix before .csv extension.
+
+    Parameters
+    ----------
+    input_csv : str
+        Input CSV filename
+    suffix : str
+        Suffix to add before .csv (default: '_with_metadata')
+
+    Returns
+    -------
+    str
+        Output filename
+
+    Examples
+    --------
+    >>> generate_output_filename('/data/csv/20091231_20251118.csv')
+    '/data/csv/20091231_20251118_with_metadata.csv'
+    """
+    input_path = Path(input_csv)
+    output_name = input_path.stem + suffix + input_path.suffix
+    output_path = input_path.parent / output_name
+    return str(output_path)
 
 
 def load_sharadar_tickers(bundle_name='sharadar'):
@@ -190,14 +303,20 @@ def main():
 
     parser.add_argument(
         '--input', '-i',
-        required=True,
-        help='Input LSEG fundamentals CSV file'
+        default=None,
+        help='Input LSEG fundamentals CSV file (if not provided, auto-detects newest file in /data/csv/)'
     )
 
     parser.add_argument(
         '--output', '-o',
-        required=True,
-        help='Output CSV file with metadata added'
+        default=None,
+        help='Output CSV file with metadata added (if not provided, adds "_with_metadata" suffix to input filename)'
+    )
+
+    parser.add_argument(
+        '--csv-dir', '-d',
+        default='/data/csv/',
+        help='Directory to search for CSV files when auto-detecting (default: /data/csv/)'
     )
 
     parser.add_argument(
@@ -217,6 +336,24 @@ def main():
     print("=" * 80)
     print("ADD SHARADAR METADATA TO LSEG FUNDAMENTALS")
     print("=" * 80)
+
+    # Auto-detect input file if not provided
+    if args.input is None:
+        print(f"\nNo input file specified - auto-detecting newest CSV in {args.csv_dir}...")
+        args.input = find_newest_csv(directory=args.csv_dir)
+        if args.input is None:
+            print("ERROR: Could not auto-detect input file. Please specify with --input")
+            sys.exit(1)
+    else:
+        print(f"\nUsing specified input file: {args.input}")
+
+    # Auto-generate output filename if not provided
+    if args.output is None:
+        print(f"No output file specified - auto-generating from input filename...")
+        args.output = generate_output_filename(args.input)
+        print(f"Generated output filename: {args.output}")
+    else:
+        print(f"Using specified output file: {args.output}")
 
     # Load LSEG fundamentals
     print(f"\nLoading LSEG fundamentals from: {args.input}")

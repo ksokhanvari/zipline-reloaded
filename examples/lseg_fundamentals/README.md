@@ -17,12 +17,7 @@ examples/lseg_fundamentals/
 │
 ├── CSV Enrichment Tools (Recommended Workflow)
 │   ├── add_sharadar_metadata_to_fundamentals.py     # CLI script for CSV enrichment
-│   ├── add_sharadar_metadata_to_fundamentals.ipynb  # Interactive notebook with 9 charts
-│   └── add_sharadar_metadata_to_fundamentals_full.ipynb  # Backup with embedded functions
-│
-├── Database Table Tools (Alternative Workflow)
-│   ├── add_sharadar_tickers.ipynb                   # Create SharadarTickersDaily table
-│   └── add_sharadar_tickers_fast.ipynb              # Optimized version for large datasets
+│   └── add_sharadar_metadata_to_fundamentals.ipynb  # Interactive notebook with 9 charts
 │
 ├── Database Management Tools
 │   ├── load_csv_fundamentals.ipynb                  # Load enriched CSV to fundamentals.sqlite
@@ -31,6 +26,12 @@ examples/lseg_fundamentals/
 │
 ├── Research & Analysis
 │   └── research_with_fundamentals.ipynb             # Example fundamentals research notebook
+│
+├── deprecated/                                        # Deprecated files (see deprecated/README.md)
+│   ├── README.md                                     # Documentation for deprecated files
+│   ├── add_sharadar_metadata_to_fundamentals_full.ipynb  # Old embedded-functions version
+│   ├── add_sharadar_tickers.ipynb                   # Old table-based approach
+│   └── add_sharadar_tickers_fast.ipynb              # Old optimized table-based approach
 │
 └── __pycache__/
     └── add_sharadar_metadata_to_fundamentals.cpython-311.pyc  # Compiled Python cache
@@ -62,29 +63,9 @@ examples/lseg_fundamentals/
      - Live progress tracking and matching statistics
    - **Note**: This is the ACTIVE version with all charts and imports
 
-3. **`add_sharadar_metadata_to_fundamentals_full.ipynb`** (31 cells)
-   - **Purpose**: Backup version with embedded functions (pre-import pattern)
-   - **Status**: Archived for reference
-   - **Note**: Use main `.ipynb` instead (imports from script)
-
-#### **Database Table Tools** (Alternative)
-
-4. **`add_sharadar_tickers.ipynb`**
-   - **Purpose**: Create `SharadarTickersDaily` table in fundamentals.sqlite
-   - **Approach**: Symbol × Date cross-product (~241M rows for full universe)
-   - **Features**:
-     - Memory-efficient chunked processing
-     - Creates indexes for fast queries (Symbol, Date, Symbol+Date)
-     - Point-in-time correct (metadata repeated across all dates)
-   - **Use Case**: When you want separate normalized table for joins
-
-5. **`add_sharadar_tickers_fast.ipynb`**
-   - **Purpose**: Optimized version with faster chunking
-   - **Difference**: Better memory management for very large datasets
-
 #### **Database Management Tools**
 
-6. **`load_csv_fundamentals.ipynb`**
+3. **`load_csv_fundamentals.ipynb`**
    - **Purpose**: Load LSEG fundamentals CSV into SQLite database
    - **Compatible With**: Both plain CSV and enriched CSV (with metadata columns)
    - **Creates Tables**:
@@ -95,19 +76,26 @@ examples/lseg_fundamentals/
      - `CashFlow` - cash flow statement
    - **Features**: Data validation, indexing, integrity checks
 
-7. **`create_fundamentals_db.py`**
+4. **`create_fundamentals_db.py`**
    - **Purpose**: Create fundamentals database schema programmatically
    - **Use Case**: When you need to recreate DB structure from scratch
 
-8. **`remap_fundamentals_sids.py`**
+5. **`remap_fundamentals_sids.py`**
    - **Purpose**: Remap Security IDs after asset database changes
    - **Use Case**: When you re-ingest bundles and SIDs change
 
 #### **Research & Analysis**
 
-9. **`research_with_fundamentals.ipynb`**
+6. **`research_with_fundamentals.ipynb`**
    - **Purpose**: Example notebook showing how to query and analyze fundamentals
    - **Use Case**: Template for your own fundamentals-based research
+
+#### **Deprecated Files**
+
+7. **`deprecated/`** directory
+   - Contains old notebooks superseded by current workflow
+   - See `deprecated/README.md` for details on each deprecated file
+   - Files preserved for reference and alternative use cases
 
 ## Contents
 

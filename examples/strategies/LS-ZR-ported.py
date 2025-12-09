@@ -104,7 +104,7 @@ ASSET_FINDER = None
 SHARADAR_SECTOR_CACHE = {}
 
 # Portfolio Construction Parameters
-UNIVERSE_SIZE = 150      # Top N stocks by market cap to consider initially
+UNIVERSE_SIZE = 1500     # Top N stocks by market cap to consider initially
 FILTERED_UNIVERSE_SIZE = 500 # Final universe size after screening
 TOP_MOMENTUM_STOCKS = 20     # Number of momentum stocks to include
 LONG_PORTFOLIO_SIZE = 50    # Total number of long positions
@@ -670,6 +670,95 @@ class PreviousValue(CustomFactor):
         out[:] = data[0]
 
 
+
+# refactored ML by ChatGPT - improved performance and logic 
+class MLFactorC(CustomFactor):
+    """
+    Machine learning factor that predicts future returns.
+    Safe for QuantRocket/Zipline multiprocessing.
+    """
+    params = ('shift_target',)
+    window_safe = True
+
+    def compute(self, today, assets, out, target, *features, shift_target):
+
+        # ---------------------------------------------------------
+        # Initialize persistent instance attributes
+        # ---------------------------------------------------------
+        if not hasattr(self, "fitted"):
+            self.fitted = False
+        if not hasattr(self, "reuse_counter"):
+            self.reuse_counter = 0
+        if not hasattr(self, "reuse_limit"):
+            self.reuse_limit = 1
+        if not hasattr(self, "imputer"):
+            self.imputer = impute.SimpleImputer(strategy="constant", fill_value=0)
+        if not hasattr(self, "scaler"):
+            self.scaler = preprocessing.RobustScaler()
+        if not hasattr(self, "model"):
+            self.model = linear_model.LinearRegression()
+
+        # ---------------------------------------------------------
+        # Prepare data
+        # ---------------------------------------------------------
+        X = np.dstack(features)     # shape (t, n_stocks, n_features)
+        Y = target                  # shape (t, n_stocks)
+
+        n_time, n_stocks, n_factors = X.shape
+
+        # Guard condition: If shift_target not valid
+        if shift_target >= n_time:
+            out[:] = 0
+            return
+
+        # Training windows
+        X_train = X[:-shift_target].reshape(-1, n_factors)
+        Y_train = Y[shift_target:].reshape(-1)
+
+        # ---------------------------------------------------------
+        # Clean X and Y (remove NaN, inf, nonsense rows)
+        # ---------------------------------------------------------
+        mask = np.isfinite(X_train).all(axis=1) & np.isfinite(Y_train)
+
+        X_train = X_train[mask]
+        Y_train = Y_train[mask]
+
+        # Not enough samples → skip
+        if len(X_train) < 5:
+            out[:] = 0
+            return
+
+        # ---------------------------------------------------------
+        # Fit model if needed (reuse logic)
+        # ---------------------------------------------------------
+        if not self.fitted or self.reuse_counter == 0:
+
+            Xt = self.imputer.fit_transform(X_train)
+            Xt = self.scaler.fit_transform(Xt)
+
+            self.model.fit(Xt, Y_train)
+
+            self.fitted = True
+            self.reuse_counter = self.reuse_limit
+
+        # ---------------------------------------------------------
+        # Predict on latest bar
+        # ---------------------------------------------------------
+        X_test = X[-1]  # shape (n_stocks, n_factors)
+
+        # Clean test features
+        X_test = self.imputer.transform(X_test)
+        X_test = self.scaler.transform(X_test)
+
+        preds = self.model.predict(X_test)
+
+        # Output predictions
+        out[:] = preds
+
+        # Count down retrain counter
+        self.reuse_counter -= 1
+
+
 class MLFactor(CustomFactor):
     """Machine learning factor that predicts future returns"""
     params = ('shift_target',)
@@ -878,7 +967,7 @@ def initialize(context):
     spy = symbol('SPY')
     if spy:
         set_benchmark(spy)
-
+    set_benchmark((symbol('SPY')))
     # Initialize portfolio and risk parameters
     context.longfact = 1.0
     context.shortfact = 1.0
@@ -965,11 +1054,12 @@ def make_pipeline():
     # Step 1: Get top stocks by enterprise value OR market cap (wider universe to account for filtering)
     # Using enterprise value as primary metric (similar to original strategy)
     # Fall back to market cap for stocks without enterprise value
-    enterprise_value_filter = CustomFundamentals.EnterpriseValue_DailyTimeSeries_.latest.top(UNIVERSE_SIZE * 3)
-    market_cap_filter = CustomFundamentals.CompanyMarketCap.latest.top(UNIVERSE_SIZE * 3)
+    enterprise_value_filter = CustomFundamentals.EnterpriseValue_DailyTimeSeries_.latest.top(UNIVERSE_SIZE)
+    market_cap_filter = CustomFundamentals.CompanyMarketCap.latest.top(UNIVERSE_SIZE)
 
     # Combine: prefer enterprise value, but include market cap leaders as well
-    size_filter = enterprise_value_filter | market_cap_filter
+    size_filter = market_cap_filter #enterprise_value_filter | market_cap_filter
+    #size_filter = market_cap_filter
 
     # Step 2: Apply universe filters using CustomFilter classes
     # Pass the metadata columns from CustomFundamentals to each filter
@@ -979,15 +1069,15 @@ def make_pipeline():
 
     # Step 3: Combine all filters
     us_equities_universe = (
-        size_filter &
-        exchange_filter &
-        category_filter &
-        adr_filter
+        size_filter #&
+       # exchange_filter &
+        #category_filter #&
+       # adr_filter
     )
 
     # Step 4: Add benchmark assets (SPY, IBM, etc.)
     tradable_filter = us_equities_universe | StaticAssets([symbol('IBM')])
-
+    #tradable_filter = (CustomFundamentals.CompanyMarketCap.latest.top(UNIVERSE_SIZE)) | StaticAssets([symbol('IBM')])
     # Money flow factors
     money_flow_index = MoneyFlowIndexFactor(mask=tradable_filter, window_length=90)
     chaikin_money_flow = ChaikinMoneyFlowFactor(mask=tradable_filter, window_length=90)
@@ -995,8 +1085,8 @@ def make_pipeline():
     volume_weighted_mf = VolumeWeightedMoneyFlowFactor(mask=tradable_filter, window_length=90)
 
     # Create SimpleBeta factors with debug
-    beta_spy = SimpleBeta(target=spy_asset, regression_length=60)
-    beta_iwm = SimpleBeta(target=iwm_asset, regression_length=60)
+    beta_spy = SimpleBeta(target=spy_asset, regression_length=60) # PreviousValue(inputs=[CustomFundamentals.pred])
+    beta_iwm = SimpleBeta(target=iwm_asset, regression_length=60) #SimpleBeta(target=iwm_asset, regression_length=60)
     
 
     # Build pipeline columns one by one for debugging
@@ -1022,14 +1112,14 @@ def make_pipeline():
     columns['sumvolume'] = SumVolume(window_length=3)
 
     columns['eps_ActualSurprise_prev_Q_percent'] = CustomFundamentals.EarningsPerShare_ActualSurprise.latest
-    columns['eps_gr_mean'] = CustomFundamentals.LongTermGrowth_Mean.latest
+    columns['eps_gr_mean'] =  CustomFundamentals.LongTermGrowth_Mean.latest #PreviousValue(inputs=[CustomFundamentals.LongTermGrowth_Mean])  #CustomFundamentals.LongTermGrowth_Mean.latest
 
     columns['CashCashEquivalents_Total'] = CustomFundamentals.CashCashEquivalents_Total.latest
     # Use Sharadar FCF to match QuantRocket implementation
     columns['fcf'] = SharadarFundamentals.fcf.latest
     # OLD: Was using LSEG FCF (different data source)
-    # columns['fcf'] = CustomFundamentals.FOCFExDividends_Discrete.latest
-    columns['int'] = CustomFundamentals.InterestExpense_NetofCapitalizedInterest.latest
+    #columns['fcf'] = CustomFundamentals.FOCFExDividends_Discrete.latest
+    columns['int'] =  CustomFundamentals.InterestExpense_NetofCapitalizedInterest.latest
 
     columns['beta60SPY'] = beta_spy
     columns['beta60IWM'] = beta_iwm
@@ -1041,6 +1131,7 @@ def make_pipeline():
     columns['slope220'] = Slope(window_length=220, mask=tradable_filter).slope.zscore(mask=tradable_filter)
     columns['slope90'] = Slope(window_length=90, mask=tradable_filter).slope.zscore(mask=tradable_filter)
     columns['slope30'] = Slope(window_length=30, mask=tradable_filter).slope.zscore(mask=tradable_filter)
+    
     columns['stk20w'] = StochasticOscillatorWeekly()
     columns['above_200dma'] = Above200DMA(mask=tradable_filter)
     columns['walpha'] = WeightedAlpha()
@@ -1062,18 +1153,18 @@ def make_pipeline():
 
     columns['bc1'] = CustomFundamentals.bc1.latest
 
-    # columns['MLfactor'] = MLFactor(
-    #     inputs=[
-    #         Returns(window_length=90, mask=tradable_filter),
-    #         CustomFundamentals.EnterpriseValueToEBITDA_DailyTimeSeriesRatio_,
-    #         CustomFundamentals.LongTermGrowth_Mean,
-    #         CustomFundamentals.CombinedAlphaModelSectorRank,
-    #         CustomFundamentals.ForwardEnterpriseValueToOperatingCashFlow_DailyTimeSeriesRatio_,
-    #     ],
-    #     window_length=180,
-    #     mask=tradable_filter,
-    #     shift_target=10
-    # )
+    columns['MLfactor'] = MLFactorC(
+        inputs=[
+            Returns(window_length=90, mask=tradable_filter),
+            CustomFundamentals.EnterpriseValueToEBITDA_DailyTimeSeriesRatio_,
+            CustomFundamentals.LongTermGrowth_Mean,
+            CustomFundamentals.CombinedAlphaModelSectorRank,
+            CustomFundamentals.ForwardEnterpriseValueToOperatingCashFlow_DailyTimeSeriesRatio_,
+        ],
+        window_length=180,
+        mask=tradable_filter,
+        shift_target=15
+    ).zscore(mask=tradable_filter)
 
     # Commenting out sentiment factors - SumFactor usage needs fixing
     # The SumFactor class doesn't have inputs defined properly
@@ -1085,7 +1176,7 @@ def make_pipeline():
     # columns['sentest'] = 1/SumFactor(CustomFundamentals2.sent2pol, window_length=18)
 
     pipe = Pipeline(
-        screen=tradable_filter,
+       # screen=tradable_filter,
         columns=columns
     )
 
@@ -1099,6 +1190,19 @@ def before_trading_start(context, data):
 
     # Get pipeline output
     df = pipeline_output('my_pipeline')
+    print('pipe line size',len(df))
+
+    # Extract IBM row before filtering (needed for VIX flag signals)
+    ibm_row = None
+    if context.ibm_sid in df.index:
+        ibm_row = df.loc[[context.ibm_sid]].copy()
+
+    # Filter to top UNIVERSE_SIZE by market cap
+    df = df.sort_values(by=['market_cap'], ascending=False).head(UNIVERSE_SIZE)
+
+    # Add IBM back if it was filtered out (we need it for VIX signals)
+    if ibm_row is not None and context.ibm_sid not in df.index:
+        df = pd.concat([df, ibm_row])
 
     # Filter to tradeable stocks - keep as list of assets
     # all_selected = df.index
@@ -1167,11 +1271,25 @@ def process_universe(context, df, data):
     df['doll_vol'] = df['price'] * df['smav']
 
     # Calculate cash return
+    # Note: fcf and int are quarterly (may have NaNs for recent periods)
+    # entval is daily (should always be available)
+    # Fill missing quarterly data with 0 (stocks without data will rank low)
+    df['fcf'] = df['fcf'].fillna(0)
+    df['int'] = df['int'].fillna(0)
+
     df['cash_return'] = (df['fcf'] - df['int']) / df['entval']
     df['cash_return'] = df['cash_return'].replace([np.inf, -np.inf], np.nan)
 
+    # Drop stocks where cash_return is still NaN (entval = 0 or NaN)
+    # Note: cash_return = 0 is valid (stocks with no earnings), they'll just rank low
+    initial_count = len(df)
     df.dropna(subset=['cash_return'], inplace=True)
-    df = df[df['cash_return'] != 0]
+    dropped_count = initial_count - len(df)
+    if dropped_count > 0:
+        print(f"  Dropped {dropped_count} stocks with NaN cash_return (missing entval)")
+    if len(df) == 0:
+        print("  ERROR: All stocks dropped! Check data availability.")
+        print(f"  Debug: fcf NaN count: {df['fcf'].isna().sum()}, int NaN count: {df['int'].isna().sum()}, entval NaN count: {df['entval'].isna().sum()}")
 
     # Display sector returns
     sorted_df = df.groupby('sector')['cash_return'].agg(['mean']).sort_values(by='mean', ascending=False)
@@ -1196,7 +1314,7 @@ def process_universe(context, df, data):
             context.season = 0
 
         df['estrank'] = (
-            #df['MLfactor'].rank() +
+           df['MLfactor'].rank() +
             (df['entval'].rank() * 2) +
             (df['cash_return'].rank()) +
             df['eps_gr_mean'].rank() * (4 if context.season == 1 else 1) +
@@ -1204,6 +1322,11 @@ def process_universe(context, df, data):
         )
 
     print(f"Filtered stock universe size {df.shape}")
+    print(f"DEBUG: estrank NaN count: {df['estrank'].isna().sum()} / {len(df)}")
+    if df['estrank'].isna().all():
+        print("  ERROR: All estrank values are NaN!")
+        print(f"  MLfactor NaN: {df['MLfactor'].isna().sum()}, entval NaN: {df['entval'].isna().sum()}, cash_return NaN: {df['cash_return'].isna().sum()}")
+        print(f"  eps_gr_mean NaN: {df['eps_gr_mean'].isna().sum()}")
 
     # Create portfolios
     select_long_portfolio(context, df, data)
@@ -1224,6 +1347,16 @@ def select_long_portfolio(context, df, data):
     """Select securities for long portfolio."""
     dfl = df.copy()
 
+    # DEBUG: Check what data we have
+    print(f"DEBUG select_long_portfolio: Input df size: {len(dfl)}")
+    if len(dfl) > 0:
+        print(f"  estrank stats: min={dfl['estrank'].min():.2f}, max={dfl['estrank'].max():.2f}, NaN count={dfl['estrank'].isna().sum()}")
+        print(f"  cash_return stats: min={dfl['cash_return'].min():.4f}, max={dfl['cash_return'].max():.4f}, NaN count={dfl['cash_return'].isna().sum()}")
+        print(f"  Top 5 by estrank: {dfl.nlargest(5, 'estrank')[['name', 'estrank', 'cash_return']].to_dict('records')}")
+    else:
+        print("  ERROR: Input df is EMPTY!")
+        return
+
     num_momentum_stocks = TOP_MOMENTUM_STOCKS
     num_value_stocks = LONG_PORTFOLIO_SIZE - num_momentum_stocks
 
@@ -1233,6 +1366,7 @@ def select_long_portfolio(context, df, data):
            .sort_values(by=['cash_return'], ascending=[False])[0:num_value_stocks]
            .copy()
     )
+    print(f"  Value stocks selected (longs_c): {len(context.longs_c)}")
 
     # Select momentum stocks
     if context.vix_uptrend_flag:
@@ -1267,7 +1401,7 @@ def select_long_portfolio(context, df, data):
     # Adjust by slope
     slopefact = 1 + (context.longs['slope120'] / context.longs['slope120'].sum())
     context.longs['cash_return'] = context.longs['cash_return'] * slopefact**2
-
+    
     context.longs = context.longs.sort_values(by=['cash_return'], ascending=[False])
 
     print(f'Long portfolio calculated with total cash return: {context.longs["cash_return"].sum()}')
@@ -1542,7 +1676,7 @@ def exit_positions(context, data):
 
     for sid_val in getting_the_boot:
         if context.verbose == 1:
-            print('Exiting', sid_val)
+            print(sid_val)
         # Check tradeability before trying to exit
         if data.can_trade(sid_val):
             try:
@@ -1609,7 +1743,6 @@ def initialize_sids(context, data):
         context.sids_initialized = 1
 
     return
-
 
 def filter_symbols_sectors_universe(df):
     """Filter universe by sectors and stocks."""

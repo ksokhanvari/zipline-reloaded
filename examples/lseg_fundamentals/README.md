@@ -365,13 +365,73 @@ docker exec zipline-reloaded-jupyter ls -lah /root/.zipline/data/sharadar/*/fund
 - **Source**: LSEG/Refinitiv via QuantRocket
 - **Format**: CSV export
 - **Coverage**: 4,440 symbols, 4,012 dates (2008-2025)
-- **Size**: ~9M rows, 38 columns
+- **Size**: ~9M rows, 36 fundamental columns + 9 Sharadar metadata columns
+
+#### Available LSEG Fundamental Columns (36 fields)
+
+**Price & Volume:**
+1. `RefPriceClose` - Reference closing price
+2. `RefVolume` - Reference trading volume
+
+**Company Information:**
+3. `CompanyCommonName` - Company name
+4. `CompanyMarketCap` - Market capitalization
+5. `GICSSectorName` - GICS sector classification
+
+**Valuation Metrics:**
+6. `EnterpriseValue_DailyTimeSeries_` - Enterprise value (daily)
+7. `EnterpriseValueToEBIT_DailyTimeSeriesRatio_` - EV/EBIT ratio
+8. `EnterpriseValueToEBITDA_DailyTimeSeriesRatio_` - EV/EBITDA ratio
+9. `EnterpriseValueToSales_DailyTimeSeriesRatio_` - EV/Sales ratio
+10. `ForwardEnterpriseValueToOperatingCashFlow_DailyTimeSeriesRatio_` - Forward EV/OCF
+11. `ForwardPEG_DailyTimeSeriesRatio_` - Forward PEG ratio
+12. `PriceEarningsToGrowthRatio_SmartEstimate_` - PEG ratio (SmartEstimate)
+13. `ForwardPriceToCashFlowPerShare_DailyTimeSeriesRatio_` - Forward P/CF
+14. `ForwardPriceToSalesPerShare_DailyTimeSeriesRatio_` - Forward P/S
+
+**Cash Flow:**
+15. `FOCFExDividends_Discrete` - Free operating cash flow ex-dividends
+16. `CashCashEquivalents_Total` - Cash and cash equivalents
+
+**Debt & Interest:**
+17. `Debt_Total` - Total debt
+18. `InterestExpense_NetofCapitalizedInterest` - Interest expense (net)
+
+**Earnings Metrics:**
+19. `EarningsPerShare_Actual` - Actual EPS
+20. `EarningsPerShare_SmartEstimate_current_Q` - Current quarter EPS estimate
+21. `EarningsPerShare_SmartEstimate_prev_Q` - Previous quarter EPS estimate
+22. `EarningsPerShare_ActualSurprise` - EPS surprise (actual vs estimate)
+
+**Growth & Estimates:**
+23. `LongTermGrowth_Mean` - Long-term growth rate (mean estimate)
+24. `Estpricegrowth_percent` - Estimated price growth percentage
+25. `PriceTarget_Median` - Median analyst price target
+26. `Dividend_Per_Share_SmartEstimate` - Dividend per share estimate
+
+**Profitability Ratios:**
+27. `ReturnOnEquity_SmartEstimat` - Return on equity (SmartEstimate)
+28. `ReturnOnAssets_SmartEstimate` - Return on assets (SmartEstimate)
+29. `GrossProfitMargin_ActualSurprise` - Gross profit margin surprise
+
+**Rankings & Quality:**
+30. `CombinedAlphaModelRegionRank` - Alpha model region rank
+31. `CombinedAlphaModelSectorRank` - Alpha model sector rank
+32. `CombinedAlphaModelSectorRankChange` - Sector rank change
+33. `EarningsQualityRegionRank_Current` - Earnings quality rank (region)
+
+**Analyst Recommendations:**
+34. `Recommendation_Median_1_5_` - Median analyst recommendation (1-5 scale)
+
+**Custom Signals:**
+35. `pred` - VIX prediction signal (merged from vix_flag.csv)
+36. `bc1` - BC signal (merged from bc_data.csv)
 
 ### Sharadar Metadata
 
-- **Source**: Sharadar bundle (`tickers.h5`)
+- **Source**: NASDAQ Data Link API (SHARADAR/TICKERS table)
 - **Coverage**: 60,303 tickers total, 30,801 unique (after deduplication)
-- **Fields**: exchange, category, location, sector, industry, scalemarketcap, etc.
+- **Fields**: 9 metadata columns added with `sharadar_` prefix
 
 ## Matching Statistics
 

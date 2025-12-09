@@ -196,29 +196,81 @@ equity = SharadarFundamentals.equity.latest
 ### LSEG Data
 
 **Provider**: London Stock Exchange Group (formerly Refinitiv)
-**Coverage**: Millions of entities across 250 markets
+**Coverage**: 4,440 symbols, 4,012 dates (2009-2025), ~9M rows
+**Database**: `fundamentals.sqlite` (enriched with Sharadar metadata)
 
-#### Available Data Types
-- **Entity Data**: Corporate structures, legal entity identifiers
-- **Ownership**: Investment manager holdings, insider data
-- **Smart Estimates**: Consensus analyst estimates (ROE, ROA, EPS)
-- **Alpha Models**: Combined factor scores, sector rankings
-- **Forward Metrics**: Forward PE, PEG ratios, target prices
+#### Available LSEG Fundamental Columns (36 fields)
+
+**Price & Volume (2):**
+- `RefPriceClose`, `RefVolume`
+
+**Company Information (3):**
+- `CompanyCommonName`, `CompanyMarketCap`, `GICSSectorName`
+
+**Valuation Metrics (9):**
+- `EnterpriseValue_DailyTimeSeries_`, `EnterpriseValueToEBIT_DailyTimeSeriesRatio_`
+- `EnterpriseValueToEBITDA_DailyTimeSeriesRatio_`, `EnterpriseValueToSales_DailyTimeSeriesRatio_`
+- `ForwardEnterpriseValueToOperatingCashFlow_DailyTimeSeriesRatio_`
+- `ForwardPEG_DailyTimeSeriesRatio_`, `PriceEarningsToGrowthRatio_SmartEstimate_`
+- `ForwardPriceToCashFlowPerShare_DailyTimeSeriesRatio_`
+- `ForwardPriceToSalesPerShare_DailyTimeSeriesRatio_`
+
+**Cash Flow (2):**
+- `FOCFExDividends_Discrete`, `CashCashEquivalents_Total`
+
+**Debt & Interest (2):**
+- `Debt_Total`, `InterestExpense_NetofCapitalizedInterest`
+
+**Earnings Metrics (4):**
+- `EarningsPerShare_Actual`, `EarningsPerShare_SmartEstimate_current_Q`
+- `EarningsPerShare_SmartEstimate_prev_Q`, `EarningsPerShare_ActualSurprise`
+
+**Growth & Estimates (4):**
+- `LongTermGrowth_Mean`, `Estpricegrowth_percent`
+- `PriceTarget_Median`, `Dividend_Per_Share_SmartEstimate`
+
+**Profitability Ratios (3):**
+- `ReturnOnEquity_SmartEstimat`, `ReturnOnAssets_SmartEstimate`
+- `GrossProfitMargin_ActualSurprise`
+
+**Rankings & Quality (4):**
+- `CombinedAlphaModelRegionRank`, `CombinedAlphaModelSectorRank`
+- `CombinedAlphaModelSectorRankChange`, `EarningsQualityRegionRank_Current`
+
+**Analyst Recommendations (1):**
+- `Recommendation_Median_1_5_`
+
+**Custom Signals (2):**
+- `pred` (VIX prediction signal), `bc1` (BC signal)
+
+**Additional Metadata**: 9 Sharadar metadata columns (`sharadar_exchange`, `sharadar_category`, `sharadar_is_adr`, etc.) merged during CSV enrichment for universe filtering.
 
 #### Integration Pattern
 ```python
 from zipline.pipeline import multi_source as ms
 
-class LSEGFundamentals(ms.Database):
-    CODE = "lseg_fundamentals"  # Matches filename
+class CustomFundamentals(ms.Database):
+    CODE = "fundamentals"  # Matches database filename
     LOOKBACK_WINDOW = 252
 
-    ReturnOnEquity_SmartEstimate = ms.Column(float)
+    # Example columns
+    ReturnOnEquity_SmartEstimat = ms.Column(float)
     CombinedAlphaModelSectorRank = ms.Column(float)
-    ForwardPEG = ms.Column(float)
+    ForwardPEG_DailyTimeSeriesRatio_ = ms.Column(float)
+    GICSSectorName = ms.Column(str)
+    CompanyMarketCap = ms.Column(float)
+    pred = ms.Column(float)  # VIX signal
+    bc1 = ms.Column(float)   # BC signal
+
+    # Sharadar metadata (for universe filtering)
+    sharadar_exchange = ms.Column(str)
+    sharadar_category = ms.Column(str)
+    sharadar_is_adr = ms.Column(bool)
 ```
 
-**Database Location**: `~/.zipline/data/custom/lseg_fundamentals.sqlite`
+**Database Locations**:
+- Docker: `/data/custom_databases/fundamentals.sqlite`
+- Local: `~/.zipline/data/custom/fundamentals.sqlite`
 
 ---
 
@@ -603,10 +655,101 @@ else:
 
 ---
 
-**Document Version**: 8.0
-**Last Updated**: 2025-11-29
-**Key Features**: Hidden Point Capital branding, Sharadar + LSEG integration, multi-source pipelines, FlightLog monitoring, comprehensive HTML documentation, LSEG fundamentals enrichment with Sharadar metadata
-- redo using these " 1. CashCashEquivalents_Total
+## Recent Session: MRQ Configuration, LS-ZR Fixes, and Auto-Detection Features (2025-12-09)
+
+### Summary
+
+Completed MRQ bundle configuration, fixed critical LS-ZR-ported strategy issues (IBM handling, missing data), and added auto-detection features to LSEG fundamentals workflows for improved usability.
+
+### Key Accomplishments
+
+1. **MRQ Dimension Configuration**:
+   - Modified `sharadar_bundle.py` to filter for MRQ dimension at API level
+   - Added dimension filters at lines 1064 (nasdaqdatalink API) and 1264 (bulk export API)
+   - Created `SESSION_SUMMARY_2025-12-02.md` documenting ARQ vs MRQ differences
+   - Identified 9 critical differences between QuantRocket and Zipline implementations
+
+2. **LS-ZR-ported Strategy Fixes**:
+   - **IBM VIX Flag Handling**: Extract IBM row before market cap filtering, add back if filtered out
+   - **Missing Quarterly Data**: Fill missing fcf/int with 0 instead of dropping stocks
+   - **Removed Zero Filter**: Allow cash_return=0 (stocks without earnings data)
+   - **Debug Output**: Added comprehensive diagnostics for data coverage issues
+   - Fixed KeyError and empty portfolio crashes when IBM filtered out or data missing
+
+3. **Auto-Detection Features for LSEG Fundamentals**:
+   - Added `find_newest_csv()` function to detect newest CSV by date in filename
+   - Added `generate_output_filename()` to auto-generate output names
+   - Made `--input` and `--output` CLI arguments optional
+   - Updated both enrichment and load notebooks to auto-detect newest files
+   - Pattern: `YYYYMMDD_YYYYMMDD.csv` → selects file with most recent end date
+
+4. **Directory Organization**:
+   - Created `deprecated/` directory in `examples/lseg_fundamentals/`
+   - Moved 3 deprecated notebooks (`_full.ipynb`, `add_sharadar_tickers*.ipynb`)
+   - Created `deprecated/README.md` explaining deprecations
+   - Updated main README to reflect new structure
+
+5. **Sharadar TICKERS API Fix**:
+   - Bundle no longer creates `tickers.h5` file
+   - Updated `load_sharadar_tickers()` to download from NASDAQ Data Link API
+   - Downloads SHARADAR/TICKERS table with all metadata columns
+   - Requires `NASDAQ_DATA_LINK_API_KEY` environment variable
+
+### Files Modified
+
+**Strategy Files**:
+- `examples/strategies/LS-ZR-ported.py` - IBM handling, missing data fixes, debug output
+- `examples/strategies/SESSION_SUMMARY_2025-12-02.md` - Performance delta analysis
+
+**LSEG Fundamentals**:
+- `examples/lseg_fundamentals/add_sharadar_metadata_to_fundamentals.py` - Auto-detection, API download
+- `examples/lseg_fundamentals/add_sharadar_metadata_to_fundamentals.ipynb` - Auto-detection, cell reordering
+- `examples/lseg_fundamentals/load_csv_fundamentals.ipynb` - Auto-detection helper function
+- `examples/lseg_fundamentals/README.md` - Updated structure, deprecated directory
+- `examples/lseg_fundamentals/deprecated/README.md` - Deprecation explanations
+
+**Bundle Configuration**:
+- `src/zipline/data/bundles/sharadar_bundle.py` - MRQ dimension filters
+
+### Key Technical Decisions
+
+1. **Preserve IBM for VIX Signals**: Even if not in top 1500 by market cap, needed for strategy signals
+2. **Fill vs Drop Missing Data**: Better to fill with 0 and let ranking handle it than drop all stocks
+3. **Auto-Detection by Date**: Always process most recent data without manual configuration
+4. **API Download for TICKERS**: More reliable than depending on cached bundle files
+5. **Deprecated Directory**: Keep old files for reference but reduce confusion
+
+### Git Commits (Branch: claude/continue-session-011-011CUzneiQ5d1tV3Y3r29tCA)
+
+- `0230e6e8` - feat: Add auto-detection of newest CSV by date in load_csv_fundamentals
+- `13132385` - fix: Download Sharadar TICKERS directly from API
+- `3af1e790` - fix: Import auto-detection functions before using them
+- `c7ea0669` - feat: Add auto-detection of newest CSV file for LSEG enrichment
+- `c4c49f06` - refactor: Move deprecated LSEG notebooks to deprecated/ directory
+- `96622c4e` - docs: Add session summary for MRQ configuration
+- `d3481a0c` - fix: Handle missing data and preserve IBM for VIX signals
+
+### Known Issues
+
+1. **LSEG Enterprise Value Coverage**: Only ~2 stocks have entval data in current database
+   - Solution: Reload LSEG fundamentals with full dataset
+   - Temporary workaround: Use Sharadar enterprise value instead
+
+2. **MRQ Data Recency**: MRQ dimension may have gaps for most recent quarters
+   - Solution: Use ARQ for point-in-time accuracy if needed
+
+### Next Steps
+
+1. Reload LSEG fundamentals database with full enterprise value coverage
+2. Test LS-ZR-ported strategy with complete LSEG data
+3. Compare backtest results with QuantRocket implementation
+4. Apply remaining fixes from 9-item comparison (money flow factors, Ichimoku signal, etc.)
+
+---
+
+**Document Version**: 9.0
+**Last Updated**: 2025-12-09
+**Key Features**: Hidden Point Capital branding, Sharadar + LSEG integration, multi-source pipelines, FlightLog monitoring, MRQ configuration, auto-detection workflows, comprehensive strategy debugging
    2. CombinedAlphaModelRegionRank
    3. CombinedAlphaModelSectorRank
    4. CombinedAlphaModelSectorRankChange

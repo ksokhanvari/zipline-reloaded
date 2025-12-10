@@ -102,7 +102,7 @@ import logging
 
 # Backtest Parameters
 START_DATE = '2021-01-01'  # Backtest start date (allow lookback window)
-END_DATE = '2025-11-15'    # Backtest end date
+END_DATE = '2025-12-02'    # Backtest end date
 CAPITAL_BASE = 100000      # Starting capital ($)
 
 # Strategy Parameters

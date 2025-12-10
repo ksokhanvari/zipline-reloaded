@@ -83,6 +83,8 @@ zipline.iml
 TAGS
 
 .ipynb_checkpoints/
+__pycache__/
+.Trash-0/
 
 .gdb_history
 

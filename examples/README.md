@@ -77,13 +77,13 @@ Combine Sharadar and custom databases in your strategies.
   - Strategy: Quality factors from both sources
   - Perfect for: Learning multi-source patterns
 
-- **`debug_multi_source.py`** - Test pipeline without running backtest
-  - Features: Quick pipeline testing, field validation
-  - Perfect for: Debugging screens before backtesting
+- **`backtest_with_fundamentals.py`** - Full backtest example
+  - Features: Complete multi-source backtest implementation
+  - Perfect for: Production-ready multi-source strategies
 
-- **`test_sharadar_loader.py`** - Test Sharadar loader directly
-  - Features: Validate data loading, check field availability
-  - Perfect for: Troubleshooting Sharadar issues
+- **`multi_source_strategy.ipynb`** - Interactive strategy development
+  - Features: Notebook-based multi-source examples
+  - Perfect for: Jupyter-based strategy development
 
 ### 6️⃣ Custom Data (`6_custom_data/`)
 
@@ -138,7 +138,15 @@ Shared utilities used across examples.
 
 ### 🗄️ Deprecated (`deprecated/`)
 
-Old examples kept for reference. May not work with current version.
+Historical files organized by category. All deprecated files have been moved here to keep main directories clean and focused on current, maintained code.
+
+**Contents:**
+- `strategies/` - Old strategy implementations, test files, outdated tutorials
+- `session_summaries/` - Historical fix documentation and session logs
+- `lseg_fundamentals/` - Superseded LSEG workflow files
+- `multi_source_data/` - Old debug/test files
+
+**See**: `deprecated/README.md` for complete deprecation documentation and migration history.
 
 ## 📓 Jupyter Notebooks
 
@@ -198,9 +206,10 @@ python examples/6_custom_data/check_sf1_data.py
 
 ### "My pipeline returns 0 stocks"
 
-1. Test pipeline: `python examples/5_multi_source_data/debug_multi_source.py`
-2. Check field availability: `python examples/6_custom_data/check_sf1_data.py`
+1. Check field availability: `python examples/utils/check_sf1_data.py`
+2. Verify custom database: `python examples/utils/check_lseg_db.py`
 3. Read troubleshooting: `docs/MULTI_SOURCE_DATA.md` (search "Pipeline returns 0 stocks")
+4. See Sharadar guide: `docs/SHARADAR_FUNDAMENTALS_GUIDE.md`
 
 ## 🐳 Docker Volume Mounts
 

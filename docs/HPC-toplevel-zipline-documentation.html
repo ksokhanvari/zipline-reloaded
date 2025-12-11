@@ -2014,96 +2014,92 @@ value_screen = (
             <!-- LSEG Columns -->
             <section id="lseg-columns" class="section">
                 <h2>LSEG Custom Database Columns</h2>
-                <p>~50+ fundamental and analytics columns available from LSEG (formerly Refinitiv) custom database. Access via custom database class definition.</p>
+                <p>36 fundamental and analytics columns available from LSEG (formerly Refinitiv) custom database, enriched with Sharadar metadata. Access via custom database class definition.</p>
 
-                <h3>Smart Estimates & Forecasts</h3>
+                <h3>Price & Volume (2 columns)</h3>
                 <table>
                     <tr><th>Column</th><th>Description</th></tr>
-                    <tr><td><code>ReturnOnEquity_SmartEstimate</code></td><td>ROE consensus smart estimate</td></tr>
-                    <tr><td><code>ReturnOnAssets_SmartEstimate</code></td><td>ROA consensus smart estimate</td></tr>
-                    <tr><td><code>EarningsPerShare_SmartEstimate</code></td><td>EPS consensus smart estimate</td></tr>
-                    <tr><td><code>LongTermGrowth_Mean</code></td><td>Mean long-term growth estimate</td></tr>
-                    <tr><td><code>TargetPrice_Mean</code></td><td>Mean analyst target price</td></tr>
-                    <tr><td><code>Recommendation_Mean</code></td><td>Mean analyst recommendation (1-5 scale)</td></tr>
+                    <tr><td><code>RefPriceClose</code></td><td>Reference closing price</td></tr>
+                    <tr><td><code>RefVolume</code></td><td>Reference trading volume</td></tr>
                 </table>
 
-                <h3>Valuation Metrics</h3>
+                <h3>Company Information (3 columns)</h3>
                 <table>
                     <tr><th>Column</th><th>Description</th></tr>
+                    <tr><td><code>CompanyCommonName</code></td><td>Company common name</td></tr>
                     <tr><td><code>CompanyMarketCap</code></td><td>Company market capitalization</td></tr>
-                    <tr><td><code>EnterpriseValue</code></td><td>Enterprise value</td></tr>
-                    <tr><td><code>ForwardPE</code></td><td>Forward price to earnings ratio</td></tr>
-                    <tr><td><code>ForwardPEG</code></td><td>Forward PEG ratio</td></tr>
-                    <tr><td><code>PriceToBook_Daily</code></td><td>Daily price to book ratio</td></tr>
-                    <tr><td><code>PriceToSales_Daily</code></td><td>Daily price to sales ratio</td></tr>
-                    <tr><td><code>EVToEBITDA</code></td><td>EV to EBITDA ratio</td></tr>
-                    <tr><td><code>EVToSales</code></td><td>EV to sales ratio</td></tr>
+                    <tr><td><code>GICSSectorName</code></td><td>GICS sector classification</td></tr>
                 </table>
 
-                <h3>Fundamental Actuals</h3>
+                <h3>Valuation Metrics (9 columns)</h3>
+                <table>
+                    <tr><th>Column</th><th>Description</th></tr>
+                    <tr><td><code>EnterpriseValue_DailyTimeSeries_</code></td><td>Enterprise value (daily time series)</td></tr>
+                    <tr><td><code>EnterpriseValueToEBIT_DailyTimeSeriesRatio_</code></td><td>EV to EBIT ratio (daily)</td></tr>
+                    <tr><td><code>EnterpriseValueToEBITDA_DailyTimeSeriesRatio_</code></td><td>EV to EBITDA ratio (daily)</td></tr>
+                    <tr><td><code>EnterpriseValueToSales_DailyTimeSeriesRatio_</code></td><td>EV to sales ratio (daily)</td></tr>
+                    <tr><td><code>ForwardEnterpriseValueToOperatingCashFlow_DailyTimeSeriesRatio_</code></td><td>Forward EV to operating cash flow ratio</td></tr>
+                    <tr><td><code>ForwardPEG_DailyTimeSeriesRatio_</code></td><td>Forward PEG ratio (daily)</td></tr>
+                    <tr><td><code>ForwardPriceToCashFlowPerShare_DailyTimeSeriesRatio_</code></td><td>Forward price to cash flow per share</td></tr>
+                    <tr><td><code>ForwardPriceToSalesPerShare_DailyTimeSeriesRatio_</code></td><td>Forward price to sales per share</td></tr>
+                    <tr><td><code>PriceEarningsToGrowthRatio_SmartEstimate_</code></td><td>PE to growth ratio smart estimate</td></tr>
+                </table>
+
+                <h3>Cash Flow & Balance Sheet (4 columns)</h3>
+                <table>
+                    <tr><th>Column</th><th>Description</th></tr>
+                    <tr><td><code>CashCashEquivalents_Total</code></td><td>Total cash and cash equivalents</td></tr>
+                    <tr><td><code>Debt_Total</code></td><td>Total debt</td></tr>
+                    <tr><td><code>FOCFExDividends_Discrete</code></td><td>Free operating cash flow excluding dividends</td></tr>
+                    <tr><td><code>InterestExpense_NetofCapitalizedInterest</code></td><td>Net interest expense after capitalization</td></tr>
+                </table>
+
+                <h3>Earnings Metrics (5 columns)</h3>
                 <table>
                     <tr><th>Column</th><th>Description</th></tr>
                     <tr><td><code>EarningsPerShare_Actual</code></td><td>Actual reported EPS</td></tr>
-                    <tr><td><code>Revenue_Actual</code></td><td>Actual reported revenue</td></tr>
-                    <tr><td><code>NetIncome_Actual</code></td><td>Actual reported net income</td></tr>
-                    <tr><td><code>EBITDA_Actual</code></td><td>Actual reported EBITDA</td></tr>
-                    <tr><td><code>FreeCashFlow_Actual</code></td><td>Actual reported free cash flow</td></tr>
-                    <tr><td><code>DividendPerShare_Actual</code></td><td>Actual dividend per share</td></tr>
+                    <tr><td><code>EarningsPerShare_ActualSurprise</code></td><td>EPS surprise (actual vs estimate)</td></tr>
+                    <tr><td><code>EarningsPerShare_SmartEstimate_current_Q</code></td><td>EPS smart estimate for current quarter</td></tr>
+                    <tr><td><code>EarningsPerShare_SmartEstimate_prev_Q</code></td><td>EPS smart estimate for previous quarter</td></tr>
+                    <tr><td><code>GrossProfitMargin_ActualSurprise</code></td><td>Gross profit margin surprise</td></tr>
                 </table>
 
-                <h3>Balance Sheet Items</h3>
+                <h3>Growth & Target Estimates (4 columns)</h3>
                 <table>
                     <tr><th>Column</th><th>Description</th></tr>
-                    <tr><td><code>TotalAssets</code></td><td>Total assets</td></tr>
-                    <tr><td><code>TotalLiabilities</code></td><td>Total liabilities</td></tr>
-                    <tr><td><code>TotalEquity</code></td><td>Total shareholders' equity</td></tr>
-                    <tr><td><code>Debt_Total</code></td><td>Total debt</td></tr>
-                    <tr><td><code>Cash_Total</code></td><td>Total cash and equivalents</td></tr>
-                    <tr><td><code>Inventory_Total</code></td><td>Total inventory</td></tr>
-                    <tr><td><code>Receivables_Total</code></td><td>Total receivables</td></tr>
+                    <tr><td><code>LongTermGrowth_Mean</code></td><td>Mean long-term growth estimate</td></tr>
+                    <tr><td><code>PriceTarget_Median</code></td><td>Median analyst target price</td></tr>
+                    <tr><td><code>Estpricegrowth_percent</code></td><td>Estimated price growth percentage</td></tr>
+                    <tr><td><code>Dividend_Per_Share_SmartEstimate</code></td><td>Dividend per share smart estimate</td></tr>
                 </table>
 
-                <h3>Profitability Ratios</h3>
+                <h3>Profitability Ratios (2 columns)</h3>
                 <table>
                     <tr><th>Column</th><th>Description</th></tr>
-                    <tr><td><code>ROE_TTM</code></td><td>Return on equity (trailing 12 months)</td></tr>
-                    <tr><td><code>ROA_TTM</code></td><td>Return on assets (trailing 12 months)</td></tr>
-                    <tr><td><code>ROIC_TTM</code></td><td>Return on invested capital (TTM)</td></tr>
-                    <tr><td><code>GrossMargin_TTM</code></td><td>Gross margin (TTM)</td></tr>
-                    <tr><td><code>OperatingMargin_TTM</code></td><td>Operating margin (TTM)</td></tr>
-                    <tr><td><code>NetProfitMargin_TTM</code></td><td>Net profit margin (TTM)</td></tr>
+                    <tr><td><code>ReturnOnEquity_SmartEstimat</code></td><td>ROE consensus smart estimate</td></tr>
+                    <tr><td><code>ReturnOnAssets_SmartEstimate</code></td><td>ROA consensus smart estimate</td></tr>
                 </table>
 
-                <h3>Alpha Model Rankings</h3>
+                <h3>Alpha Model Rankings (4 columns)</h3>
                 <table>
                     <tr><th>Column</th><th>Description</th></tr>
-                    <tr><td><code>CombinedAlphaModelScore</code></td><td>Combined alpha model score</td></tr>
-                    <tr><td><code>CombinedAlphaModelRank</code></td><td>Combined alpha model rank</td></tr>
+                    <tr><td><code>CombinedAlphaModelRegionRank</code></td><td>Alpha model rank within region</td></tr>
                     <tr><td><code>CombinedAlphaModelSectorRank</code></td><td>Alpha model rank within sector</td></tr>
-                    <tr><td><code>ValueScore</code></td><td>Value factor score</td></tr>
-                    <tr><td><code>GrowthScore</code></td><td>Growth factor score</td></tr>
-                    <tr><td><code>QualityScore</code></td><td>Quality factor score</td></tr>
-                    <tr><td><code>MomentumScore</code></td><td>Momentum factor score</td></tr>
+                    <tr><td><code>CombinedAlphaModelSectorRankChange</code></td><td>Change in sector rank</td></tr>
+                    <tr><td><code>EarningsQualityRegionRank_Current</code></td><td>Current earnings quality rank in region</td></tr>
                 </table>
 
-                <h3>Technical & Sentiment</h3>
+                <h3>Analyst Recommendations (1 column)</h3>
                 <table>
                     <tr><th>Column</th><th>Description</th></tr>
-                    <tr><td><code>Beta</code></td><td>Stock beta vs market</td></tr>
-                    <tr><td><code>Volatility_30Day</code></td><td>30-day price volatility</td></tr>
-                    <tr><td><code>Volatility_90Day</code></td><td>90-day price volatility</td></tr>
-                    <tr><td><code>ShortInterest_Ratio</code></td><td>Short interest ratio</td></tr>
-                    <tr><td><code>InstitutionalOwnership</code></td><td>Percentage institutional ownership</td></tr>
-                    <tr><td><code>InsiderOwnership</code></td><td>Percentage insider ownership</td></tr>
+                    <tr><td><code>Recommendation_Median_1_5_</code></td><td>Median analyst recommendation (1-5 scale: 1=Strong Buy, 5=Strong Sell)</td></tr>
                 </table>
 
-                <h3>Dividend & Yield</h3>
+                <h3>Custom Signals (2 columns)</h3>
                 <table>
                     <tr><th>Column</th><th>Description</th></tr>
-                    <tr><td><code>DividendYield</code></td><td>Current dividend yield</td></tr>
-                    <tr><td><code>DividendPayoutRatio</code></td><td>Dividend payout ratio</td></tr>
-                    <tr><td><code>DividendGrowth_5Year</code></td><td>5-year dividend growth rate</td></tr>
-                    <tr><td><code>ExDividendDate</code></td><td>Ex-dividend date</td></tr>
+                    <tr><td><code>pred</code></td><td>VIX prediction signal</td></tr>
+                    <tr><td><code>bc1</code></td><td>BC sentiment indicator</td></tr>
                 </table>
 
                 <div class="callout callout-info">
@@ -2111,25 +2107,64 @@ value_screen = (
                     <pre><code>from zipline.pipeline import multi_source as ms
 
 class LSEGFundamentals(ms.Database):
-    CODE = "lseg_fundamentals"
+    CODE = "fundamentals"  # Matches fundamentals.sqlite filename
     LOOKBACK_WINDOW = 252
 
-    # Define columns matching your database
-    ReturnOnEquity_SmartEstimate = ms.Column(float)
+    # Price & Volume
+    RefPriceClose = ms.Column(float)
+    RefVolume = ms.Column(float)
+
+    # Company Information
+    CompanyCommonName = ms.Column(str)
+    CompanyMarketCap = ms.Column(float)
+    GICSSectorName = ms.Column(str)
+
+    # Valuation Metrics
+    EnterpriseValue_DailyTimeSeries_ = ms.Column(float)
+    ForwardPEG_DailyTimeSeriesRatio_ = ms.Column(float)
+
+    # Profitability
+    ReturnOnEquity_SmartEstimat = ms.Column(float)
+    ReturnOnAssets_SmartEstimate = ms.Column(float)
+
+    # Alpha Rankings
     CombinedAlphaModelSectorRank = ms.Column(float)
-    ForwardPEG = ms.Column(float)
+    EarningsQualityRegionRank_Current = ms.Column(float)
+
+    # Earnings
+    EarningsPerShare_Actual = ms.Column(float)
+    EarningsPerShare_ActualSurprise = ms.Column(float)
+
+    # Growth & Targets
+    LongTermGrowth_Mean = ms.Column(float)
+    PriceTarget_Median = ms.Column(float)
+
+    # Custom Signals
+    pred = ms.Column(float)  # VIX prediction
+    bc1 = ms.Column(float)   # BC sentiment
 
 # Use in pipeline
-pipeline = ms.Pipeline(
-    columns={
-        'roe_estimate': LSEGFundamentals.ReturnOnEquity_SmartEstimate.latest,
-        'sector_rank': LSEGFundamentals.CombinedAlphaModelSectorRank.latest,
-    }
-)</code></pre>
+def make_pipeline():
+    # Quality filters
+    high_roe = LSEGFundamentals.ReturnOnEquity_SmartEstimat.latest > 15
+    low_debt = LSEGFundamentals.Debt_Total.latest / LSEGFundamentals.CompanyMarketCap.latest < 0.5
+
+    # Alpha ranking
+    top_sector = LSEGFundamentals.CombinedAlphaModelSectorRank.latest <= 20
+
+    return ms.Pipeline(
+        columns={
+            'roe': LSEGFundamentals.ReturnOnEquity_SmartEstimat.latest,
+            'sector_rank': LSEGFundamentals.CombinedAlphaModelSectorRank.latest,
+            'target_price': LSEGFundamentals.PriceTarget_Median.latest,
+            'vix_signal': LSEGFundamentals.pred.latest,
+        },
+        screen=(high_roe & low_debt & top_sector)
+    )</code></pre>
                 </div>
 
-                <div class="callout callout-warning">
-                    <strong>Note:</strong> LSEG column names may vary based on your specific data subscription and export format. The columns listed above are common examples. Check your actual database schema for exact column names.
+                <div class="callout callout-success">
+                    <strong>Total Available:</strong> 36 LSEG columns + 9 Sharadar metadata columns (exchange, category, sector, industry, location, ADR status, market cap scale, SIC classifications) = 45 total columns for advanced stock screening.
                 </div>
             </section>
 

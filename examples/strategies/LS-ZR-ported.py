@@ -227,6 +227,9 @@ class CustomFundamentals(Database):
     forcast = Column(float)
     bc1 = Column(float)  # BC signal
 
+    predicted_return = Column(float) # ML forcast
+
+
     # Sharadar metadata columns for universe filtering (TEXT columns use str type)
     sharadar_exchange = Column(str)
     sharadar_category = Column(str)
@@ -1152,6 +1155,7 @@ def make_pipeline():
     columns['vixflag0'] = CustomFundamentals.pred.latest  # Current day's VIX flag
 
     columns['bc1'] = CustomFundamentals.bc1.latest
+    columns['predicted_return'] =  CustomFundamentals.predicted_return.latest
 
     columns['MLfactor'] = MLFactorC(
         inputs=[
@@ -1297,9 +1301,10 @@ def process_universe(context, df, data):
         print(sorted_df.iloc[0].name)
 
     # Calculate momentum ranking
-    df['myrs'] = df.slope120.rank() + df.RS140_QQQ.rank()
+    df['myrs'] = df['predicted_return'].rank() #+ df.slope120.rank() + df.RS140_QQQ.rank()
+    #df['myrs'] = df['predicted_return_10d'].rank()  + df.RS140_QQQ.rank()
 
-    print("cash ret, myrs --->>>>>> ", df.sort_values(by='market_cap', ascending=False)[0:10][['cash_return', 'myrs', 'slope90', 'above_200dma', 'walpha']], '\n')
+    print("cash ret, myrs --->>>>>> ", df.sort_values(by='market_cap', ascending=False)[0:10][['cash_return', 'myrs', 'slope90', 'above_200dma', 'predicted_return','sector']], '\n')
 
     df = df.sort_values(by=['market_cap'], ascending=[False])[0:FILTERED_UNIVERSE_SIZE].copy()
 
@@ -1314,11 +1319,12 @@ def process_universe(context, df, data):
             context.season = 0
 
         df['estrank'] = (
-           df['MLfactor'].rank() +
+          df['MLfactor'].rank() +
+           df['predicted_return'].rank() +
             (df['entval'].rank() * 2) +
             (df['cash_return'].rank()) +
             df['eps_gr_mean'].rank() * (4 if context.season == 1 else 1) +
-            (df[['doll_vol', 'slope90', 'eps_ActualSurprise_prev_Q_percent']].rank().sum(axis=1) / 3)
+           (df[['doll_vol', 'slope90', 'eps_ActualSurprise_prev_Q_percent']].rank().sum(axis=1) / 3)
         )
 
     print(f"Filtered stock universe size {df.shape}")
@@ -1421,7 +1427,7 @@ def select_short_portfolio(context, df, data):
     context.mometf = top_momentum_sector
 
     # Remove top momentum sector
-    dfs = RemoveSectors(context, top_momentum_sector, dfs, "not shorting! %s")
+    #dfs = RemoveSectors(context, top_momentum_sector, dfs, "not shorting! %s")
     print('Bottom momentum sector:', mom_list[-1])
 
     # Select shorts
@@ -1869,17 +1875,30 @@ def GenerateMomentumList(context, data, etf_list, momlength):
 def RemoveSectors(context, etf, dfs, prt_str):
     """Remove stocks from specific sectors."""
     # Sharadar sector names
+    # etf_sector_map = {
+    #     context.sector_etf_dict.get('XLB'): 'Basic Materials',
+    #     context.sector_etf_dict.get('XLY'): 'Consumer Cyclical',
+    #     context.sector_etf_dict.get('XLF'): 'Financial Services',
+    #     context.sector_etf_dict.get('XLP'): 'Consumer Defensive',
+    #     context.sector_etf_dict.get('XLV'): 'Healthcare',
+    #     context.sector_etf_dict.get('XLU'): 'Utilities',
+    #     context.sector_etf_dict.get('IYZ'): 'Communication Services',
+    #     context.sector_etf_dict.get('XLE'): 'Energy',
+    #     context.sector_etf_dict.get('XLI'): 'Industrials',
+    #     context.sector_etf_dict.get('XLK'): 'Technology',
+    # }
+
     etf_sector_map = {
-        context.sector_etf_dict.get('XLB'): 'Basic Materials',
-        context.sector_etf_dict.get('XLY'): 'Consumer Cyclical',
-        context.sector_etf_dict.get('XLF'): 'Financial Services',
-        context.sector_etf_dict.get('XLP'): 'Consumer Defensive',
-        context.sector_etf_dict.get('XLV'): 'Healthcare',
-        context.sector_etf_dict.get('XLU'): 'Utilities',
-        context.sector_etf_dict.get('IYZ'): 'Communication Services',
-        context.sector_etf_dict.get('XLE'): 'Energy',
-        context.sector_etf_dict.get('XLI'): 'Industrials',
-        context.sector_etf_dict.get('XLK'): 'Technology',
+        context.sector_etf_dict['XLB']: 'Materials',
+        context.sector_etf_dict['XLY']: 'Consumer Discretionary',
+        context.sector_etf_dict['XLF']: 'Financials',
+        context.sector_etf_dict['XLP']: 'Consumer Staples',
+        context.sector_etf_dict['XLV']: 'Health Care',
+        context.sector_etf_dict['XLU']: 'Utilities',
+        context.sector_etf_dict['IYZ']: 'Communication Services',
+        context.sector_etf_dict['XLE']: 'Energy',
+        context.sector_etf_dict['XLI']: 'Industrials',
+        context.sector_etf_dict['XLK']: 'Information Technology',
     }
 
     if etf in etf_sector_map:

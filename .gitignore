@@ -108,3 +108,10 @@ admin
 src/zipline/_version.py
 *.code-workspace
 logs/
+
+# Temporary session files and data
+LS-code-session.txt
+Untitled.md
+bc_data.csv
+sentdata.csv
+vix_flag.csv

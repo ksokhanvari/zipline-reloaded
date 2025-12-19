@@ -1,0 +1,13 @@
+# Ignore large intermediate CSV files
+junk/
+*.csv
+
+# Ignore checkpoint files (already in root .gitignore but being explicit)
+*.json
+*_checkpoint.json
+
+# Ignore OS files
+.DS_Store
+
+# Ignore Claude settings
+.claude/

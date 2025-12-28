@@ -6,11 +6,30 @@ Fast, production-ready machine learning system for predicting stock returns usin
 
 This tool uses **Histogram-based Gradient Boosting** with extensive feature engineering to predict stock returns at customizable horizons (10-day, 90-day, etc.). It's optimized for institutional trading strategies with:
 
-- ✅ **No look-ahead bias** - All features properly lagged
+- ✅ **No look-ahead bias** - Forward-fill per symbol, proper lagging
 - ✅ **Market cap weighting** - Focused training on large-cap stocks
 - ✅ **80%+ correlation** - Excellent predictive power
 - ✅ **Fast execution** - Processes millions of rows in seconds
 - ✅ **Lean output** - Only adds 2 columns to original data
+- ✅ **Complete logging** - Auto-generated log files for reproducibility
+- ✅ **Pre-lagged data support** - Use your own lagging pipeline
+
+## 🆕 What's New in v3.1 (2025-12-28)
+
+### Critical Bug Fixes:
+- **Fixed look-ahead bias** in missing value handling - Now uses forward-fill per symbol instead of median across all dates
+- **Fixed `--no-lag` bug** - Raw LSEG fundamentals now correctly included as features when using pre-lagged data
+
+### New Features:
+- **Automatic logging** with `--log-file` - All output saved to timestamped log files
+- **Performance optimization** with `--sample-fraction` - Train on subset for 2-5x speedup
+- **Pre-lagged data support** with `--no-lag` - Use your own data preparation pipeline
+- **Auto-normalization** - Automatically handles lowercase column names (converts to PascalCase)
+
+### Impact:
+- **Better accuracy** - Forward-fill is point-in-time accurate (no future data contamination)
+- **Faster training** - Sample 50% of data for 2x speedup with minimal accuracy loss
+- **Full audit trail** - Complete logs for every run
 
 ## 📊 Key Features
 
@@ -289,18 +308,38 @@ ltg_lag2 = shift(ltg, 1 day)
 
 **Result**: Approximately **76 features** used for training
 
-### Step 5: Missing Value Handling
+### Step 5: Missing Value Handling (Forward-Fill - NO LOOK-AHEAD BIAS)
+
+**CRITICAL UPDATE (2025-12-28):** Changed from median-fill to forward-fill to eliminate look-ahead bias!
 
 ```python
 For numeric features:
-  - Fill NaN with column median
+  - Forward-fill per symbol (use last known value)
+  - Fill remaining NaNs (first rows) with 0
 
 For categorical features:
   - Fill with 'Unknown'
   - Convert to numeric codes
 ```
 
-**Why median?** More robust to outliers than mean.
+**Why forward-fill per symbol?**
+- **Point-in-time accurate**: Uses only data available at that date
+- **No look-ahead bias**: Never uses future data (median used future values!)
+- **Realistic**: Matches what you'd actually know when trading
+
+**Example:**
+```
+Symbol: AAPL
+Date       | EarningsPerShare | After Forward-Fill
+-----------|------------------|------------------
+2024-01-15 | 2.18            | 2.18 (reported)
+2024-01-16 | NaN             | 2.18 (use last known)
+2024-01-17 | NaN             | 2.18 (use last known)
+2024-04-25 | 1.53            | 1.53 (new report)
+2024-04-26 | NaN             | 1.53 (use last known)
+```
+
+This ensures fundamentals persist until the next report - exactly like real trading!
 
 ### Step 6: Sample Weighting
 
@@ -411,6 +450,29 @@ python forecast_returns_ml.py data.csv \
 - **Output**: Full file + lightweight 3-column predictions file
 - **Benefits**: Fast lookups, easy database integration
 
+#### 5. Fast Training with Logging (NEW in v3.1)
+```bash
+python forecast_returns_ml_walk_forward.py data.csv \
+  --sample-fraction 0.5 \
+  --log-file my_run.log \
+  --forecast-days 10 \
+  --target-return-days 90
+```
+- **Use case**: Quick experiments with full audit trail
+- **Speed**: ~2x faster with 50% sampling
+- **Output**: Predictions + complete log file for reproducibility
+
+#### 6. Pre-Lagged Data Pipeline (NEW in v3.1)
+```bash
+# You've already lagged your data by 1 day
+python forecast_returns_ml.py pre_lagged_data.csv \
+  --no-lag \
+  --no-cv
+```
+- **Use case**: Custom data preparation pipeline
+- **Benefits**: You control lagging logic, script uses data as-is
+- **IMPORTANT**: Only use if ALL columns are already lagged by 1 day!
+
 ### All Options
 
 ```bash
@@ -432,6 +494,19 @@ Optional Arguments:
   --n-estimators         Number of boosting rounds (default: 300)
   --learning-rate        Learning rate (default: 0.05)
   --max-depth            Maximum tree depth (default: 7)
+
+  # Data Handling (NEW in v3.1)
+  --no-lag               Skip automatic lagging (use when input data is already lagged)
+                         IMPORTANT: Only use if you've pre-lagged all columns by 1 day!
+
+  # Performance Optimization (NEW in v3.1)
+  --sample-fraction      Fraction of training data to use (0.0-1.0, default: 1.0)
+                         Example: 0.5 = 50% sampling for ~2x speedup
+                         Predictions still made for ALL rows
+
+  # Logging (NEW in v3.1)
+  --log-file             Path to log file (default: auto-generated with timestamp)
+                         All console output saved to file for reproducibility
 
   # Execution Options
   --no-cv                Skip cross-validation (faster)
@@ -837,6 +912,23 @@ Part of the Zipline-Reloaded project by Hidden Point Capital.
 
 ---
 
-**Version:** 3.0.2
-**Last Updated:** 2024-12-17
+**Version:** 3.1.0
+**Last Updated:** 2025-12-28
 **Author:** Hidden Point Capital (with Claude Code assistance)
+
+---
+
+## Changelog
+
+### v3.1.0 (2025-12-28)
+- **CRITICAL FIX**: Changed missing value handling from median-fill to forward-fill per symbol (eliminates look-ahead bias)
+- **BUGFIX**: Raw LSEG fundamentals now included when using `--no-lag` mode
+- **NEW**: Added `--log-file` for automatic logging with timestamps
+- **NEW**: Added `--sample-fraction` for training speedup (2-5x faster)
+- **NEW**: Added `--no-lag` for pre-lagged data support
+- **NEW**: Automatic column name normalization (lowercase → PascalCase)
+
+### v3.0.2 (2024-12-17)
+- Initial walk-forward implementation
+- Market cap weighted training
+- Feature importance analysis

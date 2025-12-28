@@ -27,6 +27,9 @@ Usage:
 
     # Custom output and model parameters
     python forecast_returns_ml.py 10mc.csv --output predictions.csv --n-estimators 500
+
+    # Use pre-lagged input data (skip automatic lagging)
+    python forecast_returns_ml.py already_lagged_data.csv --no-lag
 """
 
 import argparse
@@ -108,7 +111,7 @@ class ReturnForecaster:
     """
 
     def __init__(self, lookback_days=10, forecast_days=10, target_return_days=None,
-                 n_estimators=300, learning_rate=0.05, max_depth=7, num_leaves=31):
+                 n_estimators=300, learning_rate=0.05, max_depth=7, num_leaves=31, no_lag=False):
         """
         Initialize the return forecaster.
 
@@ -136,6 +139,9 @@ class ReturnForecaster:
 
             num_leaves (int): Maximum number of leaves per tree (default: 31)
                 Controls model complexity (2^max_depth - 1 is typical)
+
+            no_lag (bool): If True, skip lagging of features (default: False)
+                Use this when your input data is already lagged
         """
         self.lookback_days = lookback_days
         self.forecast_days = forecast_days
@@ -145,6 +151,7 @@ class ReturnForecaster:
         self.learning_rate = learning_rate
         self.max_depth = max_depth
         self.num_leaves = num_leaves
+        self.no_lag = no_lag
         self.model = None  # Will hold trained model
         self.feature_cols = None  # Will hold list of feature column names
 
@@ -190,7 +197,8 @@ class ReturnForecaster:
         """
         Engineer features from fundamental and price data.
 
-        CRITICAL: All fundamentals are lagged by 1 day to prevent look-ahead bias.
+        CRITICAL: All fundamentals are lagged by 1 day to prevent look-ahead bias
+                  (unless no_lag=True, for pre-lagged data).
 
         Args:
             df: Raw DataFrame with fundamental columns
@@ -198,14 +206,15 @@ class ReturnForecaster:
         Returns:
             DataFrame with engineered features
         """
-        print("Engineering features (with proper lagging to prevent look-ahead bias)...")
+        if self.no_lag:
+            print("Engineering features (using pre-lagged input data - NO ADDITIONAL LAGGING)...")
+        else:
+            print("Engineering features (with proper lagging to prevent look-ahead bias)...")
 
         # Sort for time-series operations
         df = df.sort_values(['Symbol', 'Date'])
 
-        # ===== STEP 1: Lag ALL raw fundamental columns by 1 day =====
-        print("  • Lagging all fundamental columns by 1 day...")
-
+        # ===== STEP 1: Lag ALL raw fundamental columns by 1 day (unless no_lag=True) =====
         fundamental_cols = [
             'RefPriceClose', 'RefVolume', 'CompanyMarketCap',
             'EnterpriseValue_DailyTimeSeries_',
@@ -239,14 +248,21 @@ class ReturnForecaster:
             'Estpricegrowth_percent',
         ]
 
-        # Create lagged versions
-        for col in fundamental_cols:
-            if col in df.columns:
-                df[f'{col}_lag1'] = df.groupby('Symbol')[col].shift(1)
+        if self.no_lag:
+            print("  • Skipping lagging (input data assumed to be pre-lagged)")
+            # Use original column names without _lag1 suffix
+            price_col = 'RefPriceClose'
+            volume_col = 'RefVolume'
+        else:
+            print("  • Lagging all fundamental columns by 1 day...")
+            # Create lagged versions
+            for col in fundamental_cols:
+                if col in df.columns:
+                    df[f'{col}_lag1'] = df.groupby('Symbol')[col].shift(1)
 
-        # Use ONLY lagged price for features (not current price)
-        price_col = 'RefPriceClose_lag1'
-        volume_col = 'RefVolume_lag1'
+            # Use ONLY lagged price for features (not current price)
+            price_col = 'RefPriceClose_lag1'
+            volume_col = 'RefVolume_lag1'
 
         # ===== STEP 2: Price-based features (from lagged price) =====
         print("  • Creating price momentum features...")
@@ -272,49 +288,57 @@ class ReturnForecaster:
         # ===== STEP 3: Fundamental ratios (from lagged data) =====
         print("  • Creating fundamental ratios...")
 
+        # Helper function to get correct column name based on no_lag setting
+        def get_col(base_name):
+            """Get column name with or without _lag1 suffix based on no_lag flag."""
+            if self.no_lag:
+                return base_name
+            else:
+                return f'{base_name}_lag1'
+
         # Profitability
-        df['roa'] = df['ReturnOnAssets_SmartEstimate_lag1']
-        df['roe'] = df['ReturnOnEquity_SmartEstimat_lag1']
+        df['roa'] = df[get_col('ReturnOnAssets_SmartEstimate')]
+        df['roe'] = df[get_col('ReturnOnEquity_SmartEstimat')]
 
         # Valuation
-        df['ev_to_ebitda'] = df['EnterpriseValueToEBITDA_DailyTimeSeriesRatio__lag1']
-        df['ev_to_ebit'] = df['EnterpriseValueToEBIT_DailyTimeSeriesRatio__lag1']
-        df['ev_to_sales'] = df['EnterpriseValueToSales_DailyTimeSeriesRatio__lag1']
-        df['forward_peg'] = df['ForwardPEG_DailyTimeSeriesRatio__lag1']
-        df['pe_to_growth'] = df['PriceEarningsToGrowthRatio_SmartEstimate__lag1']
+        df['ev_to_ebitda'] = df[get_col('EnterpriseValueToEBITDA_DailyTimeSeriesRatio_')]
+        df['ev_to_ebit'] = df[get_col('EnterpriseValueToEBIT_DailyTimeSeriesRatio_')]
+        df['ev_to_sales'] = df[get_col('EnterpriseValueToSales_DailyTimeSeriesRatio_')]
+        df['forward_peg'] = df[get_col('ForwardPEG_DailyTimeSeriesRatio_')]
+        df['pe_to_growth'] = df[get_col('PriceEarningsToGrowthRatio_SmartEstimate_')]
 
         # Growth metrics
-        df['ltg'] = df['LongTermGrowth_Mean_lag1']
-        df['price_growth_est'] = df['Estpricegrowth_percent_lag1']
+        df['ltg'] = df[get_col('LongTermGrowth_Mean')]
+        df['price_growth_est'] = df[get_col('Estpricegrowth_percent')]
 
         # Quality/Momentum
-        df['alpha_sector_rank'] = df['CombinedAlphaModelSectorRank_lag1']
-        df['alpha_region_rank'] = df['CombinedAlphaModelRegionRank_lag1']
-        df['alpha_sector_change'] = df['CombinedAlphaModelSectorRankChange_lag1']
-        df['earnings_quality'] = df['EarningsQualityRegionRank_Current_lag1']
+        df['alpha_sector_rank'] = df[get_col('CombinedAlphaModelSectorRank')]
+        df['alpha_region_rank'] = df[get_col('CombinedAlphaModelRegionRank')]
+        df['alpha_sector_change'] = df[get_col('CombinedAlphaModelSectorRankChange')]
+        df['earnings_quality'] = df[get_col('EarningsQualityRegionRank_Current')]
 
         # Financial health (using lagged market cap)
-        mktcap = df['CompanyMarketCap_lag1'].clip(lower=1)
-        df['debt_to_marketcap'] = df['Debt_Total_lag1'] / mktcap
-        df['cash_to_marketcap'] = df['CashCashEquivalents_Total_lag1'] / mktcap
-        df['fcf_to_marketcap'] = df['FOCFExDividends_Discrete_lag1'] / mktcap
+        mktcap = df[get_col('CompanyMarketCap')].clip(lower=1)
+        df['debt_to_marketcap'] = df[get_col('Debt_Total')] / mktcap
+        df['cash_to_marketcap'] = df[get_col('CashCashEquivalents_Total')] / mktcap
+        df['fcf_to_marketcap'] = df[get_col('FOCFExDividends_Discrete')] / mktcap
 
         # Earnings metrics
-        df['eps_actual'] = df['EarningsPerShare_Actual_lag1']
-        df['eps_surprise'] = df['EarningsPerShare_ActualSurprise_lag1']
-        df['eps_estimate_current'] = df['EarningsPerShare_SmartEstimate_current_Q_lag1']
+        df['eps_actual'] = df[get_col('EarningsPerShare_Actual')]
+        df['eps_surprise'] = df[get_col('EarningsPerShare_ActualSurprise')]
+        df['eps_estimate_current'] = df[get_col('EarningsPerShare_SmartEstimate_current_Q')]
 
         # Analyst metrics
-        df['recommendation'] = df['Recommendation_Median_1_5__lag1']
-        df['price_target'] = df['PriceTarget_Median_lag1']
-        df['upside_to_target'] = (df['PriceTarget_Median_lag1'] / df[price_col] - 1) * 100
+        df['recommendation'] = df[get_col('Recommendation_Median_1_5_')]
+        df['price_target'] = df[get_col('PriceTarget_Median')]
+        df['upside_to_target'] = (df[get_col('PriceTarget_Median')] / df[price_col] - 1) * 100
 
         # Size factor
-        df['log_marketcap'] = np.log1p(df['CompanyMarketCap_lag1'])
+        df['log_marketcap'] = np.log1p(df[get_col('CompanyMarketCap')])
 
         # ===== STEP 4: Cross-sectional features (rank within date) =====
         print("  • Creating cross-sectional rankings...")
-        rank_cols = ['CompanyMarketCap_lag1', 'return_20d', 'volatility_20d',
+        rank_cols = [get_col('CompanyMarketCap'), 'return_20d', 'volatility_20d',
                      'roe', 'roa', 'ev_to_ebitda', 'ltg']
 
         for col in rank_cols:
@@ -329,7 +353,29 @@ class ReturnForecaster:
                 df[f'{col}_lag2'] = df.groupby('Symbol')[col].shift(1)
 
         print(f"  • Total features created: {len(df.columns)}")
-        print("  ✓ All features use lagged data - NO LOOK-AHEAD BIAS")
+
+        # ===== STEP 6: Forward-fill missing values (NO LOOK-AHEAD BIAS) =====
+        print("  • Forward-filling missing values per symbol...")
+
+        # Get all numeric columns except Date and Symbol
+        numeric_cols = df.select_dtypes(include=[np.float64, np.float32, np.int64, np.int32]).columns
+        exclude_from_ffill = ['Date', 'Symbol']
+        cols_to_ffill = [col for col in numeric_cols if col not in exclude_from_ffill]
+
+        # Forward-fill per symbol (use last known value)
+        for col in cols_to_ffill:
+            df[col] = df.groupby('Symbol')[col].ffill()
+
+        # After ffill, any remaining NaNs are from the very first rows per symbol
+        # Fill these with 0 (no prior data available - safe assumption)
+        df[cols_to_ffill] = df[cols_to_ffill].fillna(0)
+
+        print(f"  ✓ Forward-filled {len(cols_to_ffill)} columns per symbol")
+
+        if self.no_lag:
+            print("  ✓ Using pre-lagged input data - NO LOOK-AHEAD BIAS")
+        else:
+            print("  ✓ All features use lagged data - NO LOOK-AHEAD BIAS")
         return df
 
     def prepare_features(self, df):
@@ -351,60 +397,61 @@ class ReturnForecaster:
             'volume_ma_20'  # Intermediate calculation
         ]
 
-        # Also exclude ALL original (non-lagged) columns to ensure no leakage
-        original_cols = [
-            'RefPriceClose', 'RefVolume', 'CompanyMarketCap',
-            'EnterpriseValue_DailyTimeSeries_',
-            'FOCFExDividends_Discrete',
-            'InterestExpense_NetofCapitalizedInterest',
-            'Debt_Total',
-            'EarningsPerShare_Actual',
-            'EarningsPerShare_SmartEstimate_prev_Q',
-            'EarningsPerShare_ActualSurprise',
-            'EarningsPerShare_SmartEstimate_current_Q',
-            'LongTermGrowth_Mean',
-            'PriceTarget_Median',
-            'CombinedAlphaModelSectorRank',
-            'CombinedAlphaModelSectorRankChange',
-            'CombinedAlphaModelRegionRank',
-            'EarningsQualityRegionRank_Current',
-            'EnterpriseValueToEBIT_DailyTimeSeriesRatio_',
-            'EnterpriseValueToEBITDA_DailyTimeSeriesRatio_',
-            'EnterpriseValueToSales_DailyTimeSeriesRatio_',
-            'Dividend_Per_Share_SmartEstimate',
-            'CashCashEquivalents_Total',
-            'ForwardPEG_DailyTimeSeriesRatio_',
-            'PriceEarningsToGrowthRatio_SmartEstimate_',
-            'Recommendation_Median_1_5_',
-            'ReturnOnEquity_SmartEstimat',
-            'ReturnOnAssets_SmartEstimate',
-            'ForwardPriceToCashFlowPerShare_DailyTimeSeriesRatio_',
-            'ForwardPriceToSalesPerShare_DailyTimeSeriesRatio_',
-            'ForwardEnterpriseValueToOperatingCashFlow_DailyTimeSeriesRatio_',
-            'GrossProfitMargin_ActualSurprise',
-            'Estpricegrowth_percent',
-        ]
-
-        exclude_cols.extend(original_cols)
+        # Exclude original (non-lagged) columns ONLY if not using no_lag mode
+        # When no_lag=True, the input is already pre-lagged, so include these columns
+        if not self.no_lag:
+            original_cols = [
+                'RefPriceClose', 'RefVolume', 'CompanyMarketCap',
+                'EnterpriseValue_DailyTimeSeries_',
+                'FOCFExDividends_Discrete',
+                'InterestExpense_NetofCapitalizedInterest',
+                'Debt_Total',
+                'EarningsPerShare_Actual',
+                'EarningsPerShare_SmartEstimate_prev_Q',
+                'EarningsPerShare_ActualSurprise',
+                'EarningsPerShare_SmartEstimate_current_Q',
+                'LongTermGrowth_Mean',
+                'PriceTarget_Median',
+                'CombinedAlphaModelSectorRank',
+                'CombinedAlphaModelSectorRankChange',
+                'CombinedAlphaModelRegionRank',
+                'EarningsQualityRegionRank_Current',
+                'EnterpriseValueToEBIT_DailyTimeSeriesRatio_',
+                'EnterpriseValueToEBITDA_DailyTimeSeriesRatio_',
+                'EnterpriseValueToSales_DailyTimeSeriesRatio_',
+                'Dividend_Per_Share_SmartEstimate',
+                'CashCashEquivalents_Total',
+                'ForwardPEG_DailyTimeSeriesRatio_',
+                'PriceEarningsToGrowthRatio_SmartEstimate_',
+                'Recommendation_Median_1_5_',
+                'ReturnOnEquity_SmartEstimat',
+                'ReturnOnAssets_SmartEstimate',
+                'ForwardPriceToCashFlowPerShare_DailyTimeSeriesRatio_',
+                'ForwardPriceToSalesPerShare_DailyTimeSeriesRatio_',
+                'ForwardEnterpriseValueToOperatingCashFlow_DailyTimeSeriesRatio_',
+                'GrossProfitMargin_ActualSurprise',
+                'Estpricegrowth_percent',
+            ]
+            exclude_cols.extend(original_cols)
+        else:
+            # When using no_lag, the input is pre-lagged, so INCLUDE these columns as features
+            print("  • Using pre-lagged fundamentals as features (no_lag=True)")
 
         # Select feature columns
         feature_cols = [col for col in df.columns if col not in exclude_cols]
 
-        # Handle missing values - fill with median for numeric columns
+        # Extract features (missing values already forward-filled in engineer_features)
         X = df[feature_cols].copy()
 
-        for col in X.columns:
-            if X[col].dtype in [np.float64, np.float32, np.int64, np.int32]:
-                median_val = X[col].median()
-                X[col] = X[col].fillna(median_val)
-            else:
-                # For categorical, fill with mode or 'Unknown'
-                X[col] = X[col].fillna('Unknown')
-
-        # Convert any remaining object columns to category codes
+        # Handle categorical columns (convert to codes)
         for col in X.columns:
             if X[col].dtype == 'object':
+                X[col] = X[col].fillna('Unknown')
                 X[col] = pd.Categorical(X[col]).codes
+
+        # Any remaining NaNs should be very rare (already forward-filled)
+        # Fill with 0 as a safe default (e.g., first row per symbol before any data)
+        X = X.fillna(0)
 
         y = df['forward_return'].values
 
@@ -448,9 +495,11 @@ class ReturnForecaster:
         Returns:
             np.ndarray: Array of sample weights, same length as df
         """
-        # Use lagged market cap to avoid look-ahead bias
-        # This ensures we weight based on data available at prediction time
-        mktcap_col = 'CompanyMarketCap_lag1' if 'CompanyMarketCap_lag1' in df.columns else 'CompanyMarketCap'
+        # Use appropriate market cap column based on no_lag setting
+        if self.no_lag:
+            mktcap_col = 'CompanyMarketCap' if 'CompanyMarketCap' in df.columns else 'CompanyMarketCap_lag1'
+        else:
+            mktcap_col = 'CompanyMarketCap_lag1' if 'CompanyMarketCap_lag1' in df.columns else 'CompanyMarketCap'
 
         # Calculate market cap rank within each date (1 = largest)
         # We rank within date to handle market cap changes over time
@@ -692,6 +741,9 @@ Examples:
   # Adjust model complexity
   python forecast_returns_ml.py data.csv --n-estimators 500 --max-depth 9
 
+  # Use pre-lagged input data (skip automatic lagging)
+  python forecast_returns_ml.py already_lagged_data.csv --no-lag
+
 For full documentation, see README.md in this directory.
         """
     )
@@ -718,6 +770,8 @@ For full documentation, see README.md in this directory.
                         help='Keep all engineered features in output (creates large file)')
     parser.add_argument('--export-predictions', action='store_true',
                         help='Export a separate file with only Symbol, Date, and predicted_return columns')
+    parser.add_argument('--no-lag', action='store_true',
+                        help='Skip lagging of features (use when input data is already lagged)')
 
     args = parser.parse_args()
 
@@ -734,6 +788,74 @@ For full documentation, see README.md in this directory.
     print(f"\n📂 Reading {args.input}...")
     df = pd.read_csv(args.input)
     print(f"  • Loaded {len(df):,} rows, {len(df.columns)} columns")
+
+    # Handle case-insensitive column names (normalize to PascalCase)
+    def normalize_column_name(col):
+        """Convert lowercase column names to expected PascalCase format."""
+        col_lower = col.lower()
+
+        # Common column mappings
+        known_columns = {
+            'date': 'Date',
+            'symbol': 'Symbol',
+            'refpriceclose': 'RefPriceClose',
+            'refvolume': 'RefVolume',
+            'companymarketcap': 'CompanyMarketCap',
+            'companycommonname': 'CompanyCommonName',
+            'enterprisevalue_dailytimeseries_': 'EnterpriseValue_DailyTimeSeries_',
+            'focfexdividends_discrete': 'FOCFExDividends_Discrete',
+            'interestexpense_netofcapitalizedinterest': 'InterestExpense_NetofCapitalizedInterest',
+            'debt_total': 'Debt_Total',
+            'earningspershare_actual': 'EarningsPerShare_Actual',
+            'earningspershare_smartestimate_prev_q': 'EarningsPerShare_SmartEstimate_prev_Q',
+            'earningspershare_actualsurprise': 'EarningsPerShare_ActualSurprise',
+            'earningspershare_smartestimate_current_q': 'EarningsPerShare_SmartEstimate_current_Q',
+            'longtermgrowth_mean': 'LongTermGrowth_Mean',
+            'pricetarget_median': 'PriceTarget_Median',
+            'combinedalphamodelsectorrank': 'CombinedAlphaModelSectorRank',
+            'combinedalphamodelsectorrankchange': 'CombinedAlphaModelSectorRankChange',
+            'combinedalphamodelregionrank': 'CombinedAlphaModelRegionRank',
+            'earningsqualityregionrank_current': 'EarningsQualityRegionRank_Current',
+            'enterprisevaluetoebit_dailytimeseriesratio_': 'EnterpriseValueToEBIT_DailyTimeSeriesRatio_',
+            'enterprisevaluetoebitda_dailytimeseriesratio_': 'EnterpriseValueToEBITDA_DailyTimeSeriesRatio_',
+            'enterprisevaluetosales_dailytimeseriesratio_': 'EnterpriseValueToSales_DailyTimeSeriesRatio_',
+            'dividend_per_share_smartestimate': 'Dividend_Per_Share_SmartEstimate',
+            'cashcashequivalents_total': 'CashCashEquivalents_Total',
+            'forwardpeg_dailytimeseriesratio_': 'ForwardPEG_DailyTimeSeriesRatio_',
+            'priceearningstogrowthratio_smartestimate_': 'PriceEarningsToGrowthRatio_SmartEstimate_',
+            'recommendation_median_1_5_': 'Recommendation_Median_1_5_',
+            'returnonequity_smartestimat': 'ReturnOnEquity_SmartEstimat',
+            'returnonassets_smartestimate': 'ReturnOnAssets_SmartEstimate',
+            'forwardpricetocashflowpershare_dailytimeseriesratio_': 'ForwardPriceToCashFlowPerShare_DailyTimeSeriesRatio_',
+            'forwardpricetosalespershare_dailytimeseriesratio_': 'ForwardPriceToSalesPerShare_DailyTimeSeriesRatio_',
+            'forwardenterprisevaluetooperatingcashflow_dailytimeseriesratio_': 'ForwardEnterpriseValueToOperatingCashFlow_DailyTimeSeriesRatio_',
+            'grossprofitmargin_actualsurprise': 'GrossProfitMargin_ActualSurprise',
+            'estpricegrowth_percent': 'Estpricegrowth_percent',
+            'gicssectorname': 'GICSSectorName',
+            'sharadar_scalemarketcap': 'sharadar_scalemarketcap',
+        }
+
+        # Return mapped name if known, otherwise return original
+        return known_columns.get(col_lower, col)
+
+    # Apply normalization
+    column_mapping = {col: normalize_column_name(col) for col in df.columns if col != normalize_column_name(col)}
+
+    if column_mapping:
+        df = df.rename(columns=column_mapping)
+        print(f"  • Normalized {len(column_mapping)} column names to PascalCase")
+
+    # Verify required columns exist
+    if 'Date' not in df.columns:
+        print(f"\n❌ Error: No 'Date' or 'date' column found!")
+        print(f"   Available columns: {', '.join(df.columns[:10])}...")
+        return 1
+
+    if 'Symbol' not in df.columns:
+        print(f"\n❌ Error: No 'Symbol' or 'symbol' column found!")
+        print(f"   Available columns: {', '.join(df.columns[:10])}...")
+        return 1
+
     print(f"  • Date range: {df['Date'].min()} to {df['Date'].max()}")
     print(f"  • Unique symbols: {df['Symbol'].nunique()}")
 
@@ -744,13 +866,17 @@ For full documentation, see README.md in this directory.
         target_return_days=args.target_return_days,
         n_estimators=args.n_estimators,
         learning_rate=args.learning_rate,
-        max_depth=args.max_depth
+        max_depth=args.max_depth,
+        no_lag=args.no_lag
     )
 
     # Display prediction setup
     target_days = args.target_return_days if args.target_return_days else args.forecast_days
     print(f"\n🎯 PREDICTION SETUP:")
-    print(f"  • Using features from: T-1 (lagged by 1 day)")
+    if args.no_lag:
+        print(f"  • Using features from: T (pre-lagged input data)")
+    else:
+        print(f"  • Using features from: T-1 (lagged by 1 day)")
     print(f"  • Predicting returns from: T+{args.forecast_days} to T+{args.forecast_days + target_days}")
     print(f"  • Total return period: {target_days} days")
     if args.forecast_days != target_days:
@@ -875,7 +1001,10 @@ For full documentation, see README.md in this directory.
     print("\n" + "=" * 70)
     print("✅ Forecasting complete - NO LOOK-AHEAD BIAS GUARANTEED!")
     print("=" * 70)
-    print(f"\n📌 IMPORTANT: All features use data from T-1 to predict returns")
+    if args.no_lag:
+        print(f"\n📌 IMPORTANT: Using pre-lagged input data (T) to predict returns")
+    else:
+        print(f"\n📌 IMPORTANT: All features use data from T-1 to predict returns")
     print(f"   Prediction period: T+{args.forecast_days} to T+{args.forecast_days + target_days}")
     print("   This means predictions are safe for real trading.")
     print("=" * 70)

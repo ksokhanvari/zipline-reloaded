@@ -21,6 +21,7 @@ This tool uses **Histogram-based Gradient Boosting** with extensive feature engi
 - **Fixed `--no-lag` bug** - Raw LSEG fundamentals now correctly included as features when using pre-lagged data
 
 ### New Features:
+- **Feature descriptions** - Detailed list of all training features logged at start with human-readable descriptions
 - **Automatic logging** with `--log-file` - All output saved to timestamped log files
 - **Performance optimization** with `--sample-fraction` - Train on subset for 2-5x speedup
 - **Pre-lagged data support** with `--no-lag` - Use your own data preparation pipeline
@@ -923,6 +924,7 @@ Part of the Zipline-Reloaded project by Hidden Point Capital.
 ### v3.1.0 (2025-12-28)
 - **CRITICAL FIX**: Changed missing value handling from median-fill to forward-fill per symbol (eliminates look-ahead bias)
 - **BUGFIX**: Raw LSEG fundamentals now included when using `--no-lag` mode
+- **NEW**: Added feature descriptions logging - All training features listed with human-readable descriptions at start
 - **NEW**: Added `--log-file` for automatic logging with timestamps
 - **NEW**: Added `--sample-fraction` for training speedup (2-5x faster)
 - **NEW**: Added `--no-lag` for pre-lagged data support

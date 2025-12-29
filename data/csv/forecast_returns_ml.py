@@ -474,6 +474,131 @@ class ReturnForecaster:
         # Prediction will use all of X
         return X, y, feature_cols, sample_weights, valid_idx
 
+    def _describe_feature(self, col_name):
+        """
+        Generate a human-readable description for a feature column.
+
+        Args:
+            col_name (str): Column name
+
+        Returns:
+            str: Description of what the column contains
+        """
+        # Raw LSEG fundamentals
+        lseg_descriptions = {
+            'RefPriceClose': 'LSEG reference closing price',
+            'RefVolume': 'LSEG reference trading volume',
+            'CompanyMarketCap': 'Company market capitalization from LSEG',
+            'EnterpriseValue_DailyTimeSeries_': 'Enterprise value (daily time series)',
+            'FOCFExDividends_Discrete': 'Free operating cash flow excluding dividends',
+            'InterestExpense_NetofCapitalizedInterest': 'Interest expense (net of capitalized interest)',
+            'Debt_Total': 'Total debt',
+            'EarningsPerShare_Actual': 'Actual earnings per share',
+            'EarningsPerShare_SmartEstimate_prev_Q': 'EPS smart estimate (previous quarter)',
+            'EarningsPerShare_ActualSurprise': 'EPS actual surprise vs estimate',
+            'EarningsPerShare_SmartEstimate_current_Q': 'EPS smart estimate (current quarter)',
+            'LongTermGrowth_Mean': 'Mean long-term growth estimate',
+            'PriceTarget_Median': 'Median analyst price target',
+            'CombinedAlphaModelSectorRank': 'Combined alpha model rank within sector',
+            'CombinedAlphaModelSectorRankChange': 'Change in alpha model sector rank',
+            'CombinedAlphaModelRegionRank': 'Combined alpha model rank within region',
+            'EarningsQualityRegionRank_Current': 'Current earnings quality rank in region',
+            'EnterpriseValueToEBIT_DailyTimeSeriesRatio_': 'EV/EBIT ratio (daily)',
+            'EnterpriseValueToEBITDA_DailyTimeSeriesRatio_': 'EV/EBITDA ratio (daily)',
+            'EnterpriseValueToSales_DailyTimeSeriesRatio_': 'EV/Sales ratio (daily)',
+            'Dividend_Per_Share_SmartEstimate': 'Dividend per share smart estimate',
+            'CashCashEquivalents_Total': 'Total cash and cash equivalents',
+            'ForwardPEG_DailyTimeSeriesRatio_': 'Forward PEG ratio (daily)',
+            'PriceEarningsToGrowthRatio_SmartEstimate_': 'PE to growth ratio smart estimate',
+            'Recommendation_Median_1_5_': 'Median analyst recommendation (1-5 scale)',
+            'ReturnOnEquity_SmartEstimat': 'Return on equity smart estimate',
+            'ReturnOnAssets_SmartEstimate': 'Return on assets smart estimate',
+            'ForwardPriceToCashFlowPerShare_DailyTimeSeriesRatio_': 'Forward P/CF ratio (daily)',
+            'ForwardPriceToSalesPerShare_DailyTimeSeriesRatio_': 'Forward P/S ratio (daily)',
+            'ForwardEnterpriseValueToOperatingCashFlow_DailyTimeSeriesRatio_': 'Forward EV/OCF ratio (daily)',
+            'GrossProfitMargin_ActualSurprise': 'Gross profit margin actual surprise',
+            'Estpricegrowth_percent': 'Estimated price growth percentage',
+        }
+
+        # Handle _lag1 and _lag2 suffixes
+        base_col = col_name
+        lag_desc = ""
+        if col_name.endswith('_lag1'):
+            base_col = col_name[:-5]
+            lag_desc = " (lagged 1 day)"
+        elif col_name.endswith('_lag2'):
+            base_col = col_name[:-5]
+            lag_desc = " (lagged 2 days)"
+
+        # Handle _rank suffix
+        rank_desc = ""
+        if base_col.endswith('_rank'):
+            base_col = base_col[:-5]
+            rank_desc = " - cross-sectional percentile rank"
+
+        # Check if it's a raw LSEG column
+        if base_col in lseg_descriptions:
+            return lseg_descriptions[base_col] + lag_desc + rank_desc
+
+        # Derived features
+        derived_descriptions = {
+            'return_5d': '5-day price momentum (% return)',
+            'return_10d': '10-day price momentum (% return)',
+            'return_20d': '20-day price momentum (% return)',
+            'volatility_5d': '5-day annualized volatility (%)',
+            'volatility_10d': '10-day annualized volatility (%)',
+            'volatility_20d': '20-day annualized volatility (%)',
+            'volume_ratio': 'Volume relative to 20-day average',
+            'roa': 'Return on assets',
+            'roe': 'Return on equity',
+            'ev_to_ebitda': 'Enterprise value to EBITDA ratio',
+            'ev_to_ebit': 'Enterprise value to EBIT ratio',
+            'ev_to_sales': 'Enterprise value to sales ratio',
+            'forward_peg': 'Forward PEG ratio',
+            'pe_to_growth': 'P/E to growth ratio',
+            'ltg': 'Long-term growth estimate',
+            'price_growth_est': 'Estimated price growth',
+            'alpha_sector_rank': 'Alpha model sector rank',
+            'alpha_region_rank': 'Alpha model region rank',
+            'alpha_sector_change': 'Change in alpha sector rank',
+            'earnings_quality': 'Earnings quality rank',
+            'debt_to_marketcap': 'Debt to market cap ratio',
+            'cash_to_marketcap': 'Cash to market cap ratio',
+            'fcf_to_marketcap': 'Free cash flow to market cap ratio',
+            'eps_actual': 'Actual earnings per share',
+            'eps_surprise': 'EPS surprise vs estimate',
+            'eps_estimate_current': 'Current quarter EPS estimate',
+            'recommendation': 'Median analyst recommendation',
+            'price_target': 'Median analyst price target',
+            'upside_to_target': 'Upside to price target (%)',
+            'log_marketcap': 'Log of market capitalization',
+            'marketcap_scale': 'Market cap scale (1=Nano to 6=Mega)',
+        }
+
+        if base_col in derived_descriptions:
+            return derived_descriptions[base_col] + lag_desc + rank_desc
+
+        # Fallback for unknown columns
+        return f"Feature: {col_name}"
+
+    def _log_feature_descriptions(self, feature_cols):
+        """
+        Log a detailed description of all feature columns being used for training.
+
+        Args:
+            feature_cols (list): List of feature column names
+        """
+        print("\n" + "=" * 80)
+        print("  FEATURE COLUMNS USED FOR TRAINING")
+        print("=" * 80)
+        print(f"\nTotal features: {len(feature_cols)}\n")
+
+        for i, col in enumerate(feature_cols, 1):
+            desc = self._describe_feature(col)
+            print(f"{i:3d}. {col:60s} - {desc}")
+
+        print("\n" + "=" * 80 + "\n")
+
     def _calculate_marketcap_weights(self, df):
         """
         Calculate sample weights based on market cap ranking.
@@ -669,6 +794,9 @@ class ReturnForecaster:
         X_train = X[valid_idx]
         y_train = y[valid_idx]
         sample_weights_train = sample_weights[valid_idx]
+
+        # Log all features being used for training
+        self._log_feature_descriptions(feature_cols)
 
         # Cross-validate or train on all data
         if use_cv:

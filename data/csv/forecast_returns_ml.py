@@ -827,6 +827,10 @@ class ReturnForecaster:
         # This prevents extreme outliers from dominating the model
         from scipy import stats
         z_scores = np.abs(stats.zscore(X_clean, nan_policy='omit'))
+
+        # Z-score can produce NaN for zero-variance columns, replace with 0
+        z_scores = np.nan_to_num(z_scores, nan=0.0)
+
         extreme_mask = z_scores > 10
         extreme_count = extreme_mask.sum().sum()  # Sum all values to get scalar
         if extreme_count > 0:
@@ -837,6 +841,12 @@ class ReturnForecaster:
                 upper=X_clean.quantile(0.999),
                 axis=0
             )
+
+        # Final NaN check and fill (should be rare but ensures PCA compatibility)
+        final_nan_count = X_clean.isna().sum().sum()
+        if final_nan_count > 0:
+            print(f"  • Final cleanup: {final_nan_count:,} remaining NaN values filled with 0")
+            X_clean = X_clean.fillna(0)
 
         # Replace X with cleaned version
         X = X_clean

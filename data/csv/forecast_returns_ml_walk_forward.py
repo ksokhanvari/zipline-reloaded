@@ -1194,9 +1194,44 @@ class ReturnForecaster:
         # Log all features being used for training
         self._log_feature_descriptions(feature_cols)
 
+        # Clean data: replace inf/nan values
+        # Feature engineering can create inf from division, NaN should already be handled but double-check
+        print(f"\n🧹 Cleaning feature data...")
+
+        # Replace inf with nan first
+        X_clean = X.replace([np.inf, -np.inf], np.nan)
+
+        # Count inf/nan before cleaning
+        inf_count = np.isinf(X.values).sum()
+        nan_count = np.isnan(X_clean.values).sum()
+        if inf_count > 0 or nan_count > 0:
+            print(f"  • Found {inf_count:,} inf values, {nan_count:,} nan values - replacing with 0")
+
+        # Fill remaining NaN with 0 (safest default)
+        X_clean = X_clean.fillna(0)
+
+        # Optionally clip extreme values (e.g., z-score > 10)
+        # This prevents extreme outliers from dominating the model
+        from scipy import stats
+        z_scores = np.abs(stats.zscore(X_clean, nan_policy='omit'))
+        extreme_mask = z_scores > 10
+        extreme_count = extreme_mask.sum()
+        if extreme_count > 0:
+            print(f"  • Clipping {extreme_count:,} extreme outliers (|z-score| > 10)")
+            # Clip to 0.1% and 99.9% percentiles
+            X_clean = X_clean.clip(
+                lower=X_clean.quantile(0.001),
+                upper=X_clean.quantile(0.999),
+                axis=0
+            )
+
+        # Replace X with cleaned version
+        X = X_clean
+        print(f"  ✓ Data cleaning complete\n")
+
         # Apply PCA dimensionality reduction if requested
         if self.pca_components is not None:
-            print(f"\n🔬 Applying PCA dimensionality reduction...")
+            print(f"🔬 Applying PCA dimensionality reduction...")
             print(f"  • Original features: {X.shape[1]}")
             print(f"  • Target components: {self.pca_components}")
 

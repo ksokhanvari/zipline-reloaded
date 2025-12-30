@@ -40,6 +40,7 @@ import pandas as pd
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 from sklearn.ensemble import HistGradientBoostingRegressor
+from sklearn.decomposition import PCA
 
 # Suppress warnings for cleaner output
 warnings.filterwarnings('ignore')
@@ -111,7 +112,8 @@ class ReturnForecaster:
     """
 
     def __init__(self, lookback_days=10, forecast_days=10, target_return_days=None,
-                 n_estimators=300, learning_rate=0.05, max_depth=7, num_leaves=31, no_lag=False):
+                 n_estimators=300, learning_rate=0.05, max_depth=7, num_leaves=31, no_lag=False,
+                 pca_components=None):
         """
         Initialize the return forecaster.
 
@@ -142,6 +144,11 @@ class ReturnForecaster:
 
             no_lag (bool): If True, skip lagging of features (default: False)
                 Use this when your input data is already lagged
+
+            pca_components (int): If set, use PCA to reduce features to this many components (default: None)
+                Dimensionality reduction using Principal Component Analysis
+                Reduces feature space while preserving variance
+                Typical values: 10-50 components
         """
         self.lookback_days = lookback_days
         self.forecast_days = forecast_days
@@ -152,8 +159,10 @@ class ReturnForecaster:
         self.max_depth = max_depth
         self.num_leaves = num_leaves
         self.no_lag = no_lag
+        self.pca_components = pca_components
         self.model = None  # Will hold trained model
         self.feature_cols = None  # Will hold list of feature column names
+        self.pca = None  # Will hold fitted PCA transformer if using PCA
 
     def create_target(self, df):
         """
@@ -798,6 +807,39 @@ class ReturnForecaster:
         # Log all features being used for training
         self._log_feature_descriptions(feature_cols)
 
+        # Apply PCA dimensionality reduction if requested
+        if self.pca_components is not None:
+            print(f"\n🔬 Applying PCA dimensionality reduction...")
+            print(f"  • Original features: {X_train.shape[1]}")
+            print(f"  • Target components: {self.pca_components}")
+
+            # Fit PCA on training data only (to avoid look-ahead bias)
+            self.pca = PCA(n_components=self.pca_components, random_state=42)
+            X_train_pca = self.pca.fit_transform(X_train)
+
+            # Transform ALL data (including prediction rows) using fitted PCA
+            X_pca = self.pca.transform(X)
+
+            # Calculate variance explained
+            variance_explained = self.pca.explained_variance_ratio_.sum() * 100
+            print(f"  • Variance explained: {variance_explained:.2f}%")
+            print(f"  • Components shape: {X_train_pca.shape}")
+
+            # Update feature columns to reflect PCA components
+            pca_feature_cols = [f'PC{i+1}' for i in range(self.pca_components)]
+
+            # Convert to DataFrame to maintain compatibility
+            X_train = pd.DataFrame(X_train_pca, columns=pca_feature_cols, index=X_train.index)
+            X = pd.DataFrame(X_pca, columns=pca_feature_cols, index=X.index)
+
+            # Update stored feature columns
+            original_feature_cols = feature_cols
+            feature_cols = pca_feature_cols
+            self.feature_cols = feature_cols
+            self.original_feature_cols = original_feature_cols  # Store for reference
+
+            print(f"  ✓ PCA transformation complete\n")
+
         # Cross-validate or train on all data
         if use_cv:
             cv_results = self.cross_validate(X_train, y_train, sample_weights_train, n_splits=3)
@@ -900,6 +942,10 @@ For full documentation, see README.md in this directory.
                         help='Export a separate file with only Symbol, Date, and predicted_return columns')
     parser.add_argument('--no-lag', action='store_true',
                         help='Skip lagging of features (use when input data is already lagged)')
+    parser.add_argument('--pca', type=int, default=None, metavar='N',
+                        help='Use PCA to reduce features to N components (e.g., --pca 20). '
+                             'Dimensionality reduction preserves variance while reducing feature count. '
+                             'Typical values: 10-50 components')
 
     args = parser.parse_args()
 
@@ -995,7 +1041,8 @@ For full documentation, see README.md in this directory.
         n_estimators=args.n_estimators,
         learning_rate=args.learning_rate,
         max_depth=args.max_depth,
-        no_lag=args.no_lag
+        no_lag=args.no_lag,
+        pca_components=args.pca
     )
 
     # Display prediction setup

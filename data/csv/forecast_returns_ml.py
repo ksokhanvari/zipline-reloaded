@@ -825,24 +825,34 @@ class ReturnForecaster:
         # Fill remaining NaN with 0 (safest default)
         X_clean = X_clean.fillna(0)
 
-        # Optionally clip extreme values (e.g., z-score > 10)
-        # This prevents extreme outliers from dominating the model
-        from scipy import stats
-        z_scores = np.abs(stats.zscore(X_clean, nan_policy='omit'))
+        # Optionally clip extreme values using ONLY training data statistics
+        # CRITICAL: Use training data only to avoid look-ahead bias
+        print(f"  • Computing outlier statistics from training data only...")
 
-        # Z-score can produce NaN for zero-variance columns, replace with 0
-        z_scores = np.nan_to_num(z_scores, nan=0.0)
+        # Get training data for computing statistics (no look-ahead bias)
+        X_train_for_stats = X_clean[valid_idx]
+
+        # Compute mean and std from training data only
+        train_mean = X_train_for_stats.mean()
+        train_std = X_train_for_stats.std()
+
+        # Replace zero std with 1 to avoid division by zero
+        train_std = train_std.replace(0, 1)
+
+        # Compute z-scores using training statistics
+        z_scores = np.abs((X_clean - train_mean) / train_std)
+
+        # Z-score can still have NaN (from constant columns), replace with 0
+        z_scores = z_scores.fillna(0)
 
         extreme_mask = z_scores > 10
-        extreme_count = extreme_mask.sum().sum()  # Sum all values to get scalar
+        extreme_count = extreme_mask.sum().sum()
         if extreme_count > 0:
             print(f"  • Clipping {extreme_count:,} extreme outliers (|z-score| > 10)")
-            # Clip to 0.1% and 99.9% percentiles
-            X_clean = X_clean.clip(
-                lower=X_clean.quantile(0.001),
-                upper=X_clean.quantile(0.999),
-                axis=0
-            )
+            # Compute clip values from training data only (no look-ahead)
+            lower_clip = X_train_for_stats.quantile(0.001)
+            upper_clip = X_train_for_stats.quantile(0.999)
+            X_clean = X_clean.clip(lower=lower_clip, upper=upper_clip, axis=1)
 
         # Final NaN check and fill (should be rare but ensures PCA compatibility)
         final_nan_count = X_clean.isna().sum().sum()

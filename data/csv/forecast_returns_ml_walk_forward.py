@@ -55,6 +55,7 @@ from sklearn.model_selection import TimeSeriesSplit
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
 from sklearn.inspection import permutation_importance
 
 # Suppress warnings for cleaner output
@@ -313,6 +314,7 @@ class ReturnForecaster:
         self.model = None  # Will hold trained model
         self.feature_cols = None  # Will hold list of feature column names
         self.pca = None  # Will hold fitted PCA transformer if using PCA
+        self.scaler = None  # Will hold fitted StandardScaler if using PCA
 
     def create_target(self, df):
         """
@@ -1245,14 +1247,29 @@ class ReturnForecaster:
             print(f"  • Original features: {X.shape[1]}")
             print(f"  • Target components: {self.pca_components}")
 
-            # Fit PCA on ALL training data (valid_idx) to get consistent transformation
-            # This is important for walk-forward: we use one PCA transformation for all windows
+            # CRITICAL: Standardize features before PCA
+            # PCA requires features to be centered (mean=0) and scaled (std=1)
+            print(f"  • Standardizing features (mean=0, std=1)...")
+            self.scaler = StandardScaler()
+
+            # Fit scaler on training data only (to avoid look-ahead bias)
             X_train_full = X[valid_idx]
+            self.scaler.fit(X_train_full)
+
+            # Transform ALL data using fitted scaler
+            X_scaled = self.scaler.transform(X)
+
+            # Convert back to DataFrame to maintain compatibility
+            X_scaled_df = pd.DataFrame(X_scaled, columns=X.columns, index=X.index)
+
+            # Fit PCA on scaled training data
+            print(f"  • Fitting PCA on standardized features...")
             self.pca = PCA(n_components=self.pca_components, random_state=42)
-            self.pca.fit(X_train_full)
+            X_train_scaled = X_scaled_df[valid_idx]
+            self.pca.fit(X_train_scaled)
 
             # Transform ALL data using fitted PCA
-            X_pca = self.pca.transform(X)
+            X_pca = self.pca.transform(X_scaled_df)
 
             # Calculate variance explained
             variance_explained = self.pca.explained_variance_ratio_.sum() * 100

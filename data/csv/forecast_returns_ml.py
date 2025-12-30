@@ -828,7 +828,7 @@ class ReturnForecaster:
         from scipy import stats
         z_scores = np.abs(stats.zscore(X_clean, nan_policy='omit'))
         extreme_mask = z_scores > 10
-        extreme_count = extreme_mask.sum()
+        extreme_count = extreme_mask.sum().sum()  # Sum all values to get scalar
         if extreme_count > 0:
             print(f"  • Clipping {extreme_count:,} extreme outliers (|z-score| > 10)")
             # Clip to 0.1% and 99.9% percentiles

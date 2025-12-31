@@ -1212,36 +1212,42 @@ class ReturnForecaster:
         # Fill remaining NaN with 0 (safest default)
         X_clean = X_clean.fillna(0)
 
-        # Optionally clip extreme values using ONLY training data statistics
-        # CRITICAL: Use training data only to avoid look-ahead bias
-        print(f"  • Computing outlier statistics from training data only...")
+        # PRODUCTION SAFETY: Skip statistical outlier clipping in walk-forward mode
+        # Reason: Computing statistics from ALL data (including future months) would
+        # introduce look-ahead bias. In walk-forward, we can't know future distributions.
+        # The model (HistGradientBoosting) is robust to outliers without clipping.
+        if walk_forward:
+            print(f"  • Skipping outlier clipping (walk-forward mode - no look-ahead bias)")
+        else:
+            # Single-model mode: safe to use all training data statistics
+            print(f"  • Computing outlier statistics from training data...")
 
-        # Get training data for computing statistics (no look-ahead bias)
-        X_train_for_stats = X_clean[valid_idx]
+            # Get training data for computing statistics
+            X_train_for_stats = X_clean[valid_idx]
 
-        # Compute mean and std from training data only
-        train_mean = X_train_for_stats.mean()
-        train_std = X_train_for_stats.std()
+            # Compute mean and std from training data only
+            train_mean = X_train_for_stats.mean()
+            train_std = X_train_for_stats.std()
 
-        # Replace zero std with 1 to avoid division by zero
-        train_std = train_std.replace(0, 1)
+            # Replace zero std with 1 to avoid division by zero
+            train_std = train_std.replace(0, 1)
 
-        # Compute z-scores using training statistics
-        z_scores = np.abs((X_clean - train_mean) / train_std)
+            # Compute z-scores using training statistics
+            z_scores = np.abs((X_clean - train_mean) / train_std)
 
-        # Z-score can still have NaN (from constant columns), replace with 0
-        z_scores = z_scores.fillna(0)
+            # Z-score can still have NaN (from constant columns), replace with 0
+            z_scores = z_scores.fillna(0)
 
-        extreme_mask = z_scores > 10
-        extreme_count = extreme_mask.sum().sum()
-        if extreme_count > 0:
-            print(f"  • Clipping {extreme_count:,} extreme outliers (|z-score| > 10)")
-            # Compute clip values from training data only (no look-ahead)
-            lower_clip = X_train_for_stats.quantile(0.001)
-            upper_clip = X_train_for_stats.quantile(0.999)
-            X_clean = X_clean.clip(lower=lower_clip, upper=upper_clip, axis=1)
+            extreme_mask = z_scores > 10
+            extreme_count = extreme_mask.sum().sum()
+            if extreme_count > 0:
+                print(f"  • Clipping {extreme_count:,} extreme outliers (|z-score| > 10)")
+                # Compute clip values from training data
+                lower_clip = X_train_for_stats.quantile(0.001)
+                upper_clip = X_train_for_stats.quantile(0.999)
+                X_clean = X_clean.clip(lower=lower_clip, upper=upper_clip, axis=1)
 
-        # Final NaN check and fill (should be rare but ensures PCA compatibility)
+        # Final NaN check and fill
         final_nan_count = X_clean.isna().sum().sum()
         if final_nan_count > 0:
             print(f"  • Final cleanup: {final_nan_count:,} remaining NaN values filled with 0")
@@ -1253,6 +1259,12 @@ class ReturnForecaster:
 
         # Apply PCA dimensionality reduction if requested
         if self.pca_components is not None:
+            # PRODUCTION SAFETY: Warn if using PCA in walk-forward mode
+            if walk_forward:
+                print(f"\n⚠️  WARNING: PCA in walk-forward mode has look-ahead bias!")
+                print(f"   PCA is fit on ALL training data (including future months)")
+                print(f"   For production, use --no-walk-forward or remove --pca flag\n")
+
             print(f"🔬 Applying PCA dimensionality reduction...")
             print(f"  • Original features: {X.shape[1]}")
             print(f"  • Target components: {self.pca_components}")

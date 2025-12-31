@@ -33,6 +33,89 @@ This tool uses **Histogram-based Gradient Boosting** with extensive feature engi
 - **Faster training** - Sample 50% of data for 2x speedup with minimal accuracy loss
 - **Full audit trail** - Complete logs for every run
 
+---
+
+## 🚀 Production Deployment Guide
+
+### ✅ RECOMMENDED: Walk-Forward Mode (Zero Look-Ahead Bias)
+
+**For live trading and production use, ALWAYS use walk-forward mode:**
+
+```bash
+# Production-safe command (ZERO look-ahead bias)
+python forecast_returns_ml_walk_forward.py \
+    your_data.csv \
+    --forecast-days 10 \
+    --target-return-days 90 \
+    --resume
+```
+
+**Why walk-forward is critical:**
+- ✅ **Realistic backtesting** - Mimics real-world deployment
+- ✅ **Zero look-ahead bias** - Each month uses only past data
+- ✅ **Repeatable** - Same input produces identical results
+- ✅ **Production-ready** - Exactly how model will perform live
+
+### ❌ DO NOT Use in Production
+
+**Avoid these flags for live trading:**
+
+1. **`--pca`** - Has look-ahead bias in walk-forward mode
+   - PCA fits on ALL training data (including future months)
+   - Model sees future feature distributions
+   - Use raw features instead (290 features work well)
+
+2. **`--no-walk-forward`** - Single model with look-ahead bias
+   - Trains one model on all historical data
+   - Uses future information for validation
+   - Unrealistic performance estimates
+
+### Production Safety Checklist
+
+Before deploying to live trading:
+
+- [x] ✅ Using `forecast_returns_ml_walk_forward.py` (walk-forward script)
+- [x] ✅ NO `--pca` flag
+- [x] ✅ NO `--no-walk-forward` flag
+- [x] ✅ Features properly lagged (automatic with script)
+- [x] ✅ Resume mode tested (`--resume`)
+- [x] ✅ Checkpoint files saved for quick updates
+
+### Look-Ahead Bias Protection
+
+**The walk-forward script automatically protects against:**
+
+| Component | Protection | Status |
+|-----------|-----------|--------|
+| Feature engineering | T-1 lagging on all fundamentals | ✅ Safe |
+| Inf/NaN handling | Row-level replacement (no statistics) | ✅ Safe |
+| Outlier clipping | Disabled in walk-forward mode | ✅ Safe |
+| Walk-forward loop | Strict `Date < first_day_of_month` cutoff | ✅ Safe |
+| Model training | Each month trains on past data only | ✅ Safe |
+| PCA/StandardScaler | Disabled (would use future data) | ✅ Safe |
+
+### ⚠️ PCA Warning
+
+If you see this warning, **DO NOT** use for production:
+
+```
+⚠️  WARNING: PCA in walk-forward mode has look-ahead bias!
+   PCA is fit on ALL training data (including future months)
+   For production, use --no-walk-forward or remove --pca flag
+```
+
+**Solution:** Remove `--pca` flag from command.
+
+### Performance Without PCA
+
+**Good news:** HistGradientBoosting handles 290 features efficiently:
+- Training time: Fast (no PCA overhead)
+- Memory: Modest (fits in RAM easily)
+- Accuracy: Better (preserves all signal)
+- Production-safe: Zero look-ahead bias
+
+---
+
 ## 📊 Key Features
 
 ### 1. No Look-Ahead Bias
@@ -99,11 +182,13 @@ Predict any return horizon:
 
 ### 6. PCA Dimensionality Reduction (Optional)
 
+> **⚠️ PRODUCTION WARNING:** PCA has look-ahead bias in walk-forward mode and is **NOT RECOMMENDED for live trading**. Use PCA only for exploration or with `forecast_returns_ml.py` (single model, non-walk-forward). For production deployment, skip PCA and use all 290 features - HistGradientBoosting handles them efficiently with zero look-ahead bias.
+
 **What is PCA?**
 
 Principal Component Analysis (PCA) is a dimensionality reduction technique that transforms correlated features into a smaller set of uncorrelated components while preserving the most important variance in the data.
 
-**Why Use PCA?**
+**Why Use PCA? (Exploration Only)**
 
 - ✅ **Reduce overfitting** - Fewer features mean less risk of fitting to noise
 - ✅ **Faster training** - Dramatically speeds up model training (5-10x faster)
@@ -115,14 +200,17 @@ Principal Component Analysis (PCA) is a dimensionality reduction technique that 
 
 | Scenario | Recommendation |
 |----------|---------------|
-| Initial exploration | Try `--pca 20` for fast iterations |
-| Production models | Use `--pca 30-50` for balance of speed and accuracy |
-| Maximum accuracy | No PCA (use all 110+ features) |
-| Very large datasets | `--pca 15-25` for training speed |
+| Initial exploration | Try `--pca 20` for fast iterations (non-walk-forward only) |
+| **Production/Live Trading** | **❌ DO NOT USE PCA** - Use all 290 features |
+| Research/Backtesting | `forecast_returns_ml.py` (single model) with `--pca 30-50` |
+| Maximum accuracy | No PCA (use all features) |
 
-**How to Use:**
+**How to Use (Exploration Only):**
 
 ```bash
+# FOR EXPLORATION ONLY - Use forecast_returns_ml.py (single model)
+# NOT for production walk-forward backtesting
+
 # Reduce 110+ features to 20 components (fast, ~90% variance)
 python forecast_returns_ml.py data.csv --pca 20
 
@@ -132,8 +220,8 @@ python forecast_returns_ml.py data.csv --pca 30
 # Maximum retention: 50 components (~98% variance)
 python forecast_returns_ml.py data.csv --pca 50
 
-# Walk-forward with PCA
-python forecast_returns_ml_walk_forward.py data.csv --pca 25
+# ❌ DO NOT USE: Walk-forward with PCA (has look-ahead bias)
+# python forecast_returns_ml_walk_forward.py data.csv --pca 25
 ```
 
 **Output Example:**
@@ -997,15 +1085,38 @@ Part of the Zipline-Reloaded project by Hidden Point Capital.
 
 ## Changelog
 
-### v3.1.0 (2025-12-28)
-- **CRITICAL FIX**: Changed missing value handling from median-fill to forward-fill per symbol (eliminates look-ahead bias)
+### v3.1.0 (2025-12-31) - Production Safety Release
+
+**PRODUCTION-CRITICAL FIXES:**
+- **CRITICAL**: Eliminated look-ahead bias in walk-forward mode by disabling statistical outlier clipping
+- **CRITICAL**: Z-score and quantile clipping now skipped in walk-forward (was using future month statistics)
+- **CRITICAL**: Added warnings when using PCA with walk-forward mode (has look-ahead bias)
+- **CRITICAL**: Changed missing value handling from median-fill to forward-fill per symbol (eliminates look-ahead bias)
+
+**Production Deployment:**
+- **NEW**: Production Deployment Guide section with safety checklist
+- **NEW**: Look-ahead bias protection table documenting all safe operations
+- **NEW**: Clear warnings in code and documentation about PCA in production
+- **WARNING**: PCA not recommended for production walk-forward (use all 290 features)
+
+**Bug Fixes:**
 - **BUGFIX**: Raw LSEG fundamentals now included when using `--no-lag` mode
-- **NEW**: Added `--pca N` for PCA dimensionality reduction - Reduce features to N components while preserving variance
+- **BUGFIX**: Fixed z-score NaN handling for zero-variance columns
+- **BUGFIX**: Fixed Series boolean comparison in extreme outlier detection
+- **BUGFIX**: Added StandardScaler before PCA (was producing NaN variance)
+
+**New Features:**
+- **NEW**: Added `--pca N` for PCA dimensionality reduction (exploration only, not for production)
 - **NEW**: Added feature descriptions logging - All training features listed with human-readable descriptions at start
 - **NEW**: Added `--log-file` for automatic logging with timestamps
 - **NEW**: Added `--sample-fraction` for training speedup (2-5x faster)
 - **NEW**: Added `--no-lag` for pre-lagged data support
 - **NEW**: Automatic column name normalization (lowercase → PascalCase)
+
+**Documentation:**
+- **UPDATED**: Comprehensive production deployment guide
+- **UPDATED**: PCA section with production warnings
+- **UPDATED**: Walk-forward mode guarantees zero look-ahead bias
 
 ### v3.0.2 (2024-12-17)
 - Initial walk-forward implementation

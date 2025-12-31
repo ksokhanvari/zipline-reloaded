@@ -869,6 +869,11 @@ class ReturnForecaster:
 
         # Apply PCA dimensionality reduction if requested
         if self.pca_components is not None:
+            print(f"\n⚠️  WARNING: Using PCA dimensionality reduction")
+            print(f"   • PCA is fit on ALL training data (single model, no walk-forward)")
+            print(f"   • For production walk-forward backtesting, use forecast_returns_ml_walk_forward.py")
+            print(f"   • This script trains ONE model on all historical data (faster but has look-ahead bias)\n")
+
             print(f"🔬 Applying PCA dimensionality reduction...")
             print(f"  • Original features: {X_train.shape[1]}")
             print(f"  • Target components: {self.pca_components}")

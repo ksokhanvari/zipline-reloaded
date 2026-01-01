@@ -7,6 +7,8 @@ Fast, production-ready machine learning system for predicting stock returns usin
 This tool uses **Histogram-based Gradient Boosting** with extensive feature engineering to predict stock returns at customizable horizons (10-day, 90-day, etc.). It's optimized for institutional trading strategies with:
 
 - ✅ **No look-ahead bias** - Forward-fill per symbol, proper lagging
+- ✅ **Flexible data support** - Works with any fundamental columns (LSEG, FMP, Sharadar, custom)
+- ✅ **Scalable features** - Handles 70-290+ features automatically based on your data
 - ✅ **Market cap weighting** - Focused training on large-cap stocks
 - ✅ **80%+ correlation** - Excellent predictive power
 - ✅ **Fast execution** - Processes millions of rows in seconds
@@ -264,19 +266,32 @@ python forecast_returns_ml.py data.csv --pca 50
 
 ### Overview
 
-The model automatically transforms your 33 raw fundamental columns into **~76 engineered features** through a sophisticated pipeline. Every feature is properly lagged to prevent look-ahead bias.
+The model is **flexible and data-agnostic** - it automatically processes ANY fundamental columns in your CSV. The number of features depends on your input data:
 
-### Step 1: Raw Input Columns (What You Provide)
+- **LSEG-only (32 columns)**: Creates ~70-100 engineered features
+- **LSEG + FMP + Sharadar (200+ columns)**: Creates ~290 engineered features
+- **Your custom data**: Creates features proportional to your input columns
 
-Your CSV needs these fundamental columns (from LSEG or similar provider):
+**Key principle**: ALL fundamental columns are automatically lagged by 1 day to prevent look-ahead bias, then engineered into price momentum, ratios, rankings, and lag-2 features.
+
+### Example Production Dataset (290 Features)
+
+The example production runs use a combined dataset with **~240 raw columns** from multiple sources:
+
+**1. FMP (Financial Modeling Prep) - ~170 columns**
+- Income statement growth metrics (revenue, EBITDA, net income, EPS, etc.)
+- Balance sheet growth metrics (assets, debt, equity, etc.)
+- Cash flow growth metrics (operating CF, free CF, etc.)
+- Example columns: `growthrevenue_fmp`, `growthnetincome_fmp`, `growebitda_fmp`
+
+**2. LSEG (London Stock Exchange Group) - 32 columns**
 
 **Price & Volume (2):**
 - `RefPriceClose` - Daily closing price
 - `RefVolume` - Daily volume
 
-**Company Info (3):**
+**Company Info (2):**
 - `CompanyMarketCap` - Market capitalization
-- `CompanyCommonName` - Company name (excluded from training)
 - `GICSSectorName` - Sector classification (excluded from training)
 
 **Valuation Metrics (9):**
@@ -324,23 +339,33 @@ Your CSV needs these fundamental columns (from LSEG or similar provider):
 **Analyst Recommendations (1):**
 - `Recommendation_Median_1_5_` - Analyst recommendation (1=Strong Buy, 5=Sell)
 
-**Total**: 33 fundamental columns required
+**3. Sharadar Metadata - 2 columns**
+- `sharadar_scalemarketcap` - Market cap scale (1=Nano, 6=Mega)
+- `sharadar_is_adr` - Is American Depositary Receipt
+
+**4. Other Metadata**
+- `tradedate`, `fiscalyear_fmp`, `period_fmp`, `reportedcurrency_fmp`
+
+**Total Input**: ~240 raw columns from multiple data sources
+
+> **Note**: Your CSV doesn't need all these columns! The script automatically detects and processes whatever fundamental columns you provide. A minimal dataset needs only: `Date`, `Symbol`, `RefPriceClose`, `RefVolume`, `CompanyMarketCap`, plus any fundamentals you want to use for prediction.
 
 ### Step 2: Lag ALL Fundamentals by 1 Day
 
 **Critical for preventing look-ahead bias:**
 
 ```python
-# For EVERY fundamental column, create lagged version
+# For EVERY fundamental column in your CSV, create lagged version
 RefPriceClose_lag1 = shift(RefPriceClose, 1 day)
 CompanyMarketCap_lag1 = shift(CompanyMarketCap, 1 day)
 ReturnOnEquity_SmartEstimat_lag1 = shift(ReturnOnEquity_SmartEstimat, 1 day)
-# ... and so on for all 33 columns
+growthrevenue_fmp_lag1 = shift(growthrevenue_fmp, 1 day)
+# ... for ALL ~240 columns in production dataset
 ```
 
 **Why?** On day T, you only know fundamentals from day T-1. Using same-day fundamentals would create look-ahead bias.
 
-**Result**: 33 `_lag1` columns created
+**Result**: ~240 `_lag1` columns created (in production dataset)
 
 ### Step 3: Engineer Features from Lagged Data
 
@@ -364,9 +389,9 @@ From `RefVolume_lag1`:
 volume_ratio = current_volume / 20-day_moving_average
 ```
 
-#### C. Fundamental Ratios (20+ features)
+#### C. Fundamental Ratios (20+ features from LSEG data)
 
-From lagged fundamentals:
+From lagged LSEG fundamentals:
 
 **Profitability:**
 ```python
@@ -382,6 +407,14 @@ ev_to_sales = EnterpriseValueToSales_DailyTimeSeriesRatio__lag1
 forward_peg = ForwardPEG_DailyTimeSeriesRatio__lag1
 pe_to_growth = PriceEarningsToGrowthRatio_SmartEstimate__lag1
 ```
+
+#### D. All Other Lagged Fundamentals (~210+ features from FMP + other sources)
+
+All additional fundamental columns from your CSV are automatically included as features:
+- FMP income statement growth metrics (_lag1 versions)
+- FMP balance sheet growth metrics (_lag1 versions)
+- FMP cash flow growth metrics (_lag1 versions)
+- Any other fundamental columns you provide
 
 **Growth:**
 ```python
@@ -423,7 +456,7 @@ upside_to_target = (PriceTarget_Median_lag1 / RefPriceClose_lag1 - 1) * 100
 log_marketcap = log(1 + CompanyMarketCap_lag1)
 ```
 
-#### D. Cross-Sectional Rankings (7 features)
+#### E. Cross-Sectional Rankings (7 features)
 
 For each date, rank all stocks by percentile (0-100%):
 ```python
@@ -438,7 +471,7 @@ ltg_rank = percentile_rank(ltg)
 
 **Why ranks?** Captures relative positioning - is this stock cheap/expensive compared to peers today?
 
-#### E. Additional Lags (5 features)
+#### F. Additional Lags (5 features)
 
 T-2 versions of key metrics:
 ```python
@@ -459,19 +492,30 @@ ltg_lag2 = shift(ltg, 1 day)
 2. **Sharadar metadata**: sharadar_exchange, sharadar_category, sharadar_location, etc.
 3. **Target variable**: forward_return (what we're predicting)
 4. **Intermediate calculations**: volume_ma_20 (only used to create volume_ratio)
-5. **ALL original (non-lagged) columns**: RefPriceClose, CompanyMarketCap, etc.
+5. **ALL original (non-lagged) columns**: RefPriceClose, CompanyMarketCap, etc. (unless using `--no-lag` mode)
 
 **What's INCLUDED (the X matrix for training):**
 
-✅ All `_lag1` columns (33 lagged fundamentals)
-✅ All momentum features (return_5d, return_10d, return_20d)
-✅ All volatility features (volatility_5d, volatility_10d, volatility_20d)
+✅ All `_lag1` columns (~240 lagged fundamentals in production dataset)
+✅ All momentum features (return_5d, return_10d, return_20d, volatility_5d, volatility_10d, volatility_20d)
 ✅ Volume features (volume_ratio)
-✅ All fundamental ratios (roa, roe, ev_to_ebitda, etc.)
+✅ All fundamental ratios (roa, roe, ev_to_ebitda, ltg, etc.)
 ✅ All cross-sectional ranks (7 rank features)
 ✅ All lag-2 features (5 additional lags)
 
-**Result**: Approximately **76 features** used for training
+**Total Features (Production Dataset with LSEG + FMP + Sharadar):**
+- **Input**: ~240 raw fundamental columns
+- **After lagging + engineering**: **290 features** used for training
+- **Feature breakdown**:
+  - ~240 lagged fundamentals (_lag1 versions)
+  - 6 price momentum features
+  - 1 volume feature
+  - ~20 derived fundamental ratios
+  - 7 cross-sectional ranks
+  - 5 lag-2 features
+  - ~11 other engineered features (log_marketcap, upside_to_target, etc.)
+
+> **Note**: If you use a minimal LSEG-only dataset (32 columns), you'll get ~70-100 features instead of 290. The script automatically adapts to your data!
 
 ### Step 5: Missing Value Handling (Forward-Fill - NO LOOK-AHEAD BIAS)
 

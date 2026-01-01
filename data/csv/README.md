@@ -163,18 +163,22 @@ Predict any return horizon:
 
 **Key Insight:** Longer periods = better predictions (fundamentals predict long-term better than short-term noise)
 
-### 5. Extensive Feature Engineering (76 features)
+### 5. Extensive Feature Engineering (70-290+ features)
 
-**Price-based:**
+The number of features depends on your input data:
+- **LSEG-only dataset**: ~70-100 features
+- **Production dataset (LSEG + FMP + Sharadar)**: 290 features
+
+**Price-based features:**
 - Momentum: 5, 10, 20-day returns
 - Volatility: Rolling volatility metrics
 - Volume: Relative volume indicators
 
-**Fundamental ratios:**
-- Profitability: ROE, ROA
-- Valuation: EV/EBITDA, EV/EBIT, PEG ratios
-- Growth: Long-term growth estimates
-- Quality: Alpha model rankings, earnings quality
+**Fundamental features:**
+- All lagged fundamentals from your CSV (_lag1 versions)
+- Derived ratios: ROE, ROA, EV/EBITDA, EV/EBIT, PEG, etc.
+- Growth metrics: Long-term growth estimates, revenue growth, earnings growth
+- Quality metrics: Alpha model rankings, earnings quality
 
 **Cross-sectional:**
 - Percentile ranks within each date
@@ -565,12 +569,16 @@ Rank 4000+:                weight = 0.1  (low but not ignored)
 ### Final Training Matrix
 
 ```
-X = ~76 features (all lagged or engineered, NO raw fundamentals)
+X = 70-290+ features (depending on input data - all lagged or engineered, NO raw fundamentals)
 y = forward_return (90-day return starting 10 days ahead)
 sample_weights = market cap based weights
 
 Training rows: ~8.6M rows with valid forward_return
 Prediction rows: 9.0M+ rows (includes recent dates without forward_return)
+
+Example production dataset:
+  • Input: ~240 raw fundamental columns
+  • Output: 290 features (240 lagged + 50 engineered)
 ```
 
 ### Feature Importance
@@ -604,7 +612,10 @@ The model automatically learns which features are most predictive. Typically:
 5. ✅ **Cross-sectional context**: Ranks capture relative positioning
 6. ✅ **Temporal features**: Momentum and changes over time
 
-**The model learns from all 76 features simultaneously to predict future returns!**
+**The model learns from all features simultaneously to predict future returns!**
+- LSEG-only dataset: ~70-100 features
+- Production dataset (LSEG + FMP + Sharadar): 290 features
+- Your custom dataset: Features scale automatically with your input columns
 
 ## 🚀 Quick Start
 
@@ -870,7 +881,7 @@ python forecast_returns_ml.py data.csv \
 ### Keep All Features for Analysis
 
 ```bash
-# Save all 76 engineered features (useful for debugging/analysis)
+# Save all engineered features (useful for debugging/analysis)
 python forecast_returns_ml.py data.csv --keep-features
 
 # Warning: Output will be ~2x larger (124 columns vs 49)

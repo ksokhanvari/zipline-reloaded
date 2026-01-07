@@ -35,6 +35,7 @@ Usage:
 import argparse
 import warnings
 from pathlib import Path
+import re
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import TimeSeriesSplit
@@ -1110,6 +1111,67 @@ For full documentation, see README.md in this directory.
         print(f"\n❌ Error: No 'Symbol' or 'symbol' column found!")
         print(f"   Available columns: {', '.join(df.columns[:10])}...")
         return 1
+
+    # ========================================================================
+    # AUTOMATIC DATE CLEANUP - Remove future-dated records based on filename
+    # ========================================================================
+    # Parse end date from filename pattern: YYYYMMDD_YYYYMMDD_*.csv
+    # Example: "20091231_20260106_with_metadata.csv" -> end_date = 2026-01-06
+
+    filename = input_path.name
+    date_pattern = r'(\d{8})_(\d{8})'
+    match = re.search(date_pattern, filename)
+
+    if match:
+        start_date_str = match.group(1)
+        end_date_str = match.group(2)
+
+        try:
+            # Parse end date from filename (YYYYMMDD format)
+            end_date = pd.to_datetime(end_date_str, format='%Y%m%d')
+
+            # Convert Date column to datetime
+            df['Date'] = pd.to_datetime(df['Date'])
+
+            # Count records beyond the filename's end date
+            original_count = len(df)
+            future_mask = df['Date'] > end_date
+            future_count = future_mask.sum()
+
+            if future_count > 0:
+                # Show sample of future records
+                future_records = df[future_mask][['Date', 'Symbol']].drop_duplicates()
+                print(f"\n⚠️  AUTOMATIC DATE CLEANUP:")
+                print(f"  • Filename indicates data should end on: {end_date.strftime('%Y-%m-%d')}")
+                print(f"  • Found {future_count:,} records beyond this date")
+                print(f"  • Affected symbols: {df[future_mask]['Symbol'].nunique()}")
+
+                if future_count <= 10:
+                    print(f"  • Future records:")
+                    for _, row in future_records.iterrows():
+                        print(f"    - {row['Date'].strftime('%Y-%m-%d')}: {row['Symbol']}")
+                else:
+                    print(f"  • Sample future records (showing first 5):")
+                    for _, row in future_records.head(5).iterrows():
+                        print(f"    - {row['Date'].strftime('%Y-%m-%d')}: {row['Symbol']}")
+
+                # Remove future records
+                df = df[~future_mask].copy()
+                print(f"  ✅ Removed {future_count:,} future-dated records")
+                print(f"  • Cleaned rows: {len(df):,}")
+            else:
+                # Convert Date to datetime even if no cleanup needed
+                df['Date'] = pd.to_datetime(df['Date'])
+                print(f"  ✅ Date validation: All records within filename date range")
+
+        except ValueError as e:
+            # If date parsing fails, just convert Date column
+            df['Date'] = pd.to_datetime(df['Date'])
+            print(f"  ⚠️  Could not parse end date from filename: {end_date_str}")
+    else:
+        # No date pattern in filename, just convert Date column
+        df['Date'] = pd.to_datetime(df['Date'])
+        print(f"  ℹ️  No date range pattern found in filename (expected: YYYYMMDD_YYYYMMDD)")
 
     print(f"  • Date range: {df['Date'].min()} to {df['Date'].max()}")
     print(f"  • Unique symbols: {df['Symbol'].nunique()}")

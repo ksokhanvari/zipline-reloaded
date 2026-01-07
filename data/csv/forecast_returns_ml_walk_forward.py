@@ -28,17 +28,33 @@ For a prediction on 2015-08-20, the model trains ONLY on data before 2015-08-01.
 This ensures each prediction reflects what you could have known at that time.
 
 Usage:
-    # Walk-forward prediction (default - takes longer but NO look-ahead bias)
-    python forecast_returns_ml_walk_forward.py 10mc.csv
+    # Full training run (first time) - use Parquet for 5-10x faster I/O!
+    python forecast_returns_ml_walk_forward.py \\
+        --input-file 20091231_20260106_data.csv \\
+        --output 20091231_20260106_predictions.parquet
+    # Creates: 20091231_20260106_predictions.parquet (main output, fast)
+    #          20091231_20260106_forecast_only.csv (auto-created, for easy use)
 
-    # Predict 90-day returns, starting 10 days from now
-    python forecast_returns_ml_walk_forward.py 10mc.csv --forecast-days 10 --target-return-days 90
+    # Resume from previous predictions (95% faster for updates!)
+    python forecast_returns_ml_walk_forward.py \\
+        --input-file 20091231_20260110_data.csv \\
+        --output 20091231_20260110_predictions.parquet \\
+        --resume-file 20091231_20260106_predictions.parquet
+    # Reads/writes Parquet = 5-10x faster than CSV!
 
-    # Disable walk-forward for faster execution (has look-ahead bias)
-    python forecast_returns_ml_walk_forward.py 10mc.csv --no-walk-forward
+    # Predict 90-day returns starting 10 days from now
+    python forecast_returns_ml_walk_forward.py \\
+        --input-file data.csv \\
+        --output predictions.parquet \\
+        --forecast-days 10 \\
+        --target-return-days 90
 
-    # Custom output and model parameters
-    python forecast_returns_ml_walk_forward.py 10mc.csv --output predictions.csv --n-estimators 500
+    # Resume with custom overwrite buffer (re-predict last N months)
+    python forecast_returns_ml_walk_forward.py \\
+        --input-file new_data.csv \\
+        --output new_predictions.parquet \\
+        --resume-file old_predictions.parquet \\
+        --overwrite-months 0
 """
 
 import argparse
@@ -49,6 +65,8 @@ import hashlib
 from datetime import datetime
 import sys
 import logging
+import re
+import shutil
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import TimeSeriesSplit
@@ -60,6 +78,70 @@ from sklearn.inspection import permutation_importance
 
 # Suppress warnings for cleaner output
 warnings.filterwarnings('ignore')
+
+
+# ============================================================================
+# FILE I/O HELPERS - Support both CSV and Parquet
+# ============================================================================
+
+def read_dataframe(file_path, description="file"):
+    """
+    Read a dataframe from CSV or Parquet format (auto-detected by extension).
+
+    Args:
+        file_path: Path to file (.csv or .parquet)
+        description: Description for logging
+
+    Returns:
+        pandas DataFrame
+    """
+    file_path = Path(file_path)
+
+    if file_path.suffix.lower() in ['.parquet', '.pq']:
+        # Read Parquet (5-10x faster)
+        print(f"  • Reading Parquet format (fast!)")
+        df = pd.read_parquet(file_path, engine='pyarrow')
+        print(f"  • Loaded {len(df):,} rows, {len(df.columns)} columns")
+        return df
+    else:
+        # Read CSV (try PyArrow, fallback to default)
+        try:
+            df = pd.read_csv(file_path, engine='pyarrow')
+            print(f"  • Loaded {len(df):,} rows, {len(df.columns)} columns (PyArrow engine)")
+        except (ImportError, Exception):
+            df = pd.read_csv(file_path)
+            print(f"  • Loaded {len(df):,} rows, {len(df.columns)} columns")
+        return df
+
+
+def write_dataframe(df, file_path, description="predictions"):
+    """
+    Write a dataframe to CSV or Parquet format (auto-detected by extension).
+
+    Args:
+        df: pandas DataFrame to write
+        file_path: Path to output file (.csv or .parquet)
+        description: Description for logging
+    """
+    file_path = Path(file_path)
+
+    if file_path.suffix.lower() in ['.parquet', '.pq']:
+        # Write Parquet (5-10x faster, much smaller)
+        print(f"💾 Saving {description} to {file_path.name}...")
+        df.to_parquet(file_path, engine='pyarrow', compression='snappy', index=False)
+        file_size_mb = file_path.stat().st_size / 1024 / 1024
+        print(f"  ✓ Saved {len(df):,} rows as Parquet")
+        print(f"  • Format: Parquet (compressed, ~5-10x smaller than CSV)")
+        print(f"  • Size: {file_size_mb:.1f} MB")
+        print(f"  • Columns: {len(df.columns)}")
+    else:
+        # Write CSV
+        print(f"💾 Saving {description} to {file_path.name}...")
+        df.to_csv(file_path, index=False)
+        file_size_mb = file_path.stat().st_size / 1024 / 1024
+        print(f"  ✓ Saved {len(df):,} rows as CSV")
+        print(f"  • Size: {file_size_mb:.1f} MB")
+        print(f"  • Columns: {len(df.columns)}")
 
 
 # ============================================================================
@@ -129,106 +211,6 @@ def compute_data_hash(df, before_date=None):
     hash_input = f"{df_to_hash.shape}_{df_to_hash['Date'].min()}_{df_to_hash['Date'].max()}_{len(df_to_hash['Symbol'].unique())}"
 
     return hashlib.md5(hash_input.encode()).hexdigest()
-
-
-def save_checkpoint(checkpoint_path, metadata, predictions_df, output_path):
-    """
-    Save checkpoint metadata and predictions.
-
-    Args:
-        checkpoint_path: Path to checkpoint JSON file
-        metadata: Dictionary with checkpoint metadata
-        predictions_df: DataFrame with all predictions
-        output_path: Path where predictions CSV was saved
-    """
-    # Save metadata
-    with open(checkpoint_path, 'w') as f:
-        json.dump(metadata, f, indent=2)
-
-    print(f"\n💾 Checkpoint saved:")
-    print(f"  • Metadata: {checkpoint_path}")
-    print(f"  • Predictions: {output_path}")
-    print(f"  • Last prediction date: {metadata['last_prediction_date']}")
-
-
-def load_checkpoint(checkpoint_path):
-    """
-    Load checkpoint metadata.
-
-    Args:
-        checkpoint_path: Path to checkpoint JSON file
-
-    Returns:
-        Dictionary with checkpoint metadata, or None if not found
-    """
-    if not checkpoint_path.exists():
-        return None
-
-    try:
-        with open(checkpoint_path, 'r') as f:
-            metadata = json.load(f)
-        return metadata
-    except Exception as e:
-        print(f"⚠️  Warning: Could not load checkpoint: {e}")
-        return None
-
-
-def validate_checkpoint(checkpoint, current_params):
-    """
-    Validate that checkpoint is compatible with current run.
-
-    Args:
-        checkpoint: Checkpoint metadata dictionary
-        current_params: Current run parameters
-
-    Returns:
-        (is_valid, error_message)
-    """
-    # Check model parameters match
-    for param in ['forecast_days', 'target_return_days', 'n_estimators', 'learning_rate', 'max_depth']:
-        if checkpoint.get(param) != current_params.get(param):
-            return False, f"Parameter mismatch: {param} (checkpoint={checkpoint.get(param)}, current={current_params.get(param)})"
-
-    return True, None
-
-
-# ============================================================================
-# ML-BASED STOCK RETURN FORECASTING
-# ============================================================================
-# This script implements a complete machine learning pipeline for predicting
-# stock returns using fundamental data. Key technical features:
-#
-# LOOK-AHEAD BIAS PREVENTION:
-#   - All fundamental features lagged by 1 day (use T-1 to predict T+k)
-#   - Time-series cross-validation with walk-forward splits
-#   - No future information leakage in any feature
-#
-# PRODUCTION-READY PREDICTIONS:
-#   - Trains on historical dates with valid forward_return (for validation)
-#   - Predicts for ALL dates including recent ones (for live trading)
-#   - Recent dates have predictions even without forward_return
-#   - This is critical: you get forecasts for dates you can actually trade on!
-#
-# MARKET CAP WEIGHTED TRAINING:
-#   - Top 2000 stocks: weight = 1.0 (full importance)
-#   - Rank 2001-4000: weight = 0.5 (medium importance)
-#   - Rank 4000+: weight = 0.1 (low but not ignored)
-#   - Focuses model on tradeable large-cap universe
-#
-# FEATURE ENGINEERING (76 features):
-#   - Price momentum: 5, 10, 20-day returns
-#   - Volatility: Rolling volatility metrics
-#   - Fundamentals: ROE, ROA, valuation ratios, growth metrics
-#   - Quality: Alpha model ranks, earnings quality
-#   - Cross-sectional: Percentile ranks within each date
-#
-# PERFORMANCE:
-#   - 10-day returns: ~80% correlation, ~73% direction accuracy
-#   - 90-day returns: ~95% correlation, ~87% direction accuracy
-#   - Training time: ~5 seconds per 40K rows
-#
-# For full documentation, see README.md in this directory.
-# ============================================================================
 
 
 class ReturnForecaster:
@@ -1165,20 +1147,40 @@ class ReturnForecaster:
             # CRITICAL: Reset index after sorting so position-based indexing works
             df = df.reset_index(drop=True)
 
-            # Create a mapping from (Date, Symbol) to predicted_return
-            prev_pred_dict = {}
-            for _, row in previous_predictions.iterrows():
-                if not pd.isna(row['predicted_return']):
-                    key = (str(row['Date']), str(row['Symbol']))
-                    prev_pred_dict[key] = row['predicted_return']
+            # Normalize Date columns to ensure matching
+            previous_predictions['Date'] = pd.to_datetime(previous_predictions['Date'])
+            df['Date'] = pd.to_datetime(df['Date'])
 
-            # Create prediction array aligned with SORTED df (now with sequential index)
-            previous_predictions_array = np.full(len(df), np.nan)
-            for position in range(len(df)):
-                row = df.iloc[position]  # Use iloc for position-based access
-                key = (str(row['Date']), str(row['Symbol']))
-                if key in prev_pred_dict:
-                    previous_predictions_array[position] = prev_pred_dict[key]
+            # ============================================================
+            # FAST VECTORIZED MERGE (replaces slow iterrows loop)
+            # ============================================================
+            # Filter previous predictions to only rows with non-NaN predicted_return
+            prev_with_preds = previous_predictions[previous_predictions['predicted_return'].notna()].copy()
+            print(f"  • Previous predictions with values: {len(prev_with_preds):,}")
+
+            # Select only the columns we need for merging (reduces memory)
+            # Rename to _prev BEFORE merge to avoid suffix issues
+            prev_merge = prev_with_preds[['Date', 'Symbol', 'predicted_return']].copy()
+            prev_merge = prev_merge.rename(columns={'predicted_return': 'predicted_return_prev'})
+
+            # Ensure Symbol is string type for consistent matching
+            prev_merge['Symbol'] = prev_merge['Symbol'].astype(str)
+            df['Symbol'] = df['Symbol'].astype(str)
+
+            # Merge: left join keeps all df rows, adds predicted_return_prev from previous predictions
+            # This is much faster than looping (vectorized C code in pandas)
+            df_with_prev = df.merge(
+                prev_merge,
+                on=['Date', 'Symbol'],
+                how='left'
+            )
+
+            # Extract the merged predicted_return_prev column as array
+            # Rows that didn't match will have NaN (same as old logic)
+            previous_predictions_array = df_with_prev['predicted_return_prev'].values
+
+            matches = np.sum(~np.isnan(previous_predictions_array))
+            print(f"  • Matched {matches:,} / {len(df):,} rows ({matches/len(df)*100:.1f}%)")
 
             # Filter to keep only predictions before resume_from_date
             if resume_from_date:
@@ -1384,28 +1386,38 @@ def main():
         int: Exit code (0 for success, 1 for error)
     """
     parser = argparse.ArgumentParser(
-        description='Fast ML-based return forecasting (NO LOOK-AHEAD BIAS)',
+        description='Walk-Forward ML Return Forecasting - Zero Look-Ahead Bias',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Predict 10-day returns (default)
-  python forecast_returns_ml.py data.csv
+  # Full training run (first time)
+  python forecast_returns_ml_walk_forward.py \\
+      --input-file 20091231_20260106_data.csv \\
+      --output 20091231_20260106_predictions.csv
+
+  # Resume from previous predictions (much faster!)
+  python forecast_returns_ml_walk_forward.py \\
+      --input-file 20091231_20260110_data.csv \\
+      --output 20091231_20260110_predictions.csv \\
+      --resume-file 20091231_20260106_predictions.csv \\
+      --overwrite-months 1
 
   # Predict 90-day returns starting 10 days from now
-  python forecast_returns_ml.py data.csv --forecast-days 10 --target-return-days 90
-
-  # Custom output and faster execution
-  python forecast_returns_ml.py data.csv --output predictions.csv --no-cv
-
-  # Adjust model complexity
-  python forecast_returns_ml.py data.csv --n-estimators 500 --max-depth 9
+  python forecast_returns_ml_walk_forward.py \\
+      --input-file data.csv \\
+      --output predictions.csv \\
+      --forecast-days 10 \\
+      --target-return-days 90
 
 For full documentation, see README.md in this directory.
         """
     )
 
-    parser.add_argument('input', help='Input CSV file path')
-    parser.add_argument('--output', '-o', help='Output CSV file path (optional)')
+    # Input/Output files
+    parser.add_argument('--input-file', '-i', required=True,
+                        help='Input CSV file with fundamental data (REQUIRED)')
+    parser.add_argument('--output', '-o', required=True,
+                        help='Output CSV file for predictions (REQUIRED)')
     parser.add_argument('--lookback', type=int, default=10,
                         help='NOT IMPLEMENTED - Reserved for future use (default: 10)')
     parser.add_argument('--forecast-days', type=int, default=10,
@@ -1430,18 +1442,14 @@ For full documentation, see README.md in this directory.
     parser.add_argument('--export-predictions', action='store_true',
                         help='Export a separate file with only Symbol, Date, and predicted_return columns')
 
-    # Checkpoint / Resume options
-    parser.add_argument('--resume', action='store_true',
-                        help='Resume from previous checkpoint (95%% faster for updates). '
-                             'Loads previous predictions and only trains new months.')
-    parser.add_argument('--overwrite-months', type=int, default=3,
-                        help='When resuming, re-predict last N months (default: 3). '
-                             'Handles data revisions and ensures accuracy.')
-    parser.add_argument('--checkpoint-file', type=str, default=None,
-                        help='Path to checkpoint file (default: auto-generated). '
-                             'Use "LATEST" to automatically pick newest checkpoint by modification time.')
-    parser.add_argument('--force-full', '--no-resume', action='store_true',
-                        help='Force full retrain, ignore any existing checkpoint')
+    # Resume options
+    parser.add_argument('--resume-file', '-r', type=str, default=None,
+                        help='Previous predictions CSV file to resume from. '
+                             'When provided, only new months will be trained (95%% faster). '
+                             'Omit this flag for full training from scratch.')
+    parser.add_argument('--overwrite-months', type=int, default=1,
+                        help='When using --resume-file, re-predict last N months (default: 1). '
+                             'Helps handle data revisions. Use 0 to only predict new data.')
     parser.add_argument('--skip-feature-importance', action='store_true',
                         help='Skip feature importance calculation at the end (saves 1-3 minutes)')
     parser.add_argument('--no-lag', action='store_true',
@@ -1468,7 +1476,7 @@ For full documentation, see README.md in this directory.
     if args.log_file is None:
         # Auto-generate log file name with timestamp
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        input_path = Path(args.input)
+        input_path = Path(args.input_file)
         log_file = input_path.parent / f"forecast_ml_walk_forward_{timestamp}.log"
     else:
         log_file = Path(args.log_file)
@@ -1500,18 +1508,17 @@ For full documentation, see README.md in this directory.
     print()
 
     # Validate input
-    input_path = Path(args.input)
+    input_path = Path(args.input_file)
     if not input_path.exists():
-        print(f"Error: Input file not found: {args.input}")
+        print(f"Error: Input file not found: {args.input_file}")
         return 1
 
     # Read data
     print("=" * 70)
     print("     ML-Based Stock Return Forecasting")
     print("=" * 70)
-    print(f"\n📂 Reading {args.input}...")
-    df = pd.read_csv(args.input)
-    print(f"  • Loaded {len(df):,} rows, {len(df.columns)} columns")
+    print(f"\n📂 Reading {args.input_file}...")
+    df = read_dataframe(args.input_file, "input data")
 
     # Handle case-insensitive column names (normalize to PascalCase)
     def normalize_column_name(col):
@@ -1580,6 +1587,67 @@ For full documentation, see README.md in this directory.
         print(f"   Available columns: {', '.join(df.columns[:10])}...")
         return 1
 
+    # ========================================================================
+    # AUTOMATIC DATE CLEANUP - Remove future-dated records based on filename
+    # ========================================================================
+    # Parse end date from filename pattern: YYYYMMDD_YYYYMMDD_*.csv
+    # Example: "20091231_20260106_with_metadata.csv" -> end_date = 2026-01-06
+
+    filename = input_path.name
+    date_pattern = r'(\d{8})_(\d{8})'
+    match = re.search(date_pattern, filename)
+
+    if match:
+        start_date_str = match.group(1)
+        end_date_str = match.group(2)
+
+        try:
+            # Parse end date from filename (YYYYMMDD format)
+            end_date = pd.to_datetime(end_date_str, format='%Y%m%d')
+
+            # Convert Date column to datetime
+            df['Date'] = pd.to_datetime(df['Date'])
+
+            # Count records beyond the filename's end date
+            original_count = len(df)
+            future_mask = df['Date'] > end_date
+            future_count = future_mask.sum()
+
+            if future_count > 0:
+                # Show sample of future records
+                future_records = df[future_mask][['Date', 'Symbol']].drop_duplicates()
+                print(f"\n⚠️  AUTOMATIC DATE CLEANUP:")
+                print(f"  • Filename indicates data should end on: {end_date.strftime('%Y-%m-%d')}")
+                print(f"  • Found {future_count:,} records beyond this date")
+                print(f"  • Affected symbols: {df[future_mask]['Symbol'].nunique()}")
+
+                if future_count <= 10:
+                    print(f"  • Future records:")
+                    for _, row in future_records.iterrows():
+                        print(f"    - {row['Date'].strftime('%Y-%m-%d')}: {row['Symbol']}")
+                else:
+                    print(f"  • Sample future records (showing first 5):")
+                    for _, row in future_records.head(5).iterrows():
+                        print(f"    - {row['Date'].strftime('%Y-%m-%d')}: {row['Symbol']}")
+
+                # Remove future records
+                df = df[~future_mask].copy()
+                print(f"  ✅ Removed {future_count:,} future-dated records")
+                print(f"  • Cleaned rows: {len(df):,}")
+            else:
+                # Convert Date to datetime even if no cleanup needed
+                df['Date'] = pd.to_datetime(df['Date'])
+                print(f"  ✅ Date validation: All records within filename date range")
+
+        except ValueError as e:
+            # If date parsing fails, just convert Date column
+            df['Date'] = pd.to_datetime(df['Date'])
+            print(f"  ⚠️  Could not parse end date from filename: {end_date_str}")
+    else:
+        # No date pattern in filename, just convert Date column
+        df['Date'] = pd.to_datetime(df['Date'])
+        print(f"  ℹ️  No date range pattern found in filename (expected: YYYYMMDD_YYYYMMDD)")
+
     print(f"  • Date range: {df['Date'].min()} to {df['Date'].max()}")
     print(f"  • Unique symbols: {df['Symbol'].nunique()}")
 
@@ -1616,133 +1684,131 @@ For full documentation, see README.md in this directory.
     print(f"  • learning_rate: {args.learning_rate}")
     print(f"  • max_depth: {args.max_depth}")
     print(f"  • walk_forward: {not args.no_walk_forward}")
-    if not args.no_walk_forward and args.resume:
-        print(f"  • resume_mode: True (overwrite_months={args.overwrite_months})")
+    if args.resume_file:
+        print(f"  • resume_file: {args.resume_file} (overwrite_months={args.overwrite_months})")
 
     # ========================================================================
-    # GENERATE OUTPUT FILENAME (EARLY, so we can use it for checkpoint name)
+    # GENERATE OUTPUT FILENAME
     # ========================================================================
-    if args.output is None:
-        stem = input_path.stem
-        suffix = input_path.suffix
-        # Add suffix based on training mode
-        mode_suffix = "_predictions_WALK_FORWARD" if not args.no_walk_forward else "_predictions_SINGLE_MODEL"
-        output_path = input_path.parent / f"{stem}{mode_suffix}{suffix}"
-    else:
-        output_path = Path(args.output)
+    output_path = Path(args.output)
 
     # ========================================================================
-    # CHECKPOINT / RESUME LOGIC
+    # RESUME LOGIC - Simple and Clean
+    # ========================================================================
+    # If --resume-file is provided, load previous predictions
+    # Otherwise, start from scratch (full training)
     # ========================================================================
 
     resume_from_date = None
     previous_predictions = None
-    previous_predictions_df = None
 
-    # Determine checkpoint file path (based on output filename for clarity)
-    if args.checkpoint_file:
-        if args.checkpoint_file.upper() == 'LATEST':
-            # Find newest checkpoint file in directory
-            checkpoint_dir = input_path.parent
-            checkpoint_files = list(checkpoint_dir.glob('*_checkpoint.json'))
-
-            if not checkpoint_files:
-                print(f"\n⚠️  No checkpoint files found in {checkpoint_dir}")
-                print("   Running full training")
-                checkpoint_path = output_path.parent / f"{output_path.stem}_checkpoint.json"
-            else:
-                # Sort by modification time, newest first
-                checkpoint_files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-                checkpoint_path = checkpoint_files[0]
-                print(f"\n📂 LATEST checkpoint mode:")
-                print(f"  • Found {len(checkpoint_files)} checkpoint file(s)")
-                print(f"  • Using newest: {checkpoint_path.name}")
-                print(f"  • Modified: {datetime.fromtimestamp(checkpoint_path.stat().st_mtime).strftime('%Y-%m-%d %H:%M:%S')}")
-        else:
-            checkpoint_path = Path(args.checkpoint_file)
-    else:
-        # Auto-generate checkpoint filename based on output file
-        checkpoint_path = output_path.parent / f"{output_path.stem}_checkpoint.json"
-
-    # Check for resume
-    if args.resume and not args.force_full:
+    if args.resume_file:
         print("\n" + "=" * 70)
-        print("  📂 CHECKPOINT RESUME MODE")
+        print("  📂 RESUME MODE")
         print("=" * 70)
 
-        # Load checkpoint
-        checkpoint = load_checkpoint(checkpoint_path)
+        resume_file_path = Path(args.resume_file)
 
-        if checkpoint is None:
-            print("\n⚠️  No checkpoint found - running full training")
-            print(f"   Looked for: {checkpoint_path}")
+        if not resume_file_path.exists():
+            print(f"\n❌ ERROR: Resume file not found: {args.resume_file}")
+            print("   Running full training instead")
         else:
-            print(f"\n✓ Checkpoint found: {checkpoint_path}")
-            print(f"  • Last prediction date: {checkpoint['last_prediction_date']}")
-            print(f"  • Created: {checkpoint.get('created', 'unknown')}")
+            try:
+                print(f"\n📂 Loading previous predictions from {resume_file_path.name}...")
+                previous_predictions_df = read_dataframe(resume_file_path, "previous predictions")
 
-            # Validate checkpoint
-            current_params = {
-                'forecast_days': args.forecast_days,
-                'target_return_days': target_days,
-                'n_estimators': args.n_estimators,
-                'learning_rate': args.learning_rate,
-                'max_depth': args.max_depth
-            }
+                # ============================================================
+                # AUTO-CLEANUP RESUME FILE - Remove future-dated records
+                # ============================================================
+                # Parse end date from resume filename to clean bad data
+                resume_filename = resume_file_path.name
+                date_pattern = r'(\d{8})_(\d{8})'
+                date_match = re.search(date_pattern, resume_filename)
 
-            is_valid, error_msg = validate_checkpoint(checkpoint, current_params)
-
-            if not is_valid:
-                print(f"\n❌ Checkpoint invalid: {error_msg}")
-                print("   Running full training instead")
-                print("   Use --force-full to suppress this warning")
-            else:
-                # Load previous predictions
-                previous_output_path = Path(checkpoint['output_file'])
-
-                if not previous_output_path.exists():
-                    print(f"\n⚠️  Previous predictions file not found: {previous_output_path}")
-                    print("   Running full training")
-                else:
-                    print(f"\n📂 Loading previous predictions from {previous_output_path.name}...")
-
+                if date_match:
+                    resume_end_date_str = date_match.group(2)
                     try:
-                        previous_predictions_df = pd.read_csv(previous_output_path)
+                        resume_end_date = pd.to_datetime(resume_end_date_str, format='%Y%m%d')
+                        previous_predictions_df['Date'] = pd.to_datetime(previous_predictions_df['Date'])
 
-                        # Calculate resume date (last_date - overwrite_months)
-                        last_date = pd.to_datetime(checkpoint['last_prediction_date'])
-                        resume_from_date = (last_date - pd.DateOffset(months=args.overwrite_months)).strftime('%Y-%m-%d')
+                        # Check for future-dated records
+                        future_mask = previous_predictions_df['Date'] > resume_end_date
+                        future_count = future_mask.sum()
+
+                        if future_count > 0:
+                            print(f"\n⚠️  RESUME FILE CLEANUP:")
+                            print(f"  • Resume file should end on: {resume_end_date.strftime('%Y-%m-%d')}")
+                            print(f"  • Found {future_count:,} records beyond this date")
+                            if future_count <= 5:
+                                for _, row in previous_predictions_df[future_mask][['Date', 'Symbol']].drop_duplicates().iterrows():
+                                    print(f"    - {row['Date'].strftime('%Y-%m-%d')}: {row['Symbol']}")
+
+                            # Remove future records
+                            previous_predictions_df = previous_predictions_df[~future_mask].copy()
+                            print(f"  ✅ Removed {future_count:,} future-dated records from resume file")
+                            print(f"  • Cleaned resume rows: {len(previous_predictions_df):,}")
+                    except ValueError:
+                        pass  # If date parsing fails, skip cleanup
+
+                # Verify it has the required columns
+                if 'predicted_return' not in previous_predictions_df.columns:
+                    print(f"\n❌ ERROR: Resume file missing 'predicted_return' column")
+                    print("   Running full training instead")
+                    previous_predictions = None
+                elif 'Date' not in previous_predictions_df.columns:
+                    print(f"\n❌ ERROR: Resume file missing 'Date' column")
+                    print("   Running full training instead")
+                    previous_predictions = None
+                elif 'Symbol' not in previous_predictions_df.columns:
+                    print(f"\n❌ ERROR: Resume file missing 'Symbol' column")
+                    print("   Running full training instead")
+                    previous_predictions = None
+                else:
+                    # Find the last date with predictions
+                    prev_df_with_preds = previous_predictions_df[previous_predictions_df['predicted_return'].notna()]
+
+                    if len(prev_df_with_preds) == 0:
+                        print(f"\n⚠️  WARNING: Resume file has no predictions")
+                        print("   Running full training instead")
+                        previous_predictions = None
+                    else:
+                        # Convert Date to datetime
+                        prev_df_with_preds['Date'] = pd.to_datetime(prev_df_with_preds['Date'])
+                        last_prediction_date = prev_df_with_preds['Date'].max()
 
                         print(f"  ✓ Loaded {len(previous_predictions_df):,} rows")
-                        print(f"  • Last prediction date: {checkpoint['last_prediction_date']}")
-                        print(f"  • Overwrite buffer: {args.overwrite_months} months")
-                        print(f"  • Resume from: {resume_from_date}")
-                        print(f"  • Will re-predict from {resume_from_date} onwards")
+                        print(f"  • Last prediction date: {last_prediction_date.strftime('%Y-%m-%d')}")
+                        print(f"  • Rows with predictions: {len(prev_df_with_preds):,}")
 
-                        # Store the predictions dataframe (will be aligned AFTER sorting in fit_predict)
-                        if 'predicted_return' in previous_predictions_df.columns:
-                            # Pass the dataframe itself, not an array
-                            # It will be aligned in fit_predict() AFTER df is sorted
-                            previous_predictions = previous_predictions_df
-                            print(f"  ✓ Loaded {len(previous_predictions):,} rows with predictions")
-                            print(f"  ✓ Alignment will happen after dataframe is sorted")
+                        # Calculate resume date (go back N months)
+                        if args.overwrite_months > 0:
+                            resume_from_date = (last_prediction_date - pd.DateOffset(months=args.overwrite_months)).strftime('%Y-%m-%d')
+                            print(f"  • Overwrite buffer: {args.overwrite_months} months")
+                            print(f"  • Resume from: {resume_from_date}")
+                            print(f"  • Will re-predict from {resume_from_date} onwards")
+                        else:
+                            # Resume from day after last prediction
+                            resume_from_date = (last_prediction_date + pd.Timedelta(days=1)).strftime('%Y-%m-%d')
+                            print(f"  • Overwrite buffer: 0 months (only new data)")
+                            print(f"  • Resume from: {resume_from_date}")
 
-                    except Exception as e:
-                        print(f"\n❌ Error loading previous predictions: {e}")
-                        print("   Running full training")
-                        previous_predictions = None
-                        resume_from_date = None
+                        # Store the dataframe for later alignment
+                        previous_predictions = previous_predictions_df
+                        print(f"  ✓ Previous predictions loaded successfully")
 
-    elif args.force_full:
-        print("\n🔄 FORCE FULL RETRAIN MODE (ignoring checkpoint)")
+            except Exception as e:
+                print(f"\n❌ ERROR loading previous predictions: {e}")
+                print("   Running full training instead")
+                previous_predictions = None
+                resume_from_date = None
 
-    # ========================================================================
-    # RUN PIPELINE
-    # ========================================================================
+    else:
+        print("\n" + "=" * 70)
+        print("  🔄 FULL TRAINING MODE")
+        print("  (No --resume-file provided)")
+        print("=" * 70)
 
-    print("\n" + "=" * 70)
-    print("  🚀 STARTING PREDICTION PIPELINE")
-    print("=" * 70)
+
 
     df_predictions = forecaster.fit_predict(
         df,
@@ -1754,10 +1820,46 @@ For full documentation, see README.md in this directory.
     )
 
     # Save results (output_path already generated earlier)
-    print(f"\n💾 Saving predictions to {output_path}...")
-    df_predictions.to_csv(output_path, index=False)
+    write_dataframe(df_predictions, output_path, "predictions")
 
-    # Export predictions-only file if requested
+    # ========================================================================
+    # AUTO-EXPORT FORECAST-ONLY CSV (Always created)
+    # ========================================================================
+    # Extract date range from input filename to create forecast-only CSV
+    # Format: YYYYMMDD_YYYYMMDD_forecast_only.csv
+    print("\n" + "=" * 70)
+    print("  📊 CREATING FORECAST-ONLY CSV")
+    print("=" * 70)
+
+    # Extract date range from input filename
+    input_filename = input_path.name
+    date_pattern = r'(\d{8}_\d{8})'
+    date_match = re.search(date_pattern, input_filename)
+
+    if date_match:
+        date_range = date_match.group(1)
+        forecast_only_filename = f"{date_range}_forecast_only.csv"
+    else:
+        # Fallback: use output filename stem
+        forecast_only_filename = f"{output_path.stem}_forecast_only.csv"
+
+    forecast_only_path = output_path.parent / forecast_only_filename
+
+    # Extract only Symbol, Date, predicted_return (non-NaN only)
+    forecast_only = df_predictions[['Symbol', 'Date', 'predicted_return']].copy()
+    forecast_only = forecast_only[forecast_only['predicted_return'].notna()]
+    forecast_only = forecast_only.sort_values(['Date', 'Symbol'])
+
+    print(f"\n💾 Saving forecast-only CSV to {forecast_only_filename}...")
+    forecast_only.to_csv(forecast_only_path, index=False)
+    file_size_mb = forecast_only_path.stat().st_size / 1024 / 1024
+    print(f"  ✓ Saved {len(forecast_only):,} forecasts")
+    print(f"  • Columns: Symbol, Date, predicted_return")
+    print(f"  • Format: CSV (for easy use)")
+    print(f"  • Size: {file_size_mb:.1f} MB")
+    print(f"  • Use this file like: extract_symbol.py {forecast_only_filename} --symbol AAPL")
+
+    # Export predictions-only file if requested (old flag for backward compatibility)
     if args.export_predictions:
         # Create predictions-only filename
         if args.output is None:
@@ -1777,10 +1879,8 @@ For full documentation, see README.md in this directory.
         predictions_only = predictions_only.sort_values(['Date', 'Symbol'])
 
         # Save the lean predictions file
-        print(f"  📊 Exporting predictions-only file to {pred_only_path}...")
-        predictions_only.to_csv(pred_only_path, index=False)
-        print(f"  ✓ Saved {len(predictions_only):,} predictions (Symbol, Date, predicted_return only)")
-        print(f"  ✓ File size: {pred_only_path.stat().st_size / 1024 / 1024:.1f} MB")
+        print(f"\n  📊 Exporting predictions-only file...")
+        write_dataframe(predictions_only, pred_only_path, "predictions-only (Symbol, Date, predicted_return)")
 
     # Summary statistics
     print("\n" + "=" * 70)
@@ -1884,36 +1984,15 @@ For full documentation, see README.md in this directory.
         print(f"  • Columns: Symbol, Date, predicted_return (lean format for fast lookups)")
 
     # ========================================================================
-    # SAVE CHECKPOINT
+    # RESUME TIP
     # ========================================================================
 
-    # Save checkpoint for future resume (unless no-walk-forward)
-    # Note: Even with --force-full, we save checkpoint for next run
-    if not args.no_walk_forward:
-        # Get last prediction date
-        df_with_preds = df_predictions[df_predictions['predicted_return'].notna()]
-        if len(df_with_preds) > 0:
-            last_pred_date = pd.to_datetime(df_with_preds['Date']).max().strftime('%Y-%m-%d')
-
-            # Create checkpoint metadata
-            checkpoint_metadata = {
-                'last_prediction_date': last_pred_date,
-                'output_file': str(output_path),
-                'input_file': str(input_path),
-                'forecast_days': args.forecast_days,
-                'target_return_days': target_days,
-                'n_estimators': args.n_estimators,
-                'learning_rate': args.learning_rate,
-                'max_depth': args.max_depth,
-                'created': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                'total_rows': int(len(df_predictions)),
-                'rows_with_predictions': int(valid_preds.sum()),
-            }
-
-            save_checkpoint(checkpoint_path, checkpoint_metadata, df_predictions, output_path)
-
-            print(f"\n💡 TIP: For faster updates, use --resume to skip already-predicted months")
-            print(f"   Example: python {Path(__file__).name} {input_path.name} --resume")
+    if not args.no_walk_forward and not args.resume_file:
+        print(f"\n💡 TIP: For faster updates, use --resume-file to skip already-predicted months")
+        print(f"   Example: python {Path(__file__).name} \\")
+        print(f"       --input-file new_data.csv \\")
+        print(f"       --output new_predictions.csv \\")
+        print(f"       --resume-file {output_path.name}")
 
     print("\n" + "=" * 70)
     print("✅ Forecasting complete - NO LOOK-AHEAD BIAS GUARANTEED!")

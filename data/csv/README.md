@@ -1252,3 +1252,17 @@ Part of the Zipline-Reloaded project by Hidden Point Capital.
 - Initial walk-forward implementation
 - Market cap weighted training
 - Feature importance analysis
+
+---
+
+## 📚 Detailed Documentation
+
+For detailed technical documentation, design rationales, and troubleshooting guides, see the **[Docs/](Docs/)** directory:
+
+- **[Docs/INDEX.md](Docs/INDEX.md)** - Complete documentation index
+- **[Docs/DETERMINISTIC_DESIGN.md](Docs/DETERMINISTIC_DESIGN.md)** - Why zero randomness is better
+- **[Docs/REPRODUCIBILITY_FIX.md](Docs/REPRODUCIBILITY_FIX.md)** - Root cause analysis of non-determinism
+- **[Docs/MERGE_OPTIMIZATION_ANALYSIS.md](Docs/MERGE_OPTIMIZATION_ANALYSIS.md)** - Memory optimization details
+- **[Docs/SUMMARY_v3.2.2.md](Docs/SUMMARY_v3.2.2.md)** - Latest version summary
+
+**See [Docs/INDEX.md](Docs/INDEX.md) for complete documentation index and recommended reading order.**

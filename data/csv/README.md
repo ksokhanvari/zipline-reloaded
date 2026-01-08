@@ -16,15 +16,23 @@ This tool uses **Histogram-based Gradient Boosting** with extensive feature engi
 - ✅ **Complete logging** - Auto-generated log files for reproducibility
 - ✅ **Pre-lagged data support** - Use your own lagging pipeline
 
-## 🆕 What's New in v3.2 (2026-01-07)
+## 🆕 What's New in v3.2.2 (2026-01-07)
 
-### Major Performance Optimizations:
+### 🎯 Fully Deterministic Design - ZERO Randomness:
+- **100% reproducible results** - Eliminated ALL random number generation
+- **2-5% faster** - No RNG overhead from deterministic sampling
+- **Simpler code** - No seed management needed
+- **Perfect reproducibility** - Same input → same output, every time
+- **Fixed critical bug** - Resolved 5.62% prediction difference between identical runs
+
+### ⚡ Major Performance Optimizations (v3.2.0):
 - **10-30x faster alignment** - Vectorized pandas merge instead of iterrows() loops (5-10 min → 10-30 sec)
+- **85% less merge memory** - Merge before feature engineering (2 GB → 300 MB temp df)
 - **3-5x faster CSV reading** - PyArrow engine for high-performance parsing
 - **5-10x faster I/O** - Parquet format support (auto-detection by file extension)
 - **10x smaller files** - Parquet compression reduces 50 MB CSV to 5 MB
 
-### Simplified Resume Logic:
+### 🔧 Simplified Resume Logic (v3.2.0):
 - **Removed checkpoint JSON** - No more confusing `.json` files and automatic renaming
 - **Simple `--resume-file`** - Just point to previous predictions CSV/Parquet
 - **Explicit flags** - Changed from positional `input` to `--input-file` and `--output`

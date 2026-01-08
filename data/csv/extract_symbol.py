@@ -2,24 +2,29 @@
 """
 Extract data for specific symbols from prediction output files.
 
-This utility script filters prediction output files to extract data for one or
-all symbols, with optional forecast-only mode for lean output files.
+This utility script filters prediction output files (CSV or Parquet) to extract
+data for one or all symbols, with optional forecast-only mode for lean output files.
+
+Supports both CSV and Parquet formats (auto-detected from file extension).
 
 Usage:
-    # Extract all AAPL data
+    # Extract all AAPL data (CSV)
     python extract_symbol.py predictions.csv --symbol AAPL
 
+    # Extract from Parquet file
+    python extract_symbol.py predictions.parquet --symbol AAPL
+
     # Extract only forecast columns for AAPL
-    python extract_symbol.py predictions.csv --symbol AAPL --forecast-only
+    python extract_symbol.py predictions.parquet --symbol AAPL --forecast-only
 
     # Extract ALL symbols (entire dataset)
-    python extract_symbol.py predictions.csv --symbol ALLSYMBOLS
+    python extract_symbol.py predictions.parquet --symbol ALLSYMBOLS
 
     # Extract ALL symbols, forecast-only (lean output for trading)
-    python extract_symbol.py predictions.csv --symbol ALLSYMBOLS --forecast-only
+    python extract_symbol.py predictions.parquet --symbol ALLSYMBOLS --forecast-only
 
-    # Custom output name
-    python extract_symbol.py predictions.csv --symbol MSFT --output msft_data.csv
+    # Custom output name (format auto-detected from extension)
+    python extract_symbol.py predictions.parquet --symbol MSFT --output msft_data.csv
 """
 
 import argparse
@@ -30,24 +35,34 @@ import pandas as pd
 
 def extract_symbol_data(input_path, symbol, output_path=None, forecast_only=False):
     """
-    Extract all data for a specific symbol from a CSV file.
+    Extract all data for a specific symbol from a CSV or Parquet file.
 
     Args:
-        input_path (Path): Path to input CSV file
+        input_path (Path): Path to input CSV or Parquet file
         symbol (str): Stock symbol to extract (e.g., 'AAPL', 'MSFT', 'ALLSYMBOLS')
-        output_path (Path, optional): Path to output file. If None, auto-generate.
+        output_path (Path, optional): Path to output file. If None, auto-generate with same format as input.
         forecast_only (bool): If True, only keep Date, Symbol, predicted_return columns
 
     Returns:
         Path: Path to the output file
         int: Number of rows extracted
     """
+    # Detect input format
+    input_suffix = input_path.suffix.lower()
+    is_parquet = input_suffix in ['.parquet', '.pq']
+
     print(f"📂 Reading {input_path}...")
+    print(f"   Format: {'Parquet' if is_parquet else 'CSV'}")
 
     try:
-        df = pd.read_csv(input_path)
+        if is_parquet:
+            df = pd.read_parquet(input_path, engine='pyarrow')
+        else:
+            df = pd.read_csv(input_path)
     except Exception as e:
         print(f"❌ Error reading file: {e}")
+        if is_parquet and 'pyarrow' in str(e).lower():
+            print(f"\nTip: Install PyArrow for Parquet support: pip install pyarrow")
         return None, 0
 
     # Validate required column
@@ -120,14 +135,35 @@ def extract_symbol_data(input_path, symbol, output_path=None, forecast_only=Fals
         if forecast_only:
             suffix += '_forecast_only'
 
-        output_path = input_path.parent / f"{input_stem}{suffix}.csv"
+        # Use same format as input (Parquet or CSV)
+        output_ext = input_suffix if is_parquet else '.csv'
+        output_path = input_path.parent / f"{input_stem}{suffix}{output_ext}"
+    else:
+        # User specified output path - respect their format choice
+        output_path = Path(output_path)
+
+    # Detect output format
+    output_suffix = output_path.suffix.lower()
+    output_is_parquet = output_suffix in ['.parquet', '.pq']
 
     # Save the filtered data
     if symbol_upper == 'ALLSYMBOLS':
         print(f"\n💾 Saving all symbols data...")
     else:
         print(f"\n💾 Saving {symbol} data...")
-    symbol_data.to_csv(output_path, index=False)
+
+    print(f"   Output format: {'Parquet' if output_is_parquet else 'CSV'}")
+
+    try:
+        if output_is_parquet:
+            symbol_data.to_parquet(output_path, engine='pyarrow', compression='snappy', index=False)
+        else:
+            symbol_data.to_csv(output_path, index=False)
+    except Exception as e:
+        print(f"❌ Error writing output file: {e}")
+        if output_is_parquet and 'pyarrow' in str(e).lower():
+            print(f"\nTip: Install PyArrow for Parquet support: pip install pyarrow")
+        return None, 0
 
     # Display statistics
     if symbol_upper == 'ALLSYMBOLS':
@@ -197,25 +233,29 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Extract single symbol (all columns)
+  # Extract single symbol (all columns) - CSV
   python extract_symbol.py predictions.csv --symbol AAPL
+
+  # Extract from Parquet file (format auto-detected)
+  python extract_symbol.py predictions.parquet --symbol AAPL
 
   # Extract single symbol (forecast-only: Date, Symbol, predicted_return)
-  python extract_symbol.py predictions.csv --symbol AAPL --forecast-only
+  python extract_symbol.py predictions.parquet --symbol AAPL --forecast-only
 
   # Extract ALL symbols (entire dataset, all columns)
-  python extract_symbol.py predictions.csv --symbol ALLSYMBOLS
+  python extract_symbol.py predictions.parquet --symbol ALLSYMBOLS
 
   # Extract ALL symbols, forecast-only (lean file for trading systems)
-  python extract_symbol.py predictions.csv --symbol ALLSYMBOLS --forecast-only
+  python extract_symbol.py predictions.parquet --symbol ALLSYMBOLS --forecast-only
 
-  # Custom output path
-  python extract_symbol.py predictions.csv --symbol TSLA --output tesla_analysis.csv
+  # Custom output path (format auto-detected from extension)
+  python extract_symbol.py predictions.parquet --symbol TSLA --output tesla_analysis.csv
+  python extract_symbol.py predictions.csv --symbol MSFT --output msft_data.parquet
 
   # Extract multiple individual symbols (run separately)
-  python extract_symbol.py predictions.csv --symbol AAPL
-  python extract_symbol.py predictions.csv --symbol MSFT
-  python extract_symbol.py predictions.csv --symbol GOOGL
+  python extract_symbol.py predictions.parquet --symbol AAPL
+  python extract_symbol.py predictions.parquet --symbol MSFT
+  python extract_symbol.py predictions.parquet --symbol GOOGL
 
 Use cases:
   - Verify predictions for specific stocks
@@ -228,11 +268,11 @@ Use cases:
     )
 
     parser.add_argument('input',
-                        help='Input CSV file (output from forecast_returns_ml.py)')
+                        help='Input CSV or Parquet file (output from forecast_returns_ml.py)')
     parser.add_argument('--symbol', '-s', required=True,
                         help='Stock symbol to extract (e.g., AAPL, MSFT, GOOGL, or ALLSYMBOLS for all)')
     parser.add_argument('--output', '-o',
-                        help='Output CSV file path (default: auto-generated)')
+                        help='Output file path (CSV or Parquet, default: auto-generated with same format as input)')
     parser.add_argument('--forecast-only', '-f', action='store_true',
                         help='Output only Date, Symbol, and predicted_return columns (lean file)')
 

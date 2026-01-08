@@ -30,24 +30,9 @@ Start here for general usage:
 
 ## 📖 Historical Documentation
 
-### v3.2.0 - Checkpoint & Resume (Earlier 2026-01-07)
-
-- **[CHECKPOINT_RESUME_GUIDE.md](CHECKPOINT_RESUME_GUIDE.md)** - Original checkpoint/resume workflow (now simplified)
-
 ### Version Tracking
 
-- **[ML_FORECASTING_VERSIONS.md](ML_FORECASTING_VERSIONS.md)** - Complete version history and changelog
-
-### Session Summaries
-
-- **[SESSION_SUMMARY_2024-12-17.md](SESSION_SUMMARY_2024-12-17.md)** - Session notes from Dec 17, 2024
-- **[SESSION_SUMMARY_2024-12-16.md](SESSION_SUMMARY_2024-12-16.md)** - Session notes from Dec 16, 2024
-
----
-
-## 🧪 Testing Documentation
-
-- **[TESTING_FRAMEWORK_README.md](TESTING_FRAMEWORK_README.md)** - Testing framework and validation procedures
+- **[ML_FORECASTING_VERSIONS.md](ML_FORECASTING_VERSIONS.md)** - Comparison of two forecasting scripts (walk-forward vs single-model)
 
 ---
 
@@ -70,7 +55,7 @@ Start here for general usage:
 
 **Usage:**
 - [../README.md](../README.md) - Main usage guide
-- [CHECKPOINT_RESUME_GUIDE.md](CHECKPOINT_RESUME_GUIDE.md) - Resume workflow (legacy)
+- [../CHANGELOG.md](../CHANGELOG.md) - Version-specific usage notes
 
 ---
 
@@ -81,20 +66,18 @@ data/csv/
 ├── README.md                          # Main documentation (START HERE)
 ├── CHANGELOG.md                       # Version history
 │
-└── Docs/                              # Detailed documentation
-    ├── INDEX.md                       # This file
-    │
-    ├── DETERMINISTIC_DESIGN.md        # Core design philosophy
-    ├── REPRODUCIBILITY_FIX.md         # Technical analysis
-    ├── MERGE_OPTIMIZATION_ANALYSIS.md # Performance details
-    ├── SUMMARY_v3.2.2.md              # Latest version summary
-    │
-    ├── CHECKPOINT_RESUME_GUIDE.md     # Legacy checkpoint system
-    ├── ML_FORECASTING_VERSIONS.md     # Version tracking
-    ├── TESTING_FRAMEWORK_README.md    # Testing documentation
-    │
-    ├── SESSION_SUMMARY_2024-12-17.md  # Session notes
-    └── SESSION_SUMMARY_2024-12-16.md  # Session notes
+├── Docs/                              # Detailed documentation
+│   ├── INDEX.md                       # This file
+│   │
+│   ├── DETERMINISTIC_DESIGN.md        # Core design philosophy (v3.2.2)
+│   ├── REPRODUCIBILITY_FIX.md         # Technical analysis (v3.2.2)
+│   ├── MERGE_OPTIMIZATION_ANALYSIS.md # Performance details (v3.2.2)
+│   ├── SUMMARY_v3.2.2.md              # Latest version summary
+│   │
+│   └── ML_FORECASTING_VERSIONS.md     # Script comparison guide
+│
+├── logs/                              # Log files (auto-generated)
+└── convert_*.py                       # Utility scripts
 ```
 
 ---

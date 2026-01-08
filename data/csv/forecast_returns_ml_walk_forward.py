@@ -1516,13 +1516,17 @@ For full documentation, see README.md in this directory.
     # SETUP LOGGING
     # ========================================================================
 
+    # Create logs directory if it doesn't exist
+    logs_dir = Path('./logs')
+    logs_dir.mkdir(exist_ok=True)
+
     # Generate log file name if not specified
     if args.log_file is None:
-        # Auto-generate log file name with timestamp
+        # Auto-generate log file name with timestamp in logs directory
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        input_path = Path(args.input_file)
-        log_file = input_path.parent / f"forecast_ml_walk_forward_{timestamp}.log"
+        log_file = logs_dir / f"forecast_ml_walk_forward_{timestamp}.log"
     else:
+        # User-specified log file - use as-is (they may want custom location)
         log_file = Path(args.log_file)
 
     # Initialize global logger

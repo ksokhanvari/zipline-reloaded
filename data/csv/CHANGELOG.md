@@ -15,6 +15,26 @@
 
 ### 🎯 Changes
 
+#### 0. Organized Log Files (Lines 1519-1530)
+
+**New**: Log files now stored in `./logs/` directory instead of cluttering data directory
+
+**Before**:
+```
+data/csv/forecast_ml_walk_forward_20260107_143022.log  # In data directory 🔴
+```
+
+**After**:
+```
+data/csv/logs/forecast_ml_walk_forward_20260107_143022.log  # Organized ✅
+```
+
+**Implementation**:
+- Creates `./logs/` directory automatically if it doesn't exist
+- Auto-generated log files use `./logs/` directory
+- User-specified `--log-file` paths still work (custom location)
+- Added to `.gitignore` (logs/ and *.log)
+
 #### 1. Removed Random Sampling (Lines 833, 959)
 
 **Before (v3.2.1)**:

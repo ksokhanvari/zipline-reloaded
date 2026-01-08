@@ -861,6 +861,35 @@ python forecast_returns_ml.py data.csv --export-predictions
 - **Sorted by Date, Symbol** for efficient queries
 - **No NaN rows** (only predictions, no missing values)
 
+### Log Files
+
+All runs automatically create a log file in the `./logs/` directory:
+
+```bash
+python forecast_returns_ml_walk_forward.py --input data.csv --output pred.parquet
+
+# Creates: ./logs/forecast_ml_walk_forward_20260107_143022.log
+```
+
+**Log file contains:**
+- Complete console output (all prints, warnings, errors)
+- Run parameters (model settings, feature counts, date ranges)
+- Training progress (time per month, prediction counts)
+- File paths (input, output, resume files)
+- Duplicate row detection results
+- Feature descriptions (all 290+ features logged)
+
+**Benefits:**
+- ✅ **Full audit trail** for reproducibility
+- ✅ **Automatic naming** with timestamp (no conflicts)
+- ✅ **Organized storage** in `./logs/` directory (not cluttering data directory)
+- ✅ **Share logs** for debugging without sharing data
+
+**Custom log location:**
+```bash
+python forecast_returns_ml_walk_forward.py --input data.csv --log-file /path/to/custom.log
+```
+
 **Example output:**
 ```csv
 Symbol,Date,predicted_return

@@ -1255,6 +1255,40 @@ Part of the Zipline-Reloaded project by Hidden Point Capital.
 
 ---
 
+## 🔧 Utility Scripts
+
+### Format Conversion Tools
+
+**Convert CSV to Parquet (for speed & compression):**
+```bash
+python convert_csv_to_parquet.py input.csv output.parquet
+
+# Example:
+python convert_csv_to_parquet.py predictions.csv predictions.parquet
+# Output: predictions.parquet (10x smaller, 5-10x faster I/O)
+```
+
+**Convert Parquet to CSV (for compatibility & sharing):**
+```bash
+python convert_parquet_to_csv.py input.parquet output.csv
+
+# Example:
+python convert_parquet_to_csv.py predictions.parquet predictions.csv
+# Output: predictions.csv (10x larger, but universal format)
+```
+
+**Benefits:**
+- ✅ **Parquet**: 10x smaller files, 5-10x faster I/O, preserves types
+- ✅ **CSV**: Universal compatibility, human-readable, Excel-friendly
+- ✅ **Round-trip safe**: Convert CSV→Parquet→CSV preserves all data
+- ✅ **Error handling**: Clear messages if file not found or PyArrow missing
+
+**When to use:**
+- **CSV → Parquet**: For production pipelines (speed & storage)
+- **Parquet → CSV**: For sharing with teams, Excel analysis, debugging
+
+---
+
 ## 📚 Detailed Documentation
 
 For detailed technical documentation, design rationales, and troubleshooting guides, see the **[Docs/](Docs/)** directory:

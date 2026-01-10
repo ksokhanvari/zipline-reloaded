@@ -846,9 +846,12 @@ class ReturnForecaster:
             min_samples_leaf=20,
             l2_regularization=0.1,
             max_bins=255,
+            # TIME-SERIES SAFETY: Disable automatic validation to prevent look-ahead bias
+            # validation_fraction does RANDOM splits which leak future data in time-series
+            # If early stopping needed, pass explicit chronological X_val/y_val
             early_stopping=True if X_val is not None else False,
             n_iter_no_change=50,
-            validation_fraction=0.1 if X_val is None else None,
+            validation_fraction=None,  # Explicit: disabled for time-series safety
             random_state=42,
             verbose=0  # Reduce verbosity
         )

@@ -586,6 +586,25 @@ class ReturnForecaster:
         # Select feature columns
         feature_cols = [col for col in df.columns if col not in exclude_cols]
 
+        # CRITICAL SAFETY CHECK: Ensure no date-related columns leak into features
+        # Date columns would cause data leakage and unstable predictions
+        dangerous_cols = []
+        for col in feature_cols:
+            col_lower = col.lower()
+            # Check for any date-related column names
+            if any(keyword in col_lower for keyword in ['date', 'time', 'timestamp']):
+                dangerous_cols.append(col)
+
+        if dangerous_cols:
+            print(f"\n❌ CRITICAL ERROR: Date-related columns found in features!")
+            print(f"   These columns would cause data leakage:")
+            for col in dangerous_cols:
+                print(f"   - {col}")
+            print(f"\n   Automatically excluding these columns for safety...")
+            # Remove dangerous columns from feature list
+            feature_cols = [col for col in feature_cols if col not in dangerous_cols]
+            print(f"   ✓ Excluded {len(dangerous_cols)} dangerous columns")
+
         # Extract features (missing values already forward-filled in engineer_features)
         X = df[feature_cols].copy()
 

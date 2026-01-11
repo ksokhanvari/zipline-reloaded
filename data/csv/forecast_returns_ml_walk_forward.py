@@ -1622,6 +1622,8 @@ For full documentation, see README.md in this directory.
             'estpricegrowth_percent': 'Estpricegrowth_percent',
             'gicssectorname': 'GICSSectorName',
             'sharadar_scalemarketcap': 'sharadar_scalemarketcap',
+            'tradedate': 'TradeDate',
+            'instrument': 'Instrument',
         }
 
         # Return mapped name if known, otherwise return original

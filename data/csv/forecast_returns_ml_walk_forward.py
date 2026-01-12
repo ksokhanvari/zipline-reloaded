@@ -242,7 +242,7 @@ class ReturnForecaster:
 
     def __init__(self, lookback_days=10, forecast_days=10, target_return_days=None,
                  n_estimators=300, learning_rate=0.05, max_depth=7, num_leaves=31, no_lag=False,
-                 sample_fraction=1.0, pca_components=None):
+                 sample_fraction=1.0, pca_components=None, lookback_months=None):
         """
         Initialize the return forecaster.
 
@@ -281,6 +281,20 @@ class ReturnForecaster:
                 Dimensionality reduction using Principal Component Analysis
                 Reduces feature space while preserving variance
                 Typical values: 10-50 components
+
+            lookback_months (int): If set, use rolling window of N months for training (default: None)
+                None = Expanding window (train on ALL historical data)
+                12 = Rolling 12-month window (train on last 12 months only)
+                24 = Rolling 24-month window (train on last 24 months only)
+
+                Example with --lookback-months 12:
+                - Jan 2021: Train on Jan 2020 - Dec 2020 (12 months)
+                - Feb 2021: Train on Feb 2020 - Jan 2021 (12 months)
+                - Mar 2021: Train on Mar 2020 - Feb 2021 (12 months)
+
+                Use this to test recency bias vs. long-term patterns.
+                Shorter windows = more responsive to recent changes
+                Longer windows/expanding = more stable, learns long-term patterns
         """
         self.lookback_days = lookback_days
         self.forecast_days = forecast_days
@@ -293,6 +307,7 @@ class ReturnForecaster:
         self.no_lag = no_lag
         self.sample_fraction = sample_fraction
         self.pca_components = pca_components
+        self.lookback_months = lookback_months
         self.model = None  # Will hold trained model
         self.feature_cols = None  # Will hold list of feature column names
         self.pca = None  # Will hold fitted PCA transformer if using PCA
@@ -1063,10 +1078,14 @@ class ReturnForecaster:
     def _walk_forward_predict(self, df, X, y, sample_weights, valid_idx,
                               resume_from_date=None, previous_predictions=None):
         """
-        Expanding window walk-forward prediction with monthly retraining.
+        Walk-forward prediction with monthly retraining (expanding or rolling window).
 
         This eliminates look-ahead bias by ensuring each prediction uses only
         data available at that point in time.
+
+        Window strategies:
+        - Expanding window (lookback_months=None): Train on ALL historical data
+        - Rolling window (lookback_months=N): Train on last N months only
 
         Args:
             df: DataFrame with Date column and engineered features
@@ -1085,8 +1104,12 @@ class ReturnForecaster:
             print("  🔄 RESUMING WALK-FORWARD PREDICTION")
             print(f"  (Starting from {resume_from_date})")
         else:
-            print("  🔄 EXPANDING WINDOW WALK-FORWARD PREDICTION")
-            print("  (Monthly Retraining - NO LOOK-AHEAD BIAS)")
+            if self.lookback_months:
+                print(f"  🔄 ROLLING {self.lookback_months}-MONTH WINDOW WALK-FORWARD PREDICTION")
+                print(f"  (Monthly Retraining - NO LOOK-AHEAD BIAS)")
+            else:
+                print("  🔄 EXPANDING WINDOW WALK-FORWARD PREDICTION")
+                print("  (Monthly Retraining - NO LOOK-AHEAD BIAS)")
         print("=" * 70)
 
         # Convert Date to datetime if needed
@@ -1148,12 +1171,25 @@ class ReturnForecaster:
                 continue
 
             # Training data: all rows BEFORE this month with valid forward_return
-            train_mask = (df['Date'] < first_day_of_month) & valid_idx
+            # Window strategy depends on lookback_months parameter
+            if self.lookback_months:
+                # ROLLING WINDOW: Only last N months before current month
+                # This tests recency bias - recent data may be more relevant
+                lookback_start = first_day_of_month - pd.DateOffset(months=self.lookback_months)
+                train_mask = (df['Date'] >= lookback_start) & (df['Date'] < first_day_of_month) & valid_idx
+            else:
+                # EXPANDING WINDOW: All data before current month (default)
+                # This learns long-term patterns - more stable but slower to adapt
+                train_mask = (df['Date'] < first_day_of_month) & valid_idx
+
             train_positions = np.where(train_mask)[0]  # Get position indices
 
             # Skip if no training data available yet
             if len(train_positions) == 0:
-                print(f"  [{i:3d}/{len(unique_months)}] {current_month}: ⏭️  SKIPPED (no training data yet) - {len(predict_positions):,} rows")
+                if self.lookback_months:
+                    print(f"  [{i:3d}/{len(unique_months)}] {current_month}: ⏭️  SKIPPED (no data in {self.lookback_months}-month window) - {len(predict_positions):,} rows")
+                else:
+                    print(f"  [{i:3d}/{len(unique_months)}] {current_month}: ⏭️  SKIPPED (no training data yet) - {len(predict_positions):,} rows")
                 continue
 
             # Get training data using position-based indexing
@@ -1552,6 +1588,13 @@ For full documentation, see README.md in this directory.
     parser.add_argument('--no-walk-forward', action='store_true',
                         help='Disable expanding window walk-forward training (FASTER but has LOOK-AHEAD BIAS). '
                              'Default: walk-forward is ENABLED for realistic backtesting.')
+    parser.add_argument('--lookback-months', type=int, default=None, metavar='N',
+                        help='Use rolling N-month window for training instead of expanding window (default: None). '
+                             'None = Expanding window (train on ALL historical data). '
+                             '12 = Rolling 12-month window (train on last 12 months only). '
+                             'Use this to test recency bias vs. long-term patterns. '
+                             'Shorter windows = more responsive to recent changes. '
+                             'Longer windows/expanding = more stable, learns long-term patterns.')
     parser.add_argument('--keep-features', action='store_true',
                         help='Keep all engineered features in output (creates large file)')
     parser.add_argument('--export-predictions', action='store_true',
@@ -1815,7 +1858,8 @@ For full documentation, see README.md in this directory.
         max_depth=args.max_depth,
         no_lag=args.no_lag,
         sample_fraction=args.sample_fraction,
-        pca_components=args.pca
+        pca_components=args.pca,
+        lookback_months=args.lookback_months
     )
 
     # Display prediction setup

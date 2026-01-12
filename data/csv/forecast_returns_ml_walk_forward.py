@@ -394,16 +394,20 @@ class ReturnForecaster:
             'Estpricegrowth_percent',
         ]
 
-        # CRITICAL SAFETY: ALWAYS lag price and volume columns
+        # CRITICAL SAFETY: ALWAYS lag price, volume, and market cap columns
         # Even if --no-lag is used, these columns must be lagged to prevent data leakage
-        # Price is used to calculate forward_return, so same-day price would leak information
-        print("  • SAFETY: Always lagging RefPriceClose and RefVolume (even with --no-lag)...")
+        # - Price is used to calculate forward_return, so same-day price would leak information
+        # - Market cap is derived from price (price × shares), so it must also be lagged
+        # - Volume can reflect same-day trading activity, should use prior day
+        print("  • SAFETY: Always lagging RefPriceClose, RefVolume, and CompanyMarketCap (even with --no-lag)...")
         if 'RefPriceClose' in df.columns:
             df['RefPriceClose_lag1'] = df.groupby('Symbol')['RefPriceClose'].shift(1)
         if 'RefVolume' in df.columns:
             df['RefVolume_lag1'] = df.groupby('Symbol')['RefVolume'].shift(1)
+        if 'CompanyMarketCap' in df.columns:
+            df['CompanyMarketCap_lag1'] = df.groupby('Symbol')['CompanyMarketCap'].shift(1)
 
-        # Always use lagged price/volume for features
+        # Always use lagged price/volume/marketcap for features
         price_col = 'RefPriceClose_lag1'
         volume_col = 'RefVolume_lag1'
 
@@ -414,7 +418,8 @@ class ReturnForecaster:
             print("  • Lagging all fundamental columns by 1 day...")
             # Create lagged versions for all fundamentals
             for col in fundamental_cols:
-                if col in df.columns and col not in ['RefPriceClose', 'RefVolume']:  # Skip price/volume (already lagged above)
+                # Skip price/volume/marketcap (already lagged above)
+                if col in df.columns and col not in ['RefPriceClose', 'RefVolume', 'CompanyMarketCap']:
                     df[f'{col}_lag1'] = df.groupby('Symbol')[col].shift(1)
 
         # ===== STEP 2: Price-based features (from lagged price) =====
@@ -443,7 +448,16 @@ class ReturnForecaster:
 
         # Helper function to get correct column name based on no_lag setting
         def get_col(base_name):
-            """Get column name with or without _lag1 suffix based on no_lag flag."""
+            """Get column name with or without _lag1 suffix based on no_lag flag.
+
+            EXCEPTION: RefPriceClose, RefVolume, and CompanyMarketCap are ALWAYS lagged
+            for safety (even with --no-lag).
+            """
+            # These columns are ALWAYS lagged (safety measure)
+            if base_name in ['RefPriceClose', 'RefVolume', 'CompanyMarketCap']:
+                return f'{base_name}_lag1'
+
+            # Other columns depend on no_lag setting
             if self.no_lag:
                 return base_name
             else:
@@ -548,14 +562,14 @@ class ReturnForecaster:
             'sharadar_location', 'sharadar_sector', 'sharadar_industry',
             'sharadar_sicsector', 'sharadar_sicindustry', 'forward_return',
             'volume_ma_20',  # Intermediate calculation
-            'RefPriceClose', 'RefVolume',  # ALWAYS exclude (we use lagged versions)
+            'RefPriceClose', 'RefVolume', 'CompanyMarketCap',  # ALWAYS exclude (we use lagged versions)
         ]
 
         # Exclude original (non-lagged) columns ONLY if not using no_lag mode
         # When no_lag=True, the input is already pre-lagged, so include these columns
+        # NOTE: RefPriceClose, RefVolume, CompanyMarketCap already excluded above (always lagged)
         if not self.no_lag:
             original_cols = [
-                'CompanyMarketCap',
                 'EnterpriseValue_DailyTimeSeries_',
                 'FOCFExDividends_Discrete',
                 'InterestExpense_NetofCapitalizedInterest',
@@ -624,17 +638,10 @@ class ReturnForecaster:
             if is_date_column:
                 dangerous_cols.append(col)
 
-            # Check for non-lagged price/volume columns (RefPriceClose, RefVolume are ALWAYS lagged)
-            # These should ALWAYS have _lag1 suffix, never use original
-            if col in ['RefPriceClose', 'RefVolume'] and not col.endswith('_lag1'):
+            # Check for non-lagged price/volume/marketcap columns
+            # These are ALWAYS lagged (even with --no-lag), should ALWAYS have _lag1 suffix
+            if col in ['RefPriceClose', 'RefVolume', 'CompanyMarketCap'] and not col.endswith('_lag1'):
                 dangerous_cols.append(col)
-
-            # Check for CompanyMarketCap ONLY if NOT using --no-lag mode
-            # With --no-lag, we assume input data is pre-lagged, so CompanyMarketCap is safe
-            # Without --no-lag, CompanyMarketCap is same-day data and must be excluded
-            if not self.no_lag:
-                if col == 'CompanyMarketCap' and not col.endswith('_lag1'):
-                    dangerous_cols.append(col)
 
         if dangerous_cols:
             print(f"\n❌ CRITICAL ERROR: Dangerous columns found in features!")
@@ -842,11 +849,9 @@ class ReturnForecaster:
         Returns:
             np.ndarray: Array of sample weights, same length as df
         """
-        # Use appropriate market cap column based on no_lag setting
-        if self.no_lag:
-            mktcap_col = 'CompanyMarketCap' if 'CompanyMarketCap' in df.columns else 'CompanyMarketCap_lag1'
-        else:
-            mktcap_col = 'CompanyMarketCap_lag1' if 'CompanyMarketCap_lag1' in df.columns else 'CompanyMarketCap'
+        # ALWAYS use lagged market cap (safety measure - even with --no-lag)
+        # CompanyMarketCap is derived from price, so it must be lagged
+        mktcap_col = 'CompanyMarketCap_lag1' if 'CompanyMarketCap_lag1' in df.columns else 'CompanyMarketCap'
 
         # Calculate market cap rank within each date (1 = largest)
         # We rank within date to handle market cap changes over time

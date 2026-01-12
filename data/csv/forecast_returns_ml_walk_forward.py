@@ -599,12 +599,42 @@ class ReturnForecaster:
         dangerous_cols = []
         for col in feature_cols:
             col_lower = col.lower()
-            # Check for date-related column names
-            if any(keyword in col_lower for keyword in ['date', 'time', 'timestamp']):
+
+            # Check for ACTUAL date columns (not just columns with "time" in the name)
+            # Exclude columns with "timeseries" or "dailytime" - those are legitimate fundamental descriptors
+            is_date_column = False
+
+            # Pattern 1: Ends with 'date' (accepteddate_fmp, tradedate, etc.)
+            if col_lower.endswith('date'):
+                is_date_column = True
+            # Pattern 2: Starts with 'date' or 'timestamp'
+            elif col_lower.startswith(('date', 'timestamp')):
+                is_date_column = True
+            # Pattern 3: Contains '_date_' or '_date' (fiscal_date, report_date, etc.)
+            elif '_date' in col_lower or 'date_' in col_lower:
+                is_date_column = True
+            # Pattern 4: Contains 'timestamp' (but not if part of TimeSeries)
+            elif 'timestamp' in col_lower:
+                is_date_column = True
+
+            # Whitelist: NOT a date if it contains "timeseries" or "dailytime" (these are fundamental data descriptors)
+            if is_date_column and ('timeseries' in col_lower or 'dailytime' in col_lower):
+                is_date_column = False
+
+            if is_date_column:
                 dangerous_cols.append(col)
-            # Check for non-lagged price/volume/marketcap columns (must use _lag1 versions)
-            if col in ['RefPriceClose', 'RefVolume', 'CompanyMarketCap'] and not col.endswith('_lag1'):
+
+            # Check for non-lagged price/volume columns (RefPriceClose, RefVolume are ALWAYS lagged)
+            # These should ALWAYS have _lag1 suffix, never use original
+            if col in ['RefPriceClose', 'RefVolume'] and not col.endswith('_lag1'):
                 dangerous_cols.append(col)
+
+            # Check for CompanyMarketCap ONLY if NOT using --no-lag mode
+            # With --no-lag, we assume input data is pre-lagged, so CompanyMarketCap is safe
+            # Without --no-lag, CompanyMarketCap is same-day data and must be excluded
+            if not self.no_lag:
+                if col == 'CompanyMarketCap' and not col.endswith('_lag1'):
+                    dangerous_cols.append(col)
 
         if dangerous_cols:
             print(f"\n❌ CRITICAL ERROR: Dangerous columns found in features!")

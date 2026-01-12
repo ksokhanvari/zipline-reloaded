@@ -394,21 +394,28 @@ class ReturnForecaster:
             'Estpricegrowth_percent',
         ]
 
+        # CRITICAL SAFETY: ALWAYS lag price and volume columns
+        # Even if --no-lag is used, these columns must be lagged to prevent data leakage
+        # Price is used to calculate forward_return, so same-day price would leak information
+        print("  • SAFETY: Always lagging RefPriceClose and RefVolume (even with --no-lag)...")
+        if 'RefPriceClose' in df.columns:
+            df['RefPriceClose_lag1'] = df.groupby('Symbol')['RefPriceClose'].shift(1)
+        if 'RefVolume' in df.columns:
+            df['RefVolume_lag1'] = df.groupby('Symbol')['RefVolume'].shift(1)
+
+        # Always use lagged price/volume for features
+        price_col = 'RefPriceClose_lag1'
+        volume_col = 'RefVolume_lag1'
+
         if self.no_lag:
-            print("  • Skipping lagging (input data assumed to be pre-lagged)")
-            # Use original column names without _lag1 suffix
-            price_col = 'RefPriceClose'
-            volume_col = 'RefVolume'
+            print("  • Skipping lagging for other fundamentals (input assumed to be pre-lagged)")
+            # Don't lag other fundamentals - assume they're already lagged in the input
         else:
             print("  • Lagging all fundamental columns by 1 day...")
-            # Create lagged versions
+            # Create lagged versions for all fundamentals
             for col in fundamental_cols:
-                if col in df.columns:
+                if col in df.columns and col not in ['RefPriceClose', 'RefVolume']:  # Skip price/volume (already lagged above)
                     df[f'{col}_lag1'] = df.groupby('Symbol')[col].shift(1)
-
-            # Use ONLY lagged price for features (not current price)
-            price_col = 'RefPriceClose_lag1'
-            volume_col = 'RefVolume_lag1'
 
         # ===== STEP 2: Price-based features (from lagged price) =====
         print("  • Creating price momentum features...")
@@ -540,14 +547,15 @@ class ReturnForecaster:
             'GICSSectorName', 'sharadar_exchange', 'sharadar_category',
             'sharadar_location', 'sharadar_sector', 'sharadar_industry',
             'sharadar_sicsector', 'sharadar_sicindustry', 'forward_return',
-            'volume_ma_20'  # Intermediate calculation
+            'volume_ma_20',  # Intermediate calculation
+            'RefPriceClose', 'RefVolume',  # ALWAYS exclude (we use lagged versions)
         ]
 
         # Exclude original (non-lagged) columns ONLY if not using no_lag mode
         # When no_lag=True, the input is already pre-lagged, so include these columns
         if not self.no_lag:
             original_cols = [
-                'RefPriceClose', 'RefVolume', 'CompanyMarketCap',
+                'CompanyMarketCap',
                 'EnterpriseValue_DailyTimeSeries_',
                 'FOCFExDividends_Discrete',
                 'InterestExpense_NetofCapitalizedInterest',

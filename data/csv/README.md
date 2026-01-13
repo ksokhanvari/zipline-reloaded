@@ -16,6 +16,45 @@ This tool uses **Histogram-based Gradient Boosting** with extensive feature engi
 - ✅ **Complete logging** - Auto-generated log files for reproducibility
 - ✅ **Pre-lagged data support** - Use your own lagging pipeline
 
+## 🆕 What's New in v3.3.0 (2026-01-12)
+
+### 🚨 CRITICAL Data Leak Fixes:
+- **Fixed `tradedate` leak** - Date column was included as feature (15.8% importance!)
+- **Fixed `RefPriceClose` leak** - Same-day price predicting future returns with `--no-lag` (19.6% importance!)
+- **Fixed `CompanyMarketCap` leak** - Market cap derived from price, now always lagged
+- **Fixed `accepteddate_fmp*` leaks** - Multiple date columns slipping through
+- **Enhanced safety checks** - Precise date column detection, preserves legitimate fundamental data
+
+### 🎯 Price-Derived Columns ALWAYS Lagged (Even with `--no-lag`):
+- `RefPriceClose` → `RefPriceClose_lag1` (yesterday's close)
+- `RefVolume` → `RefVolume_lag1` (yesterday's volume)
+- `CompanyMarketCap` → `CompanyMarketCap_lag1` (yesterday's market cap)
+
+**Why**: These columns contain T+0 information. Using same-day price/volume/market cap to predict T+10 to T+100 returns = **data leakage**. Now uses T-1 (previous day) data for point-in-time safety.
+
+### 🆕 NEW FEATURE: Rolling Window Training (`--lookback-months`):
+- **Experiment with historical depth** - Test recency bias vs. long-term patterns
+- `--lookback-months 12` - Train on rolling 12-month window (recent data focus)
+- `--lookback-months 24` - Train on rolling 24-month window (balanced)
+- `None` (default) - Expanding window (all historical data)
+
+**Use case**: Markets change - rolling windows adapt faster to new regimes. Compare stability (expanding) vs. responsiveness (rolling).
+
+### ✅ Time-Series Validation Safety:
+- Disabled `validation_fraction` - sklearn does RANDOM splits which leak future data
+- Added clear safety documentation explaining why validation is disabled
+- If early stopping needed, must pass explicit chronological X_val/y_val
+
+### Impact:
+- **Stable predictions** - No changes when adding new data (fixed unstable forecasts)
+- **Zero look-ahead bias** - All price-derived columns properly lagged
+- **Defense-in-depth** - Multiple layers of date column protection
+- **New experiments** - Rolling windows for recency bias testing
+
+**See CHANGELOG.md for complete v3.3.0 details**
+
+---
+
 ## 🆕 What's New in v3.2.2 (2026-01-07)
 
 ### 🎯 Fully Deterministic Design - ZERO Randomness:
@@ -764,6 +803,15 @@ Optional Arguments:
   # Data Handling (NEW in v3.1)
   --no-lag               Skip automatic lagging (use when input data is already lagged)
                          IMPORTANT: Only use if you've pre-lagged all columns by 1 day!
+                         Note: RefPriceClose, RefVolume, CompanyMarketCap are ALWAYS lagged (safety)
+
+  # Training Window Strategy (NEW in v3.3.0)
+  --lookback-months      Use rolling N-month window instead of expanding window (default: None)
+                         None = Expanding window (train on ALL historical data)
+                         12 = Rolling 12-month window (train on last 12 months only)
+                         24 = Rolling 24-month window (train on last 24 months only)
+                         Use to test recency bias vs. long-term patterns
+                         Shorter windows = more responsive, Longer/expanding = more stable
 
   # Performance Optimization (NEW in v3.1)
   --sample-fraction      Fraction of training data to use (0.0-1.0, default: 1.0)

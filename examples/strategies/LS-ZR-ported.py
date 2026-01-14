@@ -1319,12 +1319,12 @@ def process_universe(context, df, data):
             context.season = 0
 
         df['estrank'] = (
-          df['MLfactor'].rank() +
+          #df['MLfactor'].rank() +
            df['predicted_return'].rank() +
             (df['entval'].rank() * 2) +
             (df['cash_return'].rank()) +
-            df['eps_gr_mean'].rank() * (4 if context.season == 1 else 1) +
-           (df[['doll_vol', 'slope90', 'eps_ActualSurprise_prev_Q_percent']].rank().sum(axis=1) / 3)
+            df['eps_gr_mean'].rank() * (4 if context.season == 1 else 1) #+
+           #(df[['doll_vol', 'slope90', 'eps_ActualSurprise_prev_Q_percent']].rank().sum(axis=1) / 3)
         )
 
     print(f"Filtered stock universe size {df.shape}")

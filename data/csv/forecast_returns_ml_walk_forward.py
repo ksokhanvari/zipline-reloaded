@@ -519,13 +519,17 @@ class ReturnForecaster:
         df['log_marketcap'] = np.log1p(df[get_col('CompanyMarketCap')])
 
         # ===== STEP 4: Cross-sectional features (rank within date) =====
-        print("  • Creating cross-sectional rankings...")
-        rank_cols = [get_col('CompanyMarketCap'), 'return_20d', 'volatility_20d',
-                     'roe', 'roa', 'ev_to_ebitda', 'ltg']
+        # IMPORTANT: Rankings are computed PER-MONTH in walk-forward loop (not here)
+        # This ensures adding new data doesn't change historical rankings
+        # We just prepare the list of columns to rank later
+        print("  • Preparing cross-sectional ranking features (computed per-month in walk-forward)...")
+        self._rank_cols = [get_col('CompanyMarketCap'), 'return_20d', 'volatility_20d',
+                           'roe', 'roa', 'ev_to_ebitda', 'ltg']
+        # Filter to only columns that exist
+        self._rank_cols = [col for col in self._rank_cols if col in df.columns]
+        print(f"    - Will rank {len(self._rank_cols)} features per month: {', '.join(self._rank_cols)}")
 
-        for col in rank_cols:
-            if col in df.columns:
-                df[f'{col}_rank'] = df.groupby('Date')[col].rank(pct=True)
+        # Note: Actual ranking happens in _walk_forward_predict() to ensure reproducibility
 
         # ===== STEP 5: Additional lag features (2 days back) =====
         print("  • Creating additional lagged features...")
@@ -674,6 +678,16 @@ class ReturnForecaster:
         # Extract features (missing values already forward-filled in engineer_features)
         X = df[feature_cols].copy()
 
+        # Add placeholder ranking columns (will be computed per-month in walk-forward)
+        # This ensures ranking columns are included in feature list
+        if hasattr(self, '_rank_cols') and self._rank_cols:
+            for col in self._rank_cols:
+                rank_col = f'{col}_rank'
+                if rank_col not in X.columns:
+                    X[rank_col] = np.nan  # Will be filled per-month in walk-forward
+                    feature_cols.append(rank_col)
+            print(f"  • Added {len(self._rank_cols)} ranking feature placeholders (computed per-month)")
+
         # Handle categorical columns (convert to codes)
         categorical_cols = []
         for col in X.columns:
@@ -689,7 +703,14 @@ class ReturnForecaster:
 
         # Any remaining NaNs should be very rare (already forward-filled)
         # Fill with 0 as a safe default (e.g., first row per symbol before any data)
-        X = X.fillna(0)
+        # EXCEPT ranking columns which are computed per-month in walk-forward
+        if hasattr(self, '_rank_cols') and self._rank_cols:
+            rank_cols_list = [f'{col}_rank' for col in self._rank_cols if f'{col}_rank' in X.columns]
+            non_rank_cols = [col for col in X.columns if col not in rank_cols_list]
+            X[non_rank_cols] = X[non_rank_cols].fillna(0)
+            # Leave ranking columns as NaN (will be computed per-month)
+        else:
+            X = X.fillna(0)
 
         # Final safety check: ensure all columns are numeric
         for col in X.columns:
@@ -1192,7 +1213,26 @@ class ReturnForecaster:
                     print(f"  [{i:3d}/{len(unique_months)}] {current_month}: ⏭️  SKIPPED (no training data yet) - {len(predict_positions):,} rows")
                 continue
 
-            # Get training data using position-based indexing
+            # REPRODUCIBILITY FIX: Compute rankings on training window + current month only
+            # This ensures adding new data doesn't change historical rankings
+            # Combine training and prediction positions for ranking
+            month_positions = np.concatenate([train_positions, predict_positions])
+            month_df = df.iloc[month_positions].copy()
+
+            # Compute rankings within each date using only this month's universe
+            if hasattr(self, '_rank_cols') and self._rank_cols:
+                for col in self._rank_cols:
+                    if col in month_df.columns:
+                        month_df[f'{col}_rank'] = month_df.groupby('Date')[col].rank(pct=True)
+
+            # Update X with new ranking features for this month
+            rank_feature_cols = [f'{col}_rank' for col in self._rank_cols if col in month_df.columns]
+            for rank_col in rank_feature_cols:
+                if rank_col in month_df.columns:
+                    # Update the original X dataframe with this month's rankings
+                    X.loc[month_df.index, rank_col] = month_df[rank_col]
+
+            # Get training data using position-based indexing (now with updated rankings)
             X_train = X.iloc[train_positions]
             y_train = y[train_positions]
             weights_train = sample_weights[train_positions]
@@ -1350,20 +1390,36 @@ class ReturnForecaster:
             for col in non_numeric_cols:
                 X[col] = pd.to_numeric(X[col], errors='coerce')
 
-        # Count inf/nan BEFORE cleaning
-        inf_mask = np.isinf(X.values)
-        nan_mask = np.isnan(X.values)
+        # Count inf/nan BEFORE cleaning (excluding ranking columns which are intentionally NaN)
+        if hasattr(self, '_rank_cols') and self._rank_cols:
+            rank_cols_list = [f'{col}_rank' for col in self._rank_cols if f'{col}_rank' in X.columns]
+            non_rank_cols = [col for col in X.columns if col not in rank_cols_list]
+            X_non_rank = X[non_rank_cols]
+        else:
+            rank_cols_list = []
+            X_non_rank = X
+
+        inf_mask = np.isinf(X_non_rank.values)
+        nan_mask = np.isnan(X_non_rank.values)
         inf_count = inf_mask.sum()
         nan_count = nan_mask.sum()
 
         if inf_count > 0 or nan_count > 0:
-            print(f"  • Found {inf_count:,} inf values, {nan_count:,} nan values")
+            print(f"  • Found {inf_count:,} inf values, {nan_count:,} nan values (excluding ranking columns)")
 
         # Replace inf with nan, then fill all NaN with 0
-        X_clean = X.replace([np.inf, -np.inf], np.nan).fillna(0)
+        # EXCEPT ranking columns which are computed per-month in walk-forward
+        X_clean = X.copy()
+        if rank_cols_list:
+            X_clean[non_rank_cols] = X[non_rank_cols].replace([np.inf, -np.inf], np.nan).fillna(0)
+            # Leave ranking columns as-is (NaN, will be filled per-month)
+        else:
+            X_clean = X.replace([np.inf, -np.inf], np.nan).fillna(0)
 
         if inf_count > 0 or nan_count > 0:
             print(f"  • Replaced with 0 (safe default for model training)")
+        if rank_cols_list:
+            print(f"  • Kept {len(rank_cols_list)} ranking columns as NaN (computed per-month in walk-forward)")
 
         # PRODUCTION SAFETY: Skip statistical outlier clipping in walk-forward mode
         # Reason: Computing statistics from ALL data (including future months) would

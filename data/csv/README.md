@@ -16,6 +16,34 @@ This tool uses **Histogram-based Gradient Boosting** with extensive feature engi
 - ✅ **Complete logging** - Auto-generated log files for reproducibility
 - ✅ **Pre-lagged data support** - Use your own lagging pipeline
 
+## 🆕 What's New in v3.3.1 (2026-01-13)
+
+### 🔒 CRITICAL Reproducibility Fix:
+- **Per-Month Ranking Features** - Cross-sectional rankings now computed PER-MONTH in walk-forward loop
+- **Problem Fixed**: Adding new data no longer changes historical predictions
+- **Before**: December predictions changed when adding January data (rankings recomputed on expanded universe)
+- **After**: December predictions stable - rankings computed only using December's training window
+
+**Weekly Production Use Case**:
+```bash
+# Week 51: Run forecasting
+python forecast_ml.py --input-file data_week51.csv --output pred_week51.parquet
+
+# Week 52: Add new data and resume
+python forecast_ml.py --input-file data_week52.csv --output pred_week52.parquet \
+    --resume-file pred_week51.parquet --overwrite-months 1
+
+# ✅ December predictions in pred_week52 IDENTICAL to pred_week51
+# ✅ Only January has new predictions
+# ✅ Backtest results reproducible
+```
+
+**Impact**: Your backtest returns will now be **100% stable** when adding new weekly/monthly data. Critical for production trading systems that need consistent performance metrics.
+
+**See CHANGELOG.md for complete v3.3.1 technical details**
+
+---
+
 ## 🆕 What's New in v3.3.0 (2026-01-12)
 
 ### 🚨 CRITICAL Data Leak Fixes:

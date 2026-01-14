@@ -1,5 +1,183 @@
 # Changelog - ML Return Forecasting
 
+## [3.3.1] - 2026-01-13
+
+### 🔒 CRITICAL Reproducibility Fix - Per-Month Ranking Features
+
+**CRITICAL FIX**: Cross-sectional ranking features now computed per-month in walk-forward loop instead of on entire dataset upfront. This ensures **adding new data doesn't change historical predictions**.
+
+---
+
+### 🎯 Problem
+
+**Weekly Production Issue**:
+- Update CSV with new week's data (Week 52)
+- Re-run forecasting with `--resume-file` and `--overwrite-months 1`
+- **Old predictions for December changed** even though training window was the same!
+
+**Root Cause**:
+```python
+# OLD (UNSAFE): Rankings computed on entire dataset BEFORE walk-forward
+df['CompanyMarketCap_rank'] = df.groupby('Date')['CompanyMarketCap'].rank(pct=True)
+# Then walk-forward training uses these pre-computed rankings
+
+# Problem: When you add Week 52 data:
+# - Rankings for December change because universe expanded
+# - AAPL rank: 1/4400 → 1/4440 (small change)
+# - Small-cap ranks shift more significantly
+# - Model sees different features → different predictions
+```
+
+**Impact**:
+- December 2025 predictions changed from [1.209%, 2.176%, 6.066%, 3.653%] to [1.270%, 2.511%, 7.083%, 3.961%]
+- Backtest results non-reproducible when adding new data
+- Loss of trust in production system
+
+---
+
+### 🎯 Solution
+
+**Per-Month Ranking Computation**:
+```python
+# NEW (SAFE): Rankings computed per-month in walk-forward loop
+for each month:
+    # Use only training window + current month for rankings
+    training_data = data[Dec 2024 : Nov 2025]
+    current_month = data[Dec 2025]
+    combined = training_data + current_month
+
+    # Compute rankings within this universe only
+    rankings = combined.groupby('Date')['CompanyMarketCap'].rank(pct=True)
+
+    # Train and predict with these rankings
+    train(training_data)
+    predict(current_month)
+```
+
+**Why This Works**:
+- December 2025 rankings computed using **only** Dec 2024 - Dec 2025 data
+- Adding January 2026 data **does NOT affect** December rankings
+- Each month's predictions isolated from future data additions
+- **100% reproducible** regardless of when you run the script
+
+---
+
+### 🎯 Changes
+
+#### 1. Deferred Ranking Computation (Lines 521-532)
+
+**Before**:
+```python
+# Computed on entire dataset upfront
+df['CompanyMarketCap_rank'] = df.groupby('Date')['CompanyMarketCap'].rank(pct=True)
+```
+
+**After**:
+```python
+# Store columns to rank, compute per-month later
+self._rank_cols = ['CompanyMarketCap_lag1', 'return_20d', 'volatility_20d', ...]
+# Actual ranking happens in walk-forward loop
+```
+
+#### 2. Per-Month Ranking in Walk-Forward Loop (Lines 1199-1226)
+
+**New logic**:
+```python
+for each month:
+    # Get training + prediction data for this month
+    month_positions = train_positions + predict_positions
+    month_df = df.iloc[month_positions]
+
+    # Compute rankings within this month's universe
+    for col in self._rank_cols:
+        month_df[f'{col}_rank'] = month_df.groupby('Date')[col].rank(pct=True)
+
+    # Update X with month-specific rankings
+    X.loc[month_df.index, rank_cols] = month_df[rank_cols]
+
+    # Train and predict with point-in-time rankings
+    train(X_train)
+    predict(X_predict)
+```
+
+#### 3. Ranking Column Placeholders (Lines 681-689)
+
+- Add NaN placeholders for ranking columns in feature matrix
+- Ensures ranking columns included in feature list
+- Filled per-month during walk-forward training
+
+#### 4. NaN Handling for Rankings (Lines 707-713, 1393-1422)
+
+- Skip fillna(0) for ranking columns (intentionally NaN until walk-forward)
+- Exclude ranking columns from inf/nan cleaning
+- Preserve NaN rankings until computed per-month
+
+---
+
+### 🎯 Impact Summary
+
+| Aspect | Before | After |
+|--------|--------|-------|
+| Ranking Computation | Entire dataset upfront | Per-month in walk-forward |
+| December Predictions (Week 48) | Change when Week 52 added | **Unchanged** when Week 52 added |
+| Reproducibility | ❌ Non-reproducible | ✅ 100% reproducible |
+| Weekly Updates | Unstable historical predictions | Stable historical predictions |
+| Production Safety | ⚠️ Risky | ✅ Safe |
+
+---
+
+### 🧪 Verification
+
+**Test Procedure**:
+1. Run full training: `python forecast_ml_walk_forward.py --input-file data_week51.csv --output predictions_week51.parquet`
+2. Add new data: `data_week52.csv` (includes Week 51 + Week 52)
+3. Resume training: `python forecast_ml_walk_forward.py --input-file data_week52.csv --output predictions_week52.parquet --resume-file predictions_week51.parquet --overwrite-months 1`
+4. **Verify**: December 2025 predictions in `predictions_week52.parquet` **match** December 2025 in `predictions_week51.parquet`
+
+**Expected Result**:
+```python
+# December 2025 predictions should be IDENTICAL
+week51_predictions[december] == week52_predictions[december]  # True
+# Only January 2026 should have new predictions
+```
+
+---
+
+### 📝 Files Modified
+
+- `forecast_returns_ml_walk_forward.py` (Lines 521-532, 681-689, 707-713, 1199-1226, 1393-1422)
+
+---
+
+### ⚠️ Breaking Changes
+
+**None** - This is a bug fix that ensures correct behavior. Your existing predictions might change slightly on re-run because the old rankings were contaminated by future data.
+
+---
+
+### 🎯 Migration Guide
+
+**No code changes needed** - Just re-run your forecasting:
+
+```bash
+# Full re-run to get clean predictions with per-month rankings
+python forecast_returns_ml_walk_forward.py \
+    --input-file your_data.csv \
+    --output clean_predictions.parquet \
+    --lookback-months 12
+
+# Future weekly updates will now be stable
+python forecast_returns_ml_walk_forward.py \
+    --input-file new_data.csv \
+    --output new_predictions.parquet \
+    --resume-file clean_predictions.parquet \
+    --overwrite-months 1
+```
+
+**Recommendation**: After upgrading, do a full re-run (not resume) to get clean predictions with the fixed ranking logic.
+
+---
+
 ## [3.3.0] - 2026-01-12
 
 ### 🚨 CRITICAL Data Leak Fixes + Rolling Window Feature

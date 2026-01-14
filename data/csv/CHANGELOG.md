@@ -1,5 +1,69 @@
 # Changelog - ML Return Forecasting
 
+## [3.3.2] - 2026-01-13
+
+### 🎛️ Feature: Added `--num-leaves` Flag for Easy Model Capacity Tuning
+
+**NEW**: Command-line flag to control model capacity without editing code.
+
+---
+
+### 🎯 What's New
+
+**New Flag**:
+```bash
+--num-leaves N    # Maximum number of leaves per tree (default: 31)
+```
+
+**Usage Examples**:
+
+```bash
+# Conservative (default) - 21K rows per leaf
+python forecast_ml_walk_forward.py --input-file data.csv --output pred.parquet
+
+# Balanced (recommended) - 10K rows per leaf
+python forecast_ml_walk_forward.py --input-file data.csv --output pred.parquet --num-leaves 63
+
+# High capacity - 5K rows per leaf
+python forecast_ml_walk_forward.py --input-file data.csv --output pred.parquet --num-leaves 127
+```
+
+**Why This Matters**:
+- **Model capacity** = how complex patterns the model can learn
+- **More leaves** = more granular predictions (e.g., sector-specific patterns)
+- **Your 650K training rows** support 63-127 leaves safely (rule: >1000 rows per leaf)
+
+**When to Experiment**:
+- Keep **31** (default) if current accuracy meets needs
+- Try **63** for potentially better signal capture (balanced)
+- Try **127** for maximum capacity (may improve weak signal detection)
+
+**Expected Impact**:
+- 63 leaves: ~10% slower training, potential 1-2% correlation improvement
+- 127 leaves: ~15% slower training, captures subtle sector/size/style interactions
+
+---
+
+### 📝 Files Modified
+
+- Added `--num-leaves` CLI argument with helpful guidance
+- Passed to `ReturnForecaster` initialization
+- Logged in MODEL PARAMETERS output for reproducibility
+
+---
+
+### 🧪 Recommendation
+
+**Test on your production data**:
+1. Run with default (`--num-leaves 31`) - baseline
+2. Run with `--num-leaves 63` - experiment
+3. Compare correlation and backtest returns
+4. If improvement, keep 63; if not, revert to 31
+
+**Your data profile** (650K rows, 300 features) has plenty of budget for higher capacity.
+
+---
+
 ## [3.3.1] - 2026-01-13
 
 ### 🔒 CRITICAL Reproducibility Fix - Per-Month Ranking Features

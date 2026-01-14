@@ -16,6 +16,34 @@ This tool uses **Histogram-based Gradient Boosting** with extensive feature engi
 - ✅ **Complete logging** - Auto-generated log files for reproducibility
 - ✅ **Pre-lagged data support** - Use your own lagging pipeline
 
+## 🆕 What's New in v3.3.2 (2026-01-13)
+
+### 🎛️ NEW: `--num-leaves` Flag for Model Capacity Tuning:
+- **Easy experimentation** - Control model capacity from command line
+- **No code editing** - Just add `--num-leaves 63` to your command
+- **Smart defaults** - Helpful guidance for your data size (31/63/127)
+
+**Why Use This**:
+```bash
+# Your data: 650K rows with 300 features
+# Default: 31 leaves = 21K rows per leaf (conservative)
+# Recommended: 63 leaves = 10K rows per leaf (balanced capacity)
+# High capacity: 127 leaves = 5K rows per leaf (capture subtle patterns)
+
+# Try balanced capacity
+python forecast_ml_walk_forward.py \
+    --input-file data.csv \
+    --output predictions.parquet \
+    --num-leaves 63 \
+    --lookback-months 12
+```
+
+**Expected Impact**: With 650K rows, increasing to 63-127 leaves may improve correlation by 1-2% (e.g., 80% → 82%) by capturing sector-specific and interaction patterns. Test and compare!
+
+**See CHANGELOG.md for complete v3.3.2 details**
+
+---
+
 ## 🆕 What's New in v3.3.1 (2026-01-13)
 
 ### 🔒 CRITICAL Reproducibility Fix:
@@ -827,6 +855,10 @@ Optional Arguments:
   --n-estimators         Number of boosting rounds (default: 300)
   --learning-rate        Learning rate (default: 0.05)
   --max-depth            Maximum tree depth (default: 7)
+  --num-leaves           Maximum leaves per tree (default: 31) (NEW in v3.3.2)
+                         Controls model capacity. With 650K rows, safe values:
+                         31 (conservative), 63 (balanced), 127 (high capacity)
+                         Rule: >1000 rows per leaf to avoid overfitting
 
   # Data Handling (NEW in v3.1)
   --no-lag               Skip automatic lagging (use when input data is already lagged)

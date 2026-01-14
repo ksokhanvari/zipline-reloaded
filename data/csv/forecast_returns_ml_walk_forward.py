@@ -1639,6 +1639,10 @@ For full documentation, see README.md in this directory.
                         help='Learning rate (default: 0.05)')
     parser.add_argument('--max-depth', type=int, default=7,
                         help='Maximum tree depth (default: 7)')
+    parser.add_argument('--num-leaves', type=int, default=31,
+                        help='Maximum number of leaves per tree (default: 31). '
+                             'Controls model capacity. With 650K rows, safe values: 31 (conservative), '
+                             '63 (balanced), 127 (high capacity). Rule: >1000 rows per leaf.')
     parser.add_argument('--no-cv', action='store_true',
                         help='Skip cross-validation (faster, only used if --no-walk-forward is set)')
     parser.add_argument('--no-walk-forward', action='store_true',
@@ -1912,6 +1916,7 @@ For full documentation, see README.md in this directory.
         n_estimators=args.n_estimators,
         learning_rate=args.learning_rate,
         max_depth=args.max_depth,
+        num_leaves=args.num_leaves,
         no_lag=args.no_lag,
         sample_fraction=args.sample_fraction,
         pca_components=args.pca,
@@ -1937,6 +1942,7 @@ For full documentation, see README.md in this directory.
     print(f"  • n_estimators: {args.n_estimators}")
     print(f"  • learning_rate: {args.learning_rate}")
     print(f"  • max_depth: {args.max_depth}")
+    print(f"  • num_leaves: {args.num_leaves}")
     print(f"  • walk_forward: {not args.no_walk_forward}")
     if args.resume_file:
         print(f"  • resume_file: {args.resume_file} (overwrite_months={args.overwrite_months})")

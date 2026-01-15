@@ -957,7 +957,7 @@ class ReturnForecaster:
             max_depth=self.max_depth,
             learning_rate=self.learning_rate,
             max_leaf_nodes=self.num_leaves,
-            min_samples_leaf=50,  # Increased from 20 for more stable splits with 800K+ rows
+            min_samples_leaf=100,  # 0.0125% of 800K rows (follows 0.01-0.05% rule for stability)
             l2_regularization=0.1,
             max_bins=255,
             # TIME-SERIES SAFETY: Disable automatic validation to prevent look-ahead bias

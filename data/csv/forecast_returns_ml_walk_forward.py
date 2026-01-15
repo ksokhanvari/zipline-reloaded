@@ -76,6 +76,16 @@ from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from sklearn.inspection import permutation_importance
 
+# Temporal diagnostics
+try:
+    from statsmodels.stats.diagnostic import acorr_ljungbox
+    from statsmodels.tsa.stattools import acf, pacf
+    STATSMODELS_AVAILABLE = True
+except ImportError:
+    STATSMODELS_AVAILABLE = False
+    warnings.warn("statsmodels not available - temporal diagnostics will be skipped. "
+                  "Install with: pip install statsmodels")
+
 # Suppress warnings for cleaner output
 warnings.filterwarnings('ignore')
 
@@ -1096,6 +1106,198 @@ class ReturnForecaster:
 
         return importance_df
 
+    def temporal_diagnostics(self, df, predictions, nlags=20, significance_level=0.05):
+        """
+        Perform temporal diagnostics on residuals to detect:
+        1. Autocorrelation (temporal structure leakage)
+        2. Look-ahead bias indicators
+        3. Prediction stability over time
+
+        Args:
+            df: DataFrame with 'Date', 'Symbol', 'forward_return', and predictions
+            predictions: Array of predictions (aligned with df)
+            nlags: Number of lags for ACF/PACF analysis (default: 20)
+            significance_level: Significance level for tests (default: 0.05)
+
+        Returns:
+            dict: Diagnostic results and warnings
+        """
+        if not STATSMODELS_AVAILABLE:
+            print("\n⚠️  Temporal diagnostics skipped (statsmodels not installed)")
+            return {'status': 'skipped', 'reason': 'statsmodels not available'}
+
+        print("\n" + "=" * 70)
+        print("📊 TEMPORAL DIAGNOSTICS - Residual Analysis")
+        print("=" * 70)
+
+        # Filter to rows with both actual and predicted values
+        valid_mask = ~np.isnan(predictions) & df['forward_return'].notna()
+
+        if valid_mask.sum() < 100:
+            print("⚠️  Insufficient data for temporal diagnostics (<100 observations)")
+            return {'status': 'skipped', 'reason': 'insufficient data'}
+
+        df_valid = df[valid_mask].copy()
+        y_true = df_valid['forward_return'].values
+        y_pred = predictions[valid_mask]
+
+        # Compute residuals (actual - predicted)
+        residuals = y_true - y_pred
+
+        print(f"\n📈 Residual Statistics:")
+        print(f"  • Valid observations: {len(residuals):,}")
+        print(f"  • Mean residual: {residuals.mean():+.4f}%")
+        print(f"  • Std deviation: {residuals.std():.4f}%")
+        print(f"  • Min residual: {residuals.min():+.2f}%")
+        print(f"  • Max residual: {residuals.max():+.2f}%")
+
+        # Sort by date for time-series analysis
+        df_valid = df_valid.copy()
+        df_valid['residual'] = residuals
+        df_valid = df_valid.sort_values('Date')
+        residuals_sorted = df_valid['residual'].values
+
+        # 1. Autocorrelation Function (ACF)
+        print(f"\n🔍 Autocorrelation Analysis (ACF):")
+        acf_values = acf(residuals_sorted, nlags=nlags, fft=False)
+
+        # Critical value for 95% confidence (approximate: 1.96 / sqrt(n))
+        critical_value = 1.96 / np.sqrt(len(residuals_sorted))
+
+        significant_lags = []
+        for lag in range(1, nlags + 1):
+            if abs(acf_values[lag]) > critical_value:
+                significant_lags.append((lag, acf_values[lag]))
+
+        if significant_lags:
+            print(f"  ⚠️  SIGNIFICANT AUTOCORRELATION DETECTED at {len(significant_lags)} lags:")
+            for lag, value in significant_lags[:5]:  # Show first 5
+                print(f"      Lag {lag:2d}: {value:+.4f} (threshold: ±{critical_value:.4f})")
+            if len(significant_lags) > 5:
+                print(f"      ... and {len(significant_lags) - 5} more lags")
+            print(f"\n  ⚠️  WARNING: Model may be leaking temporal structure!")
+            print(f"      • Residuals show time-series patterns")
+            print(f"      • Possible causes:")
+            print(f"          1. Look-ahead bias in features")
+            print(f"          2. Missing temporal features (lags, momentum)")
+            print(f"          3. Insufficient feature engineering")
+        else:
+            print(f"  ✅ No significant autocorrelation detected")
+            print(f"     Residuals appear random (good!)")
+
+        # 2. Ljung-Box Test (omnibus test for autocorrelation)
+        print(f"\n📊 Ljung-Box Test (H0: No autocorrelation):")
+        try:
+            lb_result = acorr_ljungbox(residuals_sorted, lags=[10, 20], return_df=True)
+
+            for lag in lb_result.index:
+                p_value = lb_result.loc[lag, 'lb_pvalue']
+                is_significant = p_value < significance_level
+
+                status = "❌ REJECT H0" if is_significant else "✅ ACCEPT H0"
+                print(f"  • Lag {lag:2d}: p-value = {p_value:.4f} {status}")
+
+                if is_significant:
+                    print(f"      ⚠️  Significant autocorrelation up to lag {lag}")
+
+            # Overall assessment
+            any_significant = (lb_result['lb_pvalue'] < significance_level).any()
+            if any_significant:
+                print(f"\n  ⚠️  WARNING: Ljung-Box test indicates temporal dependencies!")
+            else:
+                print(f"\n  ✅ Ljung-Box test: No significant temporal dependencies")
+
+        except Exception as e:
+            print(f"  ⚠️  Ljung-Box test failed: {e}")
+
+        # 3. Temporal stability - check if error patterns change over time
+        print(f"\n📅 Temporal Stability Analysis:")
+
+        # Split into quartiles by time
+        n_periods = 4
+        period_size = len(df_valid) // n_periods
+
+        print(f"  • Splitting data into {n_periods} time periods:")
+        for i in range(n_periods):
+            start_idx = i * period_size
+            end_idx = (i + 1) * period_size if i < n_periods - 1 else len(df_valid)
+
+            period_residuals = df_valid.iloc[start_idx:end_idx]['residual']
+            period_dates = df_valid.iloc[start_idx:end_idx]['Date']
+
+            mean_res = period_residuals.mean()
+            std_res = period_residuals.std()
+
+            print(f"      Period {i+1} ({period_dates.min()} to {period_dates.max()}):")
+            print(f"        Mean: {mean_res:+.4f}%, Std: {std_res:.4f}%")
+
+        # Check if mean/std are stable across periods (using coefficient of variation)
+        period_means = []
+        period_stds = []
+
+        for i in range(n_periods):
+            start_idx = i * period_size
+            end_idx = (i + 1) * period_size if i < n_periods - 1 else len(df_valid)
+            period_residuals = df_valid.iloc[start_idx:end_idx]['residual']
+            period_means.append(period_residuals.mean())
+            period_stds.append(period_residuals.std())
+
+        mean_stability = np.std(period_means) / (np.mean(np.abs(period_means)) + 1e-8)
+        std_stability = np.std(period_stds) / np.mean(period_stds)
+
+        print(f"\n  • Stability metrics:")
+        print(f"      Mean stability (CV): {mean_stability:.4f} {'✅ Stable' if mean_stability < 0.5 else '⚠️  Unstable'}")
+        print(f"      Std stability (CV): {std_stability:.4f} {'✅ Stable' if std_stability < 0.3 else '⚠️  Unstable'}")
+
+        # Summary
+        print(f"\n" + "=" * 70)
+        print(f"📋 SUMMARY")
+        print(f"=" * 70)
+
+        warnings_found = []
+
+        if significant_lags:
+            warnings_found.append(f"Significant ACF at {len(significant_lags)} lags")
+
+        if any_significant:
+            warnings_found.append("Ljung-Box test rejected (temporal dependencies)")
+
+        if mean_stability > 0.5:
+            warnings_found.append("Unstable mean across time periods")
+
+        if std_stability > 0.3:
+            warnings_found.append("Unstable variance across time periods")
+
+        if warnings_found:
+            print(f"⚠️  WARNINGS DETECTED:")
+            for warning in warnings_found:
+                print(f"  • {warning}")
+            print(f"\n💡 Recommendations:")
+            print(f"  1. Check for look-ahead bias in feature engineering")
+            print(f"  2. Verify all features are properly lagged")
+            print(f"  3. Consider adding more temporal features (momentum, lags)")
+            print(f"  4. Review walk-forward logic for date alignment issues")
+        else:
+            print(f"✅ NO WARNINGS - Model appears temporally sound")
+            print(f"  • Residuals show no significant autocorrelation")
+            print(f"  • Predictions stable across time periods")
+            print(f"  • No evidence of look-ahead bias")
+
+        print(f"=" * 70)
+
+        # Return results
+        return {
+            'status': 'completed',
+            'n_observations': len(residuals),
+            'mean_residual': float(residuals.mean()),
+            'std_residual': float(residuals.std()),
+            'significant_acf_lags': len(significant_lags),
+            'ljungbox_rejected': any_significant if 'any_significant' in locals() else None,
+            'mean_stability': float(mean_stability),
+            'std_stability': float(std_stability),
+            'warnings': warnings_found
+        }
+
     def _walk_forward_predict(self, df, X, y, sample_weights, valid_idx,
                               resume_from_date=None, previous_predictions=None):
         """
@@ -1278,7 +1480,7 @@ class ReturnForecaster:
         return predictions
 
     def fit_predict(self, df, use_cv=True, keep_engineered_features=False, walk_forward=True,
-                   resume_from_date=None, previous_predictions=None):
+                   resume_from_date=None, previous_predictions=None, run_temporal_diagnostics=False):
         """
         Complete pipeline: engineer features, train model, make predictions.
 
@@ -1292,6 +1494,7 @@ class ReturnForecaster:
                          If False, use single model trained on all data (FASTER but has look-ahead bias)
             resume_from_date: Optional date to resume from (for checkpoint resume)
             previous_predictions: Optional DataFrame of previous predictions (for checkpoint resume)
+            run_temporal_diagnostics: If True, run temporal diagnostics after predictions (default: False)
 
         Returns:
             DataFrame with predictions (and original columns only by default)
@@ -1556,6 +1759,20 @@ class ReturnForecaster:
         # Add predictions to ALL rows
         df['predicted_return'] = predictions
 
+        # ============================================================
+        # TEMPORAL DIAGNOSTICS (if enabled)
+        # ============================================================
+        if run_temporal_diagnostics:
+            if STATSMODELS_AVAILABLE:
+                print("\n" + "=" * 70)
+                print("🔍 RUNNING TEMPORAL DIAGNOSTICS")
+                print("=" * 70)
+                diagnostics_result = self.temporal_diagnostics(df, predictions)
+                print("\n" + "=" * 70)
+            else:
+                print("\n⚠️  Temporal diagnostics requested but statsmodels not available.")
+                print("   Install with: pip install statsmodels")
+
         # Return only original columns + predictions (not all engineered features)
         if keep_engineered_features:
             print("  ⚠️  Keeping all engineered features (large file size)")
@@ -1683,6 +1900,11 @@ For full documentation, see README.md in this directory.
                         help='Use PCA to reduce features to N components (e.g., --pca 20). '
                              'Dimensionality reduction preserves variance while reducing feature count. '
                              'Typical values: 10-50 components')
+    parser.add_argument('--temporal-diagnostics', action='store_true',
+                        help='Run temporal diagnostics after training to detect autocorrelation, '
+                             'look-ahead bias indicators, and prediction stability. '
+                             'Requires statsmodels (pip install statsmodels). '
+                             'Adds 1-2 minutes to runtime.')
 
     args = parser.parse_args()
 
@@ -2076,7 +2298,8 @@ For full documentation, see README.md in this directory.
         keep_engineered_features=args.keep_features,
         walk_forward=not args.no_walk_forward,
         resume_from_date=resume_from_date,
-        previous_predictions=previous_predictions
+        previous_predictions=previous_predictions,
+        run_temporal_diagnostics=args.temporal_diagnostics
     )
 
     # Save results (output_path already generated earlier)

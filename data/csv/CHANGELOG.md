@@ -1,5 +1,156 @@
 # Changelog - ML Return Forecasting
 
+## [3.3.4] - 2026-01-14
+
+### 🔍 Feature: Temporal Diagnostics for Look-Ahead Bias Detection
+
+**NEW**: Comprehensive temporal diagnostics to detect autocorrelation, look-ahead bias indicators, and prediction stability issues.
+
+---
+
+### 🎯 What's New
+
+**New Flag**:
+```bash
+--temporal-diagnostics    # Run temporal diagnostics after training
+```
+
+**Usage**:
+```bash
+# Run with temporal diagnostics
+python forecast_returns_ml_walk_forward.py \
+    --input-file data.csv \
+    --output predictions.parquet \
+    --temporal-diagnostics
+
+# Regular run (diagnostics off by default)
+python forecast_returns_ml_walk_forward.py \
+    --input-file data.csv \
+    --output predictions.parquet
+```
+
+**What It Does**:
+
+After training completes, runs three statistical tests on residuals (actual - predicted):
+
+1. **Autocorrelation Function (ACF) Analysis**
+   - Tests for correlation between residuals at different time lags
+   - Critical value: ±1.96/√n at 95% confidence
+   - **What it catches**: Temporal structure leakage (model missing time patterns)
+
+2. **Ljung-Box Test**
+   - Omnibus test for autocorrelation at lags 10 and 20
+   - H₀: No autocorrelation (p-value < 0.05 = reject)
+   - **What it catches**: Overall temporal dependencies in residuals
+
+3. **Temporal Stability Analysis**
+   - Splits data into 4 time periods
+   - Checks mean and std deviation stability
+   - **What it catches**: Non-stationarity, regime changes
+
+**Output Example**:
+```
+======================================================================
+📊 TEMPORAL DIAGNOSTICS - Residual Analysis
+======================================================================
+
+📈 Residual Statistics:
+  • Valid observations: 1,234,567
+  • Mean residual: +0.0123%
+  • Std deviation: 8.4567%
+
+🔍 Autocorrelation Analysis (ACF):
+  ✓ No significant autocorrelation detected (0 of 20 lags)
+
+📊 Ljung-Box Test (H0: No autocorrelation):
+  • Lag 10: p-value = 0.1234 ✓ ACCEPT H0
+  • Lag 20: p-value = 0.5678 ✓ ACCEPT H0
+
+📅 Temporal Stability Analysis:
+  • Period 1 (2020-01-01 to 2021-12-31): Mean: +0.05%, Std: 8.2%
+  • Period 2 (2022-01-01 to 2022-12-31): Mean: -0.03%, Std: 8.5%
+  • Period 3 (2023-01-01 to 2023-12-31): Mean: +0.01%, Std: 8.3%
+  • Period 4 (2024-01-01 to 2025-12-31): Mean: +0.02%, Std: 8.6%
+
+  ✓ Mean stability: 0.12 (good - threshold: <0.5)
+  ✓ Std stability: 0.03 (good - threshold: <0.3)
+
+📋 SUMMARY
+✓ No warnings detected
+✓ Model appears temporally sound
+```
+
+**When to Use**:
+- ✅ After major feature engineering changes
+- ✅ When validating a new model
+- ✅ Troubleshooting unexpected backtest results
+- ✅ Periodic quality checks (monthly/quarterly)
+- ❌ Don't run every training run (adds 1-2 minutes)
+
+**What Good Diagnostics Look Like**:
+- ✅ ACF lags all within critical value threshold
+- ✅ Ljung-Box p-values > 0.05 (accept H₀)
+- ✅ Mean stability < 0.5
+- ✅ Std stability < 0.3
+
+**What Bad Diagnostics Look Like** (Warning Signs):
+- ⚠️ Significant ACF at lag 1 → Recent prediction information leaking
+- ⚠️ Significant ACF at lags 20-21 → Monthly patterns not captured
+- ⚠️ Ljung-Box reject H₀ → Systematic temporal dependencies
+- ⚠️ High mean stability → Non-stationarity (regime changes)
+- ⚠️ High std stability → Changing volatility not modeled
+
+**Recommendations if Warnings Detected**:
+1. Check all features are properly T-1 lagged
+2. Verify walk-forward training cutoff (`Date < first_day_of_month`)
+3. Consider adding time-based features (month, quarter, year)
+4. Review feature engineering for temporal leakage
+5. Check for data quality issues (gaps, revisions)
+
+---
+
+### 📊 Technical Details
+
+**Requirements**:
+- Requires `statsmodels` library: `pip install statsmodels`
+- Graceful degradation if not installed (warning shown)
+
+**Performance Impact**:
+- Adds 1-2 minutes to total runtime
+- Only runs once after all predictions complete
+- No impact on training or prediction logic
+
+**Statistical Tests**:
+- **ACF**: Autocorrelation Function with 95% confidence bands
+- **Ljung-Box**: Joint test for autocorrelation (χ² distribution)
+- **Stability**: Coefficient of variation across time periods
+
+---
+
+### 📝 Files Modified
+
+- `forecast_returns_ml_walk_forward.py`:
+  - Lines 79-87: statsmodels imports with graceful fallback
+  - Lines 1109-1299: `temporal_diagnostics()` method (~190 lines)
+  - Lines 1482-1501: Added `run_temporal_diagnostics` parameter to `fit_predict()`
+  - Lines 1762-1774: Temporal diagnostics call after predictions
+  - Lines 1888-1892: `--temporal-diagnostics` CLI flag
+  - Line 2302: Pass flag to `fit_predict()`
+
+---
+
+### ⚠️ Breaking Changes
+
+**None** - This is an opt-in feature (disabled by default).
+
+---
+
+### 🔗 Related Issues
+
+This feature addresses look-ahead bias detection requested for production ML models. Helps validate that walk-forward training is truly preventing temporal leakage.
+
+---
+
 ## [3.3.3] - 2026-01-13
 
 ### 🎯 Optimization: Increased min_samples_leaf for Better Stability

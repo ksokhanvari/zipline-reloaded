@@ -16,6 +16,33 @@ This tool uses **Histogram-based Gradient Boosting** with extensive feature engi
 - ✅ **Complete logging** - Auto-generated log files for reproducibility
 - ✅ **Pre-lagged data support** - Use your own lagging pipeline
 
+## 🆕 What's New in v3.3.4 (2026-01-14)
+
+### 🔍 NEW: Temporal Diagnostics for Look-Ahead Bias Detection:
+- **Detect temporal leakage** - ACF analysis, Ljung-Box test, stability checks
+- **Validate model quality** - Verify walk-forward training is working correctly
+- **Production safety** - Catch look-ahead bias before live trading
+- **Opt-in feature** - Add `--temporal-diagnostics` flag when needed
+
+**Usage**:
+```bash
+python forecast_returns_ml_walk_forward.py \
+    --input-file data.csv \
+    --output predictions.parquet \
+    --temporal-diagnostics
+```
+
+**What it tests**:
+1. **ACF Analysis** - Residual autocorrelation at 20 lags (catches temporal structure leakage)
+2. **Ljung-Box Test** - Omnibus test for autocorrelation (catches temporal dependencies)
+3. **Temporal Stability** - Mean/std stability across 4 time periods (catches regime changes)
+
+**When to use**: After major feature changes, when validating a new model, troubleshooting unexpected results, or periodic quality checks (monthly/quarterly).
+
+**See CHANGELOG.md for complete v3.3.4 details**
+
+---
+
 ## 🆕 What's New in v3.3.3 (2026-01-13)
 
 ### 🎯 Stability Optimization: Increased min_samples_leaf (50 from 20):

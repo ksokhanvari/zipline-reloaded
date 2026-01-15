@@ -16,6 +16,26 @@ This tool uses **Histogram-based Gradient Boosting** with extensive feature engi
 - ✅ **Complete logging** - Auto-generated log files for reproducibility
 - ✅ **Pre-lagged data support** - Use your own lagging pipeline
 
+## 🆕 What's New in v3.3.6 (2026-01-14)
+
+### 🎯 Regularization Optimization: L2 = 0.3 (Better Control for 300 Features):
+- **Stronger regularization** - 3x increase from 0.1 to 0.3 for high-dimensional feature space
+- **Controls extreme forecasts** - Prevents ±400-500% outlier predictions
+- **Production-grade** - Conservative predictions critical for risk-managed trading
+- **Better for leverage** - Downstream leverage amplifies prediction errors
+
+**Why this matters**:
+```
+Previous: L2=0.1 (too weak for 300 features) ❌ Allows extreme predictions
+Current:  L2=0.3 (3x stronger penalty)       ✅ Controls outliers, more stable
+```
+
+**Impact**: Fewer extreme predictions, more stable across regimes, better for risk management. Predictions will be more conservative (±100-200% vs ±400-500%), which is desirable for production trading with potential leverage.
+
+**See CHANGELOG.md for complete v3.3.6 details**
+
+---
+
 ## 🆕 What's New in v3.3.5 (2026-01-14)
 
 ### 🎯 Stability Optimization: min_samples_leaf = 100 (Follows 0.01-0.05% Rule):

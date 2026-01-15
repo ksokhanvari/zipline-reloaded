@@ -958,7 +958,7 @@ class ReturnForecaster:
             learning_rate=self.learning_rate,
             max_leaf_nodes=self.num_leaves,
             min_samples_leaf=100,  # 0.0125% of 800K rows (follows 0.01-0.05% rule for stability)
-            l2_regularization=0.1,
+            l2_regularization=0.3,  # Increased from 0.1 for 300 features - controls extreme forecasts
             max_bins=255,
             # TIME-SERIES SAFETY: Disable automatic validation to prevent look-ahead bias
             # validation_fraction does RANDOM splits which leak future data in time-series

@@ -251,7 +251,7 @@ class ReturnForecaster:
     """
 
     def __init__(self, lookback_days=10, forecast_days=10, target_return_days=None,
-                 n_estimators=300, learning_rate=0.05, max_depth=7, num_leaves=31, no_lag=False,
+                 n_estimators=300, learning_rate=0.05, max_depth=6, num_leaves=31, no_lag=False,
                  sample_fraction=1.0, pca_components=None, lookback_months=None):
         """
         Initialize the return forecaster.
@@ -275,8 +275,8 @@ class ReturnForecaster:
             learning_rate (float): Learning rate for gradient boosting (default: 0.05)
                 Lower = more robust but needs more estimators
 
-            max_depth (int): Maximum tree depth (default: 7)
-                Controls model complexity
+            max_depth (int): Maximum tree depth (default: 6)
+                Controls model complexity. Reduced from 7 for noisy stock returns.
 
             num_leaves (int): Maximum number of leaves per tree (default: 31)
                 Controls model complexity (2^max_depth - 1 is typical)
@@ -1854,8 +1854,8 @@ For full documentation, see README.md in this directory.
                         help='Number of boosting rounds (default: 300)')
     parser.add_argument('--learning-rate', type=float, default=0.05,
                         help='Learning rate (default: 0.05)')
-    parser.add_argument('--max-depth', type=int, default=7,
-                        help='Maximum tree depth (default: 7)')
+    parser.add_argument('--max-depth', type=int, default=6,
+                        help='Maximum tree depth (default: 6, reduced from 7 for noisy stock returns)')
     parser.add_argument('--num-leaves', type=int, default=31,
                         help='Maximum number of leaves per tree (default: 31). '
                              'Controls model capacity. With 650K rows, safe values: 31 (conservative), '

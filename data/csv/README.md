@@ -129,6 +129,8 @@ python forecast_returns_ml_walk_forward.py \
 2. **Ljung-Box Test** - Omnibus test for autocorrelation (catches temporal dependencies)
 3. **Temporal Stability** - Mean/std stability across 4 time periods (catches regime changes)
 
+**Performance**: Now analyzes only last 6 months (2-3 minutes instead of hours for large datasets). See v3.3.10 for details.
+
 **When to use**: After major feature changes, when validating a new model, troubleshooting unexpected results, or periodic quality checks (monthly/quarterly).
 
 **See CHANGELOG.md for complete v3.3.4 details**

@@ -2165,9 +2165,21 @@ For full documentation, see README.md in this directory.
     print(f"  • learning_rate: {args.learning_rate}")
     print(f"  • max_depth: {args.max_depth}")
     print(f"  • num_leaves: {args.num_leaves}")
+    print(f"  • min_samples_leaf: 100 (hardcoded, v3.3.5 - follows 0.01-0.05% rule)")
+    print(f"  • l2_regularization: 0.3 (hardcoded, v3.3.6 - controls extreme forecasts)")
+    print(f"  • max_bins: 255 (histogram bins)")
+    print(f"  • random_state: 42 (reproducibility)")
     print(f"  • walk_forward: {not args.no_walk_forward}")
+    if args.lookback_months:
+        print(f"  • lookback_months: {args.lookback_months} (rolling window training)")
+    if args.sample_fraction < 1.0:
+        print(f"  • sample_fraction: {args.sample_fraction:.1%} (~{1/args.sample_fraction:.1f}x speedup)")
+    if args.pca:
+        print(f"  • pca_components: {args.pca} (dimensionality reduction)")
     if args.resume_file:
         print(f"  • resume_file: {args.resume_file} (overwrite_months={args.overwrite_months})")
+    if args.temporal_diagnostics:
+        print(f"  • temporal_diagnostics: True (ACF, Ljung-Box, stability tests)")
 
     # ========================================================================
     # GENERATE OUTPUT FILENAME

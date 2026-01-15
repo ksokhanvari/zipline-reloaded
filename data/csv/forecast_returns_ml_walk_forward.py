@@ -1106,7 +1106,7 @@ class ReturnForecaster:
 
         return importance_df
 
-    def temporal_diagnostics(self, df, predictions, nlags=20, significance_level=0.05):
+    def temporal_diagnostics(self, df, predictions, nlags=20, significance_level=0.05, months_lookback=6):
         """
         Perform temporal diagnostics on residuals to detect:
         1. Autocorrelation (temporal structure leakage)
@@ -1118,6 +1118,9 @@ class ReturnForecaster:
             predictions: Array of predictions (aligned with df)
             nlags: Number of lags for ACF/PACF analysis (default: 20)
             significance_level: Significance level for tests (default: 0.05)
+            months_lookback: Number of recent months to analyze (default: 6)
+                            Analyzing only recent data speeds up diagnostics dramatically.
+                            For 9M rows, analyzing 6 months takes 2-3 min vs hours for all data.
 
         Returns:
             dict: Diagnostic results and warnings
@@ -1138,13 +1141,37 @@ class ReturnForecaster:
             return {'status': 'skipped', 'reason': 'insufficient data'}
 
         df_valid = df[valid_mask].copy()
-        y_true = df_valid['forward_return'].values
-        y_pred = predictions[valid_mask]
+
+        # ============================================================
+        # OPTIMIZATION: Analyze only last N months (much faster)
+        # ============================================================
+        df_valid['Date'] = pd.to_datetime(df_valid['Date'])
+        max_date = df_valid['Date'].max()
+        cutoff_date = max_date - pd.DateOffset(months=months_lookback)
+
+        df_recent = df_valid[df_valid['Date'] >= cutoff_date].copy()
+
+        if len(df_recent) < 100:
+            print(f"⚠️  Insufficient recent data for diagnostics (<100 observations in last {months_lookback} months)")
+            print(f"   Using all available data instead...")
+            df_recent = df_valid.copy()
+            cutoff_date = df_valid['Date'].min()
+
+        print(f"\n📅 Analysis Period:")
+        print(f"  • Analyzing last {months_lookback} months")
+        print(f"  • Date range: {cutoff_date.strftime('%Y-%m-%d')} to {max_date.strftime('%Y-%m-%d')}")
+        print(f"  • Total dataset: {len(df_valid):,} rows")
+        print(f"  • Analyzed subset: {len(df_recent):,} rows ({len(df_recent)/len(df_valid)*100:.1f}%)")
+
+        # Get predictions for recent data only
+        recent_indices = df_recent.index
+        y_true = df_recent['forward_return'].values
+        y_pred = predictions[recent_indices]
 
         # Compute residuals (actual - predicted)
         residuals = y_true - y_pred
 
-        print(f"\n📈 Residual Statistics:")
+        print(f"\n📈 Residual Statistics (Last {months_lookback} Months):")
         print(f"  • Valid observations: {len(residuals):,}")
         print(f"  • Mean residual: {residuals.mean():+.4f}%")
         print(f"  • Std deviation: {residuals.std():.4f}%")
@@ -1152,10 +1179,10 @@ class ReturnForecaster:
         print(f"  • Max residual: {residuals.max():+.2f}%")
 
         # Sort by date for time-series analysis
-        df_valid = df_valid.copy()
-        df_valid['residual'] = residuals
-        df_valid = df_valid.sort_values('Date')
-        residuals_sorted = df_valid['residual'].values
+        df_recent = df_recent.copy()
+        df_recent['residual'] = residuals
+        df_recent = df_recent.sort_values('Date')
+        residuals_sorted = df_recent['residual'].values
 
         # 1. Autocorrelation Function (ACF)
         print(f"\n🔍 Autocorrelation Analysis (ACF):")
@@ -1215,20 +1242,20 @@ class ReturnForecaster:
 
         # Split into quartiles by time
         n_periods = 4
-        period_size = len(df_valid) // n_periods
+        period_size = len(df_recent) // n_periods
 
         print(f"  • Splitting data into {n_periods} time periods:")
         for i in range(n_periods):
             start_idx = i * period_size
-            end_idx = (i + 1) * period_size if i < n_periods - 1 else len(df_valid)
+            end_idx = (i + 1) * period_size if i < n_periods - 1 else len(df_recent)
 
-            period_residuals = df_valid.iloc[start_idx:end_idx]['residual']
-            period_dates = df_valid.iloc[start_idx:end_idx]['Date']
+            period_residuals = df_recent.iloc[start_idx:end_idx]['residual']
+            period_dates = df_recent.iloc[start_idx:end_idx]['Date']
 
             mean_res = period_residuals.mean()
             std_res = period_residuals.std()
 
-            print(f"      Period {i+1} ({period_dates.min()} to {period_dates.max()}):")
+            print(f"      Period {i+1} ({period_dates.min().strftime('%Y-%m-%d')} to {period_dates.max().strftime('%Y-%m-%d')}):")
             print(f"        Mean: {mean_res:+.4f}%, Std: {std_res:.4f}%")
 
         # Check if mean/std are stable across periods (using coefficient of variation)
@@ -1237,8 +1264,8 @@ class ReturnForecaster:
 
         for i in range(n_periods):
             start_idx = i * period_size
-            end_idx = (i + 1) * period_size if i < n_periods - 1 else len(df_valid)
-            period_residuals = df_valid.iloc[start_idx:end_idx]['residual']
+            end_idx = (i + 1) * period_size if i < n_periods - 1 else len(df_recent)
+            period_residuals = df_recent.iloc[start_idx:end_idx]['residual']
             period_means.append(period_residuals.mean())
             period_stds.append(period_residuals.std())
 

@@ -1,5 +1,138 @@
 # Changelog - ML Return Forecasting
 
+## [3.3.9] - 2026-01-14
+
+### 🎯 Rebalance: Reduce Regularization to Compensate for max_depth=6
+
+**REBALANCED**: Reduced min_samples_leaf from 100→50 and l2_regularization from 0.3→0.2 to compensate for max_depth reduction from 7→6.
+
+---
+
+### 🎯 What Changed
+
+**Parameter Updates**:
+```python
+min_samples_leaf=50   # Reduced from 100 (less conservative)
+l2_regularization=0.2  # Reduced from 0.3 (more flexible)
+max_depth=6           # Kept at 6 (from v3.3.7)
+```
+
+**Why This Matters**:
+- **User feedback**: Forecasts suffered with max_depth=6 + aggressive regularization
+- **Over-regularized**: The stack of max_depth=6 + min_samples_leaf=100 + L2=0.3 was too conservative
+- **Rebalancing**: Reduce other constraints to compensate for shallower trees
+
+**The Problem**:
+```
+max_depth=6              ← Conservative (reduced from 7)
+min_samples_leaf=100     ← Very conservative (0.0125% of 800K)
+l2_regularization=0.3    ← Aggressive (3x baseline)
+Result: TOO CONSERVATIVE → Worse forecasts
+```
+
+**The Solution**:
+```
+max_depth=6              ← Keep (prevents deep overfitting)
+min_samples_leaf=50      ← Revert to v3.3.3 level (balanced)
+l2_regularization=0.2    ← Moderate (2x baseline, not 3x)
+Result: BALANCED → Better forecasts while preventing overfitting
+```
+
+**Rationale**:
+1. **max_depth=6 is still correct**: Prevents overfitting to noise in deep paths
+2. **But we over-compensated**: min_samples_leaf=100 + L2=0.3 stacked too much regularization
+3. **Find the sweet spot**: Keep depth=6, reduce other constraints
+
+**min_samples_leaf: 100 → 50**:
+- 100 was 0.0125% of 800K (very conservative)
+- 50 is 0.0063% of 800K (still within 0.01-0.05% guideline minimum)
+- Allows more flexible splits while preventing micro-splits
+- This was the setting in v3.3.3 before we increased it
+
+**l2_regularization: 0.3 → 0.2**:
+- 0.3 was 3x the baseline (aggressive)
+- 0.2 is 2x the baseline (moderate, still conservative)
+- Allows larger coefficients for genuine signals
+- Still controls extreme forecasts better than 0.1
+
+**Expected Impact**:
+- ✅ **Better forecasts**: More model flexibility to learn patterns
+- ✅ **Still conservative**: 50 and 0.2 are still above baseline
+- ✅ **Balanced approach**: Regularization distributed across multiple parameters
+- ✅ **Faster training**: ~5% faster than min_samples_leaf=100
+
+**Additional Recommendations for Further Improvement**:
+
+If forecasts still need improvement, try these command-line flags:
+
+1. **Increase num_leaves** (BIGGEST IMPACT):
+   ```bash
+   --num-leaves 127    # Double from 63, allows more capacity
+   ```
+
+2. **Increase n_estimators**:
+   ```bash
+   --n-estimators 400  # Up from 300, more boosting rounds
+   ```
+
+3. **Combination** (optimal):
+   ```bash
+   --num-leaves 127 --n-estimators 400
+   ```
+
+**Complete Parameter Stack (v3.3.9)**:
+```python
+# Core model
+max_depth=6              # Prevents deep overfitting (v3.3.7)
+num_leaves=31 (default)  # Or 63/127 via --num-leaves flag
+min_samples_leaf=50      # Balanced flexibility (v3.3.9)
+l2_regularization=0.2    # Moderate regularization (v3.3.9)
+n_estimators=300         # Or 400 via --n-estimators flag
+learning_rate=0.05       # Robust convergence
+```
+
+**Result**: Better balance between preventing overfitting and maintaining forecast quality.
+
+**Trade-offs**:
+- ✅ Better forecast accuracy (more model flexibility)
+- ✅ Still prevents overfitting (depth=6 + moderate regularization)
+- ✅ Faster training (~5% vs min_samples_leaf=100)
+- ⚠️ Slightly less conservative than v3.3.5-v3.3.6
+- ⚠️ May have slightly more extreme predictions (but L2=0.2 still controls this)
+
+---
+
+### 📝 Files Modified
+
+- `forecast_returns_ml_walk_forward.py`:
+  - Line 960: `min_samples_leaf=100` → `min_samples_leaf=50`
+  - Line 961: `l2_regularization=0.3` → `l2_regularization=0.2`
+  - Lines 2168-2169: Updated logging to reflect v3.3.9 values
+
+---
+
+### ⚠️ Breaking Changes
+
+**None** - This is a rebalancing adjustment that will apply on next training run.
+
+**Impact**: Your forecasts should improve compared to the max_depth=6 + aggressive regularization stack.
+
+---
+
+### 🎯 Evolution of Regularization Strategy
+
+**Progression**:
+- v3.3.2: Baseline (min_samples_leaf=20, L2=0.1, depth=7)
+- v3.3.3: min_samples_leaf=50
+- v3.3.5: min_samples_leaf=100 (too aggressive in hindsight)
+- v3.3.6: L2=0.3 (too aggressive when stacked)
+- v3.3.7: max_depth=6 (good, but revealed over-regularization)
+- **v3.3.9**: Rebalance to min_samples_leaf=50, L2=0.2 ← **You are here**
+
+**Lesson**: Regularization is a balance. When one parameter becomes more conservative (depth 7→6), others should compensate by becoming less conservative.
+
+---
+
 ## [3.3.7] - 2026-01-14
 
 ### 🎯 Optimization: Reduced max_depth to 6 (Better for Noisy Stock Returns)

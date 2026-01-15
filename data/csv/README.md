@@ -16,6 +16,30 @@ This tool uses **Histogram-based Gradient Boosting** with extensive feature engi
 - ✅ **Complete logging** - Auto-generated log files for reproducibility
 - ✅ **Pre-lagged data support** - Use your own lagging pipeline
 
+## 🆕 What's New in v3.3.9 (2026-01-14)
+
+### 🎯 Rebalancing: Reduced Regularization for Better Forecasts:
+- **min_samples_leaf: 100→50** - Less conservative, more flexibility
+- **l2_regularization: 0.3→0.2** - Moderate (not aggressive) regularization
+- **max_depth stays at 6** - Prevents deep overfitting
+
+**Why this matters**:
+```
+Problem:  max_depth=6 + min_samples_leaf=100 + L2=0.3 = TOO CONSERVATIVE
+Solution: max_depth=6 + min_samples_leaf=50 + L2=0.2  = BALANCED
+```
+
+**Impact**: Better forecast accuracy while still preventing overfitting. User feedback showed forecasts suffered with aggressive regularization stack. This rebalances the parameters.
+
+**For even better results**, combine with command-line flags:
+```bash
+--num-leaves 127 --n-estimators 400  # Best improvement
+```
+
+**See CHANGELOG.md for complete v3.3.9 details**
+
+---
+
 ## 🆕 What's New in v3.3.7 (2026-01-14)
 
 ### 🎯 Tree Depth Optimization: max_depth = 6 (Better for Noisy Returns):

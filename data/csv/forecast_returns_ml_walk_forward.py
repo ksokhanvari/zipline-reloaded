@@ -957,8 +957,8 @@ class ReturnForecaster:
             max_depth=self.max_depth,
             learning_rate=self.learning_rate,
             max_leaf_nodes=self.num_leaves,
-            min_samples_leaf=100,  # 0.0125% of 800K rows (follows 0.01-0.05% rule for stability)
-            l2_regularization=0.3,  # Increased from 0.1 for 300 features - controls extreme forecasts
+            min_samples_leaf=50,  # 0.0063% of 800K rows - balanced stability vs flexibility
+            l2_regularization=0.2,  # Moderate regularization for 300 features
             max_bins=255,
             # TIME-SERIES SAFETY: Disable automatic validation to prevent look-ahead bias
             # validation_fraction does RANDOM splits which leak future data in time-series
@@ -2165,8 +2165,8 @@ For full documentation, see README.md in this directory.
     print(f"  • learning_rate: {args.learning_rate}")
     print(f"  • max_depth: {args.max_depth}")
     print(f"  • num_leaves: {args.num_leaves}")
-    print(f"  • min_samples_leaf: 100 (hardcoded, v3.3.5 - follows 0.01-0.05% rule)")
-    print(f"  • l2_regularization: 0.3 (hardcoded, v3.3.6 - controls extreme forecasts)")
+    print(f"  • min_samples_leaf: 50 (hardcoded, v3.3.9 - balanced stability vs flexibility)")
+    print(f"  • l2_regularization: 0.2 (hardcoded, v3.3.9 - moderate regularization)")
     print(f"  • max_bins: 255 (histogram bins)")
     print(f"  • random_state: 42 (reproducibility)")
     print(f"  • walk_forward: {not args.no_walk_forward}")

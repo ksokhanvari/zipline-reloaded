@@ -16,27 +16,28 @@ This tool uses **Histogram-based Gradient Boosting** with extensive feature engi
 - ✅ **Complete logging** - Auto-generated log files for reproducibility
 - ✅ **Pre-lagged data support** - Use your own lagging pipeline
 
-## 🆕 What's New in v3.3.9 (2026-01-14)
+## 🆕 What's New in v3.3.12 (2026-01-16)
 
-### 🎯 Rebalancing: Reduced Regularization for Better Forecasts:
-- **min_samples_leaf: 100→50** - Less conservative, more flexibility
-- **l2_regularization: 0.3→0.2** - Moderate (not aggressive) regularization
-- **max_depth stays at 6** - Prevents deep overfitting
+### 🎯 Parameter Update: min_samples_leaf = 100 (Default):
+- **min_samples_leaf: 50→100** - More stable splits, better alignment with 0.01% rule
+- **l2_regularization: 0.2** (unchanged) - Moderate regularization
+- **max_depth: 6** (unchanged) - Prevents deep overfitting
 
 **Why this matters**:
 ```
-Problem:  max_depth=6 + min_samples_leaf=100 + L2=0.3 = TOO CONSERVATIVE
-Solution: max_depth=6 + min_samples_leaf=50 + L2=0.2  = BALANCED
+Current: max_depth=6 + min_samples_leaf=100 + L2=0.2
+         ↑ Conservative depth + Conservative splits + Moderate regularization
+         = More stable, less noise-sensitive predictions
 ```
 
-**Impact**: Better forecast accuracy while still preventing overfitting. User feedback showed forecasts suffered with aggressive regularization stack. This rebalances the parameters.
+**Impact**: More robust predictions with less sensitivity to outliers. Each tree leaf requires ≥100 samples (0.0125% of 800K rows), within the recommended 0.01-0.05% range.
 
 **For even better results**, combine with command-line flags:
 ```bash
 --num-leaves 127 --n-estimators 400  # Best improvement
 ```
 
-**See CHANGELOG.md for complete v3.3.9 details**
+**See CHANGELOG.md for complete v3.3.12 details**
 
 ---
 

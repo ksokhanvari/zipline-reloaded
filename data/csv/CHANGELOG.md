@@ -1,5 +1,35 @@
 # Changelog - ML Return Forecasting
 
+## [3.3.12] - 2026-01-16
+
+### 🎯 Parameter Update: min_samples_leaf Increased to 100
+
+**CHANGED**: Increased min_samples_leaf from 50 → 100 (default).
+
+**Why This Matters**:
+- **More conservative splits**: Each leaf must have ≥100 samples (0.0125% of 800K rows)
+- **Better alignment with 0.01-0.05% rule**: Now at 0.0125% (within recommended range)
+- **Increased stability**: More robust splits, less sensitive to noise
+
+**Parameter Evolution**:
+```
+v3.3.3: min_samples_leaf=50  ← Initial optimization
+v3.3.5: min_samples_leaf=100 ← Followed 0.01% rule
+v3.3.9: min_samples_leaf=50  ← Rebalanced after max_depth=6
+v3.3.12: min_samples_leaf=100 ← User-requested default
+```
+
+**Current Model Parameters**:
+```python
+max_depth=6              # Shallow trees (prevents overfitting)
+min_samples_leaf=100     # Stable splits (0.0125% of 800K)
+l2_regularization=0.2    # Moderate regularization
+```
+
+**Trade-off**: Slightly less flexible (can't create tiny splits) but more stable predictions.
+
+---
+
 ## [3.3.10] - 2026-01-14
 
 ### ⚡ Performance: Temporal Diagnostics Now Analyzes Only Last 6 Months

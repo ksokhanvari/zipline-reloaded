@@ -16,6 +16,13 @@ This tool uses **Histogram-based Gradient Boosting** with extensive feature engi
 - ✅ **Complete logging** - Auto-generated log files for reproducibility
 - ✅ **Pre-lagged data support** - Use your own lagging pipeline
 
+## 📖 Quick Links
+
+- **[USAGE.md](USAGE.md)** - Complete command-line reference with all flags and examples ⭐ **NEW**
+- **[CHANGELOG.md](CHANGELOG.md)** - Version history with detailed explanations
+- **[LOOK_AHEAD_BIAS_AUDIT.md](LOOK_AHEAD_BIAS_AUDIT.md)** - Production safety verification
+- **[Docs/INDEX.md](Docs/INDEX.md)** - Technical deep dives and advanced topics
+
 ## 🆕 What's New in v3.3.12 (2026-01-16)
 
 ### 🎯 Parameter Update: min_samples_leaf = 100 (Default):

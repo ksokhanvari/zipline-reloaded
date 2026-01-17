@@ -5,7 +5,8 @@ This directory contains detailed technical documentation for the ML-based stock 
 ## 📚 Main Documentation
 
 Start here for general usage:
-- **[../README.md](../README.md)** - Main documentation, quick start, usage examples
+- **[../USAGE.md](../USAGE.md)** - Complete command-line reference and usage examples ⭐ **START HERE**
+- **[../README.md](../README.md)** - Feature overview, what's new, production guide
 - **[../CHANGELOG.md](../CHANGELOG.md)** - Complete version history and release notes
 
 ---
@@ -63,8 +64,10 @@ Start here for general usage:
 
 ```
 data/csv/
-├── README.md                          # Main documentation (START HERE)
+├── USAGE.md                           # Command-line reference (START HERE) ⭐
+├── README.md                          # Feature overview and what's new
 ├── CHANGELOG.md                       # Version history
+├── LOOK_AHEAD_BIAS_AUDIT.md           # Production safety verification
 │
 ├── Docs/                              # Detailed documentation
 │   ├── INDEX.md                       # This file
@@ -85,9 +88,9 @@ data/csv/
 ## 🚀 Recommended Reading Order
 
 ### For New Users:
-1. [../README.md](../README.md) - Overview and quick start
-2. [../CHANGELOG.md](../CHANGELOG.md) - What's new in latest version
-3. [SUMMARY_v3.2.2.md](SUMMARY_v3.2.2.md) - Current version details
+1. [../USAGE.md](../USAGE.md) - How to run the script (all flags and examples) ⭐ **START HERE**
+2. [../README.md](../README.md) - Overview and feature highlights
+3. [../CHANGELOG.md](../CHANGELOG.md) - What's new in latest version
 
 ### For Understanding Design:
 1. [DETERMINISTIC_DESIGN.md](DETERMINISTIC_DESIGN.md) - Why fully deterministic
@@ -95,9 +98,11 @@ data/csv/
 3. [MERGE_OPTIMIZATION_ANALYSIS.md](MERGE_OPTIMIZATION_ANALYSIS.md) - How memory was optimized
 
 ### For Production Deployment:
-1. [../README.md](../README.md) - Basic usage
-2. [REPRODUCIBILITY_FIX.md](REPRODUCIBILITY_FIX.md) - Verification checklist
-3. [DETERMINISTIC_DESIGN.md](DETERMINISTIC_DESIGN.md) - Production considerations
+1. [../USAGE.md](../USAGE.md) - Command-line reference and common workflows
+2. [../README.md](../README.md) - Feature overview and production guide
+3. [../LOOK_AHEAD_BIAS_AUDIT.md](../LOOK_AHEAD_BIAS_AUDIT.md) - Safety verification
+4. [REPRODUCIBILITY_FIX.md](REPRODUCIBILITY_FIX.md) - Verification checklist
+5. [DETERMINISTIC_DESIGN.md](DETERMINISTIC_DESIGN.md) - Production considerations
 
 ---
 

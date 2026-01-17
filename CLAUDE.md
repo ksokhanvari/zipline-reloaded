@@ -770,6 +770,119 @@ Completed MRQ bundle configuration, fixed critical LS-ZR-ported strategy issues 
 
 ---
 
+## Recent Session: ML Forecasting v3.3.x - Parameter Optimization & Safety Audit (2026-01-13 to 2026-01-16)
+
+### Summary
+
+Comprehensive model parameter optimization based on dataset characteristics (800K rows, 300 features) with thorough look-ahead bias audit. Series of iterative improvements from v3.3.1 to v3.3.12 focused on preventing overfitting while maintaining predictive power.
+
+### Key Accomplishments
+
+1. **Cross-Sectional Ranking Fix (v3.3.1)**:
+   - Fixed critical look-ahead bias in ranking features
+   - Rankings now computed per-month within walk-forward loop
+   - Ensures adding new data doesn't change historical rankings
+   - Reproducibility verified: predictions stable across data updates
+
+2. **Model Parameter Optimization (v3.3.2 - v3.3.12)**:
+   - **num_leaves**: Made configurable via `--num-leaves` flag (default 31)
+   - **min_samples_leaf**: Optimized following 0.01-0.05% rule (final: 100)
+   - **l2_regularization**: Tuned for 300-feature space (0.1 → 0.2)
+   - **max_depth**: Reduced for noisy stock returns (7 → 6)
+   - Parameter evolution tracked through 8+ versions with user feedback
+
+3. **Complete Parameter Logging (v3.3.8)**:
+   - Enhanced logging to show ALL 12 model parameters
+   - Added hardcoded parameters (min_samples_leaf, l2_regularization)
+   - Conditional parameters (lookback_months, pca, resume, temporal_diagnostics)
+   - Full reproducibility audit trail in console output
+
+4. **Temporal Diagnostics Optimization (v3.3.10)**:
+   - Analyzes only last 6 months instead of full dataset
+   - Performance: Hours → 2-3 minutes (100x+ speedup)
+   - ACF, Ljung-Box test, stability analysis on recent data
+   - Added `months_lookback=6` parameter
+
+5. **Look-Ahead Bias Audit (v3.3.11)**:
+   - Created comprehensive LOOK_AHEAD_BIAS_AUDIT.md (400 lines)
+   - Documented all 6 protection layers with line numbers
+   - Testing procedures (reproducibility, correlation sanity, temporal diagnostics)
+   - User vigilance checklist (pre-lagged input, data provider issues)
+
+6. **Final Parameter Balance (v3.3.12)**:
+   - Set min_samples_leaf=100 as production default
+   - Aligns with 0.01-0.05% rule (0.0125% of 800K rows)
+   - Balanced stack: max_depth=6, min_samples_leaf=100, L2=0.2
+
+### Files Modified
+
+**ML Forecasting Scripts**:
+- `data/csv/forecast_returns_ml_walk_forward.py` - Parameter optimizations, logging, temporal diagnostics
+- `data/csv/CHANGELOG.md` - v3.3.1 through v3.3.12 entries with detailed rationale
+- `data/csv/README.md` - Updated "What's New" for v3.3.12
+- `data/csv/LOOK_AHEAD_BIAS_AUDIT.md` - New comprehensive audit document (v3.3.11)
+- `data/csv/Docs/INDEX.md` - Updated version to v3.3.12
+
+### Parameter Evolution
+
+```python
+# v3.3.1: Fixed ranking look-ahead bias
+# v3.3.2: Added --num-leaves flag
+# v3.3.3: min_samples_leaf 20→50
+# v3.3.5: min_samples_leaf 50→100 (followed 0.01% rule)
+# v3.3.6: l2_regularization 0.1→0.3
+# v3.3.7: max_depth 7→6
+# v3.3.8: Complete parameter logging
+# v3.3.9: Rebalanced (min_samples_leaf→50, L2→0.2) after user feedback
+# v3.3.10: Temporal diagnostics 6-month optimization
+# v3.3.11: Look-ahead bias audit document
+# v3.3.12: Final min_samples_leaf→100 (user-requested default)
+
+# Final Production Stack (v3.3.12):
+max_depth=6              # Shallow trees (prevents overfitting)
+min_samples_leaf=100     # Stable splits (0.0125% of 800K)
+l2_regularization=0.2    # Moderate regularization
+num_leaves=31            # Default (adjustable via --num-leaves)
+```
+
+### Critical User Feedback
+
+**v3.3.9 Rebalancing**: User reported "forecasts suffered using tree depth of 6" - led to reducing min_samples_leaf (100→50) and l2_regularization (0.3→0.2) to compensate for conservative max_depth. Later adjusted back to min_samples_leaf=100 in v3.3.12.
+
+### Look-Ahead Bias Protection (6 Layers)
+
+| Protection Layer | Implementation | Status |
+|-----------------|----------------|--------|
+| Feature lagging | ALL fundamentals T-1 | ✅ SAFE |
+| Price safety | ALWAYS lagged (even with --no-lag) | ✅ SAFE |
+| Rolling calculations | Use lagged prices | ✅ SAFE |
+| Cross-sectional rankings | Per-month (v3.3.1 fix) | ✅ SAFE |
+| Forward-fill | Per symbol | ✅ SAFE |
+| Walk-forward training | Strict date cutoff | ✅ SAFE |
+
+### Git Commits (Branch: claude/continue-session-011-011CUzneiQ5d1tV3Y3r29tCA)
+
+- `a57da44a` - feat: Increase min_samples_leaf from 50 to 100 as default (v3.3.12)
+- Earlier commits for v3.3.1 through v3.3.11 (parameter optimizations, audit, diagnostics)
+
+### Recommendations
+
+**Production deployment checklist**:
+1. Use v3.3.12 defaults (max_depth=6, min_samples_leaf=100, L2=0.2)
+2. Run `--temporal-diagnostics` periodically to verify no look-ahead bias
+3. Monitor correlation (should stay 70-85%, not >90%)
+4. Verify data provider uses point-in-time (as-reported) fundamentals
+5. Review LOOK_AHEAD_BIAS_AUDIT.md for vigilance requirements
+
+### Next Steps
+
+1. Deploy v3.3.12 to production with optimized parameters
+2. Monitor prediction stability across monthly updates
+3. Consider `--num-leaves 127` for improved accuracy if needed
+4. Track correlation metrics to detect any degradation
+
+---
+
 ## Recent Session: ML Forecasting v3.2.2 - Fully Deterministic Design (2026-01-07)
 
 ### Summary
@@ -1165,6 +1278,6 @@ Completed comprehensive ML-based return forecasting system with production-grade
 
 ---
 
-**Document Version**: 10.0
-**Last Updated**: 2025-12-31
-**Key Features**: Hidden Point Capital branding, Sharadar + LSEG integration, multi-source pipelines, FlightLog monitoring, MRQ configuration, auto-detection workflows, comprehensive strategy debugging, **ML-based return forecasting v3.1.0 (production-ready)**
+**Document Version**: 11.0
+**Last Updated**: 2026-01-16
+**Key Features**: Hidden Point Capital branding, Sharadar + LSEG integration, multi-source pipelines, FlightLog monitoring, MRQ configuration, auto-detection workflows, comprehensive strategy debugging, **ML-based return forecasting v3.3.12 (production-ready with optimized parameters)**

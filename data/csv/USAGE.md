@@ -341,6 +341,19 @@ logs/forecast_ml_YYYYMMDD_HHMMSS.log        # Detailed log
 - Removes NaN predictions
 - Perfect for trading systems
 
+**Console output includes**:
+```
+🏆 TOP 10 PREDICTED GAINERS (most recent data):
+  - Highest 10 predictions (may show same symbol multiple times)
+  - Shows absolute maximum predicted returns
+  - Useful for identifying extreme opportunities
+
+🎯 TOP 10 UNIQUE SYMBOLS (most recent prediction per symbol):
+  - Top 10 different stocks (one per symbol)
+  - Uses most recent prediction for each symbol
+  - Better for diversified portfolio construction
+```
+
 ---
 
 ## Model Parameters

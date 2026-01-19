@@ -2465,6 +2465,18 @@ For full documentation, see README.md in this directory.
             for idx, row in top_gainers.iterrows():
                 print(f"  {row['Date']:%Y-%m-%d}  {row['Symbol']:6s}  ${row['RefPriceClose']:8.2f}  →  {row[pred_col]:+.2f}%")
 
+        # Top predictions by unique symbol (most recent prediction per symbol)
+        print(f"\n🎯 TOP 10 UNIQUE SYMBOLS (most recent prediction per symbol):")
+        if len(recent) > 0:
+            # Group by Symbol, take most recent date for each
+            recent_by_symbol = recent.sort_values('Date').groupby('Symbol').last().reset_index()
+
+            # Get top 10 unique symbols
+            top_unique = recent_by_symbol.nlargest(10, pred_col)[['Date', 'Symbol', 'RefPriceClose', pred_col]]
+
+            for idx, row in top_unique.iterrows():
+                print(f"  {row['Date']:%Y-%m-%d}  {row['Symbol']:6s}  ${row['RefPriceClose']:8.2f}  →  {row[pred_col]:+.2f}%")
+
     # ========================================================================
     # FEATURE IMPORTANCES
     # ========================================================================

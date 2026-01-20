@@ -1,5 +1,73 @@
 # Changelog - ML Return Forecasting
 
+## [3.3.13] - 2026-01-20
+
+### 📊 New Feature: Feature Importance Logging (--log-features)
+
+**ADDED**: New `--log-features` flag to track feature importance changes over time during walk-forward training.
+
+**What This Does**:
+- Logs top 20 feature importances for EACH month during walk-forward training
+- Creates CSV file: `logs/feature_importance_YYYYMMDD_HHMMSS.csv`
+- CSV format allows plotting feature importance changes over time
+- Useful for understanding regime changes and model adaptation
+
+**Usage**:
+```bash
+python forecast_returns_ml_walk_forward.py \
+    --input-file data.csv \
+    --output predictions.parquet \
+    --log-features
+```
+
+**CSV Output Format**:
+```
+Month,Rank,Feature,Importance,Std
+2020-01,1,CompanyMarketCap_lag1,0.084523,0.002341
+2020-01,2,RefPriceClose_lag1,0.071234,0.001987
+2020-02,1,CompanyMarketCap_lag1,0.082145,0.002198
+2020-02,2,return_20d,0.069876,0.001823
+```
+
+**Performance Impact**:
+- Adds ~5-10 seconds per month to training time
+- Uses smaller sample (5,000 rows) for speed
+- 3 permutation repeats (vs 5 for final importance)
+
+**Use Cases**:
+- **Research**: Understand how feature importance evolves over different market regimes
+- **Production**: Monitor if model is adapting correctly to new data
+- **Debugging**: Detect sudden shifts in feature rankings that may indicate data issues
+
+**Example Plotting Code**:
+```python
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Read logged features
+df = pd.read_csv('logs/feature_importance_20260120_143052.csv')
+
+# Plot top 5 features over time
+top_features = df[df['Rank'] <= 5]
+for feature in top_features['Feature'].unique():
+    subset = top_features[top_features['Feature'] == feature]
+    plt.plot(subset['Month'], subset['Importance'], label=feature)
+
+plt.xlabel('Month')
+plt.ylabel('Importance')
+plt.legend()
+plt.title('Feature Importance Over Time (Top 5)')
+plt.show()
+```
+
+**Technical Details**:
+- Calls `get_feature_importances()` after each month's training
+- Uses same permutation importance algorithm as final report
+- Graceful error handling (logs warning if importance calculation fails)
+- CSV file created in logs/ directory (auto-created if doesn't exist)
+
+---
+
 ## [3.3.12] - 2026-01-16
 
 ### 🎯 Parameter Update: min_samples_leaf Increased to 100

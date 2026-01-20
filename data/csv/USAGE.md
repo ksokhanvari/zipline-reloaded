@@ -166,6 +166,7 @@ python forecast_returns_ml_walk_forward.py \
 |------|---------|-------------|
 | `--temporal-diagnostics` | False | Run ACF, Ljung-Box, stability tests (analyzes last 6 months) |
 | `--skip-feature-importance` | False | Skip feature importance calculation (saves 1-3 minutes) |
+| `--log-features` | False | Log top 20 feature importances per month to CSV in logs/ directory |
 
 **Temporal diagnostics** checks for look-ahead bias:
 ```bash
@@ -498,6 +499,68 @@ python forecast_returns_ml_walk_forward.py \
 - Weekly production updates (you know what's important)
 - Fast iterations during development
 - When using `--sample-fraction` (less reliable importance)
+
+---
+
+### Feature Importance Logging (--log-features)
+
+**Purpose**: Track how feature importance changes over time during walk-forward training.
+
+**What it does**:
+- Saves top 20 features for EACH month to CSV
+- Creates timestamped file: `logs/feature_importance_YYYYMMDD_HHMMSS.csv`
+- CSV format allows easy plotting with pandas/matplotlib
+
+**Example usage**:
+```bash
+python forecast_returns_ml_walk_forward.py \
+    --input-file data.csv \
+    --output predictions.parquet \
+    --log-features
+```
+
+**CSV output format**:
+```
+Month,Rank,Feature,Importance,Std
+2020-01,1,CompanyMarketCap_lag1,0.084523,0.002341
+2020-01,2,RefPriceClose_lag1,0.071234,0.001987
+...
+2020-02,1,CompanyMarketCap_lag1,0.082145,0.002198
+2020-02,2,return_20d,0.069876,0.001823
+```
+
+**Plot feature importance over time**:
+```python
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Read logged features
+df = pd.read_csv('logs/feature_importance_20260120_143052.csv')
+
+# Plot top 5 features over time
+top_features = df[df['Rank'] <= 5]
+for feature in top_features['Feature'].unique():
+    subset = top_features[top_features['Feature'] == feature]
+    plt.plot(subset['Month'], subset['Importance'], label=feature)
+
+plt.xlabel('Month')
+plt.ylabel('Importance')
+plt.legend()
+plt.title('Feature Importance Over Time (Top 5)')
+plt.xticks(rotation=45)
+plt.tight_layout()
+plt.show()
+```
+
+**Performance impact**:
+- Adds ~5-10 seconds per month
+- Uses smaller sample (5,000 rows) for speed
+- 3 permutation repeats (vs 5 for final importance)
+
+**When to use**:
+- Research: Understand regime changes in feature importance
+- Production: Monitor if model is adapting correctly
+- Debugging: Detect sudden shifts in feature rankings
 
 ---
 

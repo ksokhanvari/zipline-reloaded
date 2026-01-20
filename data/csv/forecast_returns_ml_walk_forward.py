@@ -252,7 +252,7 @@ class ReturnForecaster:
 
     def __init__(self, lookback_days=10, forecast_days=10, target_return_days=None,
                  n_estimators=300, learning_rate=0.05, max_depth=6, num_leaves=31, no_lag=False,
-                 sample_fraction=1.0, pca_components=None, lookback_months=None):
+                 sample_fraction=1.0, pca_components=None, lookback_months=None, log_features=False):
         """
         Initialize the return forecaster.
 
@@ -305,6 +305,11 @@ class ReturnForecaster:
                 Use this to test recency bias vs. long-term patterns.
                 Shorter windows = more responsive to recent changes
                 Longer windows/expanding = more stable, learns long-term patterns
+
+            log_features (bool): If True, log top 20 feature importances per month (default: False)
+                Creates CSV file in logs/ directory with monthly feature importance rankings
+                Allows plotting feature importance changes over time
+                Adds ~5-10 seconds per month to runtime
         """
         self.lookback_days = lookback_days
         self.forecast_days = forecast_days
@@ -318,6 +323,8 @@ class ReturnForecaster:
         self.sample_fraction = sample_fraction
         self.pca_components = pca_components
         self.lookback_months = lookback_months
+        self.log_features = log_features
+        self.feature_log_path = None  # Will hold CSV path if logging features
         self.model = None  # Will hold trained model
         self.feature_cols = None  # Will hold list of feature column names
         self.pca = None  # Will hold fitted PCA transformer if using PCA
@@ -1400,6 +1407,18 @@ class ReturnForecaster:
         months_trained = 0
         total_training_time = 0
 
+        # Initialize feature importance logging if requested
+        if self.log_features:
+            from pathlib import Path
+            timestamp = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
+            logs_dir = Path('logs')
+            logs_dir.mkdir(exist_ok=True)
+            self.feature_log_path = logs_dir / f'feature_importance_{timestamp}.csv'
+            # Create header
+            with open(self.feature_log_path, 'w') as f:
+                f.write('Month,Rank,Feature,Importance,Std\n')
+            print(f"\n📝 Feature logging enabled: {self.feature_log_path}")
+
         print(f"\n🔄 Training models month by month...\n")
 
         # For each month, train on all previous data and predict
@@ -1468,6 +1487,20 @@ class ReturnForecaster:
 
             # Train model on data available up to this month
             self.train(X_train, y_train, sample_weight=weights_train, sample_fraction=self.sample_fraction)
+
+            # Log feature importances if requested
+            if self.log_features:
+                try:
+                    # Compute feature importances (using smaller sample for speed)
+                    importance_df = self.get_feature_importances(X_train, y_train, sample_size=5000, n_repeats=3)
+                    top_20 = importance_df.head(20)
+
+                    # Append to CSV
+                    with open(self.feature_log_path, 'a') as f:
+                        for rank, (idx, row) in enumerate(top_20.iterrows(), 1):
+                            f.write(f"{current_month},{rank},{row['feature']},{row['importance']:.6f},{row['std']:.6f}\n")
+                except Exception as e:
+                    print(f"    ⚠️  Feature logging failed: {e}")
 
             # Predict for current month
             X_predict = X.iloc[predict_positions]
@@ -1932,6 +1965,11 @@ For full documentation, see README.md in this directory.
                              'look-ahead bias indicators, and prediction stability. '
                              'Requires statsmodels (pip install statsmodels). '
                              'Adds 1-2 minutes to runtime.')
+    parser.add_argument('--log-features', action='store_true',
+                        help='Log top 20 feature importances for each month during walk-forward training. '
+                             'Creates feature_importance_YYYYMMDD_HHMMSS.csv in logs/ directory. '
+                             'CSV format allows plotting feature importance changes over time. '
+                             'Adds ~5-10 seconds per month to runtime.')
 
     args = parser.parse_args()
 
@@ -2169,7 +2207,8 @@ For full documentation, see README.md in this directory.
         no_lag=args.no_lag,
         sample_fraction=args.sample_fraction,
         pca_components=args.pca,
-        lookback_months=args.lookback_months
+        lookback_months=args.lookback_months,
+        log_features=args.log_features
     )
 
     # Display prediction setup

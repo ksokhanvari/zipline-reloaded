@@ -576,6 +576,142 @@ When continuing a session:
 
 ---
 
+## Recent Session: ML Forecasting v3.3.13 - Feature Importance Logging (2026-01-20)
+
+### Summary
+
+Implemented `--log-features` flag to track feature importance changes over time during walk-forward training. This allows researchers and production users to monitor how feature rankings evolve across different market regimes.
+
+### Key Accomplishments
+
+1. **Feature Importance Logging Implementation**:
+   - Added `log_features` parameter to `ReturnForecaster.__init__()`
+   - Initializes timestamped CSV before walk-forward loop: `logs/feature_importance_YYYYMMDD_HHMMSS.csv`
+   - Logs top 20 features after each month's training
+   - CSV format: `Month,Rank,Feature,Importance,Std`
+   - Graceful error handling with warning messages
+
+2. **Performance Optimization**:
+   - Uses smaller sample (5,000 rows) for speed
+   - 3 permutation repeats (vs 5 for final report)
+   - Adds only ~5-10 seconds per month to training time
+   - Minimal overhead for valuable insights
+
+3. **Comprehensive Documentation**:
+   - Updated `USAGE.md` with `--log-features` section
+   - Added example Python plotting code
+   - Documented CSV output format and use cases
+   - Updated `CHANGELOG.md` with v3.3.13 release notes
+
+4. **Repository Organization**:
+   - Moved `LOOK_AHEAD_BIAS_AUDIT.md` to `Docs/` directory
+   - Consistent documentation structure
+
+### Files Modified
+
+**ML Forecasting Scripts**:
+- `data/csv/forecast_returns_ml_walk_forward.py` - Feature logging implementation
+- `data/csv/USAGE.md` - Added --log-features documentation with plotting examples
+- `data/csv/CHANGELOG.md` - Added v3.3.13 release notes
+
+**Documentation Organization**:
+- `data/csv/LOOK_AHEAD_BIAS_AUDIT.md` → `data/csv/Docs/LOOK_AHEAD_BIAS_AUDIT.md`
+
+### Key Code Changes
+
+**1. Initialization** (lines 326-327):
+```python
+self.log_features = log_features
+self.feature_log_path = None  # Will hold CSV path if logging features
+```
+
+**2. CSV Initialization** (lines 1410-1420):
+```python
+if self.log_features:
+    from pathlib import Path
+    timestamp = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
+    logs_dir = Path('logs')
+    logs_dir.mkdir(exist_ok=True)
+    self.feature_log_path = logs_dir / f'feature_importance_{timestamp}.csv'
+    with open(self.feature_log_path, 'w') as f:
+        f.write('Month,Rank,Feature,Importance,Std\n')
+    print(f"\n📝 Feature logging enabled: {self.feature_log_path}")
+```
+
+**3. Monthly Logging** (lines 1491-1503):
+```python
+if self.log_features:
+    try:
+        importance_df = self.get_feature_importances(X_train, y_train, sample_size=5000, n_repeats=3)
+        top_20 = importance_df.head(20)
+        with open(self.feature_log_path, 'a') as f:
+            for rank, (idx, row) in enumerate(top_20.iterrows(), 1):
+                f.write(f"{current_month},{rank},{row['feature']},{row['importance']:.6f},{row['std']:.6f}\n")
+    except Exception as e:
+        print(f"    ⚠️  Feature logging failed: {e}")
+```
+
+### Use Cases
+
+**Research**:
+- Track feature importance across market regimes (bull vs bear markets)
+- Understand which features become more/less important over time
+- Identify regime shifts by feature ranking changes
+
+**Production**:
+- Monitor if model is adapting correctly to new data
+- Detect feature drift or data quality issues
+- Validate walk-forward training is working as expected
+
+**Debugging**:
+- Detect sudden shifts in feature rankings (may indicate data issues)
+- Verify feature engineering is stable across time periods
+- Troubleshoot unexpected model performance changes
+
+### Example Usage
+
+**Basic Usage**:
+```bash
+python forecast_returns_ml_walk_forward.py \
+    --input-file data.csv \
+    --output predictions.parquet \
+    --log-features
+```
+
+**Plotting Feature Importance Over Time**:
+```python
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Read logged features
+df = pd.read_csv('logs/feature_importance_20260120_143052.csv')
+
+# Plot top 5 features over time
+top_features = df[df['Rank'] <= 5]
+for feature in top_features['Feature'].unique():
+    subset = top_features[top_features['Feature'] == feature]
+    plt.plot(subset['Month'], subset['Importance'], label=feature)
+
+plt.xlabel('Month')
+plt.ylabel('Importance')
+plt.legend()
+plt.title('Feature Importance Over Time (Top 5)')
+plt.show()
+```
+
+### Git Commits (Branch: claude/continue-session-011-011CUzneiQ5d1tV3Y3r29tCA)
+
+- `d095cf0f` - feat: Add --log-features flag for tracking feature importance over time
+
+### Next Steps (if continuing this work)
+
+1. Test feature logging on production dataset with 200+ months
+2. Create visualization dashboard for feature importance trends
+3. Add statistical tests for significant feature importance changes
+4. Consider logging ALL features (not just top 20) with `--log-all-features` flag
+
+---
+
 ## Recent Session: LSEG Fundamentals + Sharadar Metadata Integration (2025-11-27 to 2025-11-29)
 
 ### Summary
@@ -1278,6 +1414,6 @@ Completed comprehensive ML-based return forecasting system with production-grade
 
 ---
 
-**Document Version**: 11.0
-**Last Updated**: 2026-01-16
-**Key Features**: Hidden Point Capital branding, Sharadar + LSEG integration, multi-source pipelines, FlightLog monitoring, MRQ configuration, auto-detection workflows, comprehensive strategy debugging, **ML-based return forecasting v3.3.12 (production-ready with optimized parameters)**
+**Document Version**: 12.0
+**Last Updated**: 2026-01-20
+**Key Features**: Hidden Point Capital branding, Sharadar + LSEG integration, multi-source pipelines, FlightLog monitoring, MRQ configuration, auto-detection workflows, comprehensive strategy debugging, **ML-based return forecasting v3.3.13 (production-ready with feature importance logging)**

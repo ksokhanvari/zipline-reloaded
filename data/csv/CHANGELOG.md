@@ -1,5 +1,116 @@
 # Changelog - ML Return Forecasting
 
+## [3.3.15] - 2026-01-20
+
+### 🛡️ Bug Fix: Skip Training Months with Insufficient Data
+
+**FIXED**: Walk-forward training now skips months with < 2,000 training samples.
+
+**The Problem**:
+Walk-forward loop attempted to train on months with very few samples, causing warnings and meaningless predictions:
+
+```
+Training HistGradientBoosting model...
+  📊 Sample Weighting:
+    • Top 2000 stocks (weight=1.0): 1 samples  ← Only 1 sample!
+    • Mid-cap stocks (weight=0.5): 0 samples
+    • Small-cap stocks (weight=0.1): 0 samples
+
+sklearn warnings (7+ times):
+  UndefinedMetricWarning: R^2 score is not well-defined with less than two samples.
+```
+
+**Why This Happens**:
+- Early months with `--lookback-months 12` (e.g., Jan 2020)
+- Only 1-12 months of historical data available
+- Insufficient data to train gradient boosting model
+
+**The Fix**:
+```python
+# Skip if insufficient training data (< 2000 samples)
+if len(train_positions) < 2000:
+    print(f"SKIPPED (insufficient training data: {len(train_positions):,} < 2,000)")
+    continue
+```
+
+**Why 2,000 Samples?**:
+- Gradient boosting needs sufficient samples to learn patterns
+- `min_samples_leaf=100` means each leaf needs 100 samples
+- `max_depth=6` can create up to 64 leaf nodes
+- 2,000 samples ensures reasonable training quality
+- Prevents R^2 warnings and overfitting on tiny datasets
+
+**Console Output**:
+```
+Before:
+  Training HistGradientBoosting model...
+  (7+ R^2 warnings)
+  ✓ Model trained with 400 iterations
+
+After:
+  [12/196] 2020-12: ⏭️  SKIPPED (insufficient training data: 150 < 2,000) - 4,440 rows
+```
+
+**Impact**:
+- Early months (first 1-2 years) may be skipped if using `--lookback-months 12`
+- Predictions for those months will be NaN
+- This is **correct behavior** - insufficient data = no prediction
+- Once sufficient data accumulated (month 13+), training proceeds normally
+
+**When This Affects You**:
+- Using `--lookback-months 12` (rolling 12-month window)
+- First 12 months have < 2,000 samples after filtering
+- Expanding window (default) usually has > 2,000 samples by month 3-4
+
+**Benefits**:
+- ✅ No more R^2 warnings
+- ✅ Clean console output
+- ✅ No meaningless predictions on tiny datasets
+- ✅ Better model quality overall
+
+---
+
+### 🧹 Code Quality: Exclude Non-Feature Columns from Training
+
+**ADDED**: 21 identifier and metadata columns now explicitly excluded from model training.
+
+**Columns Excluded**:
+
+1. **Identifiers** (3 columns):
+   - `cik_fmp`, `cik_fmp_dup`, `cik_fmp_dup.1`
+   - CIK (Central Index Key) - SEC company identifiers
+
+2. **Fiscal Year Metadata** (5 columns):
+   - `fiscalyear_fmp`, `fiscalyear_fmp_dup`, `fiscalyear_fmp_dup.1`, `fiscalyear_fmp_dup.2`, `fiscalyear_fmp_dup.3`
+   - Redundant with `Date` column
+
+3. **Period Metadata** (5 columns):
+   - `period_fmp`, `period_fmp_dup`, `period_fmp_dup.1`, `period_fmp_dup.2`, `period_fmp_dup.3`
+   - Quarter period (Q1, Q2, Q3, Q4) - redundant with `Date`
+
+4. **Currency Metadata** (5 columns):
+   - `reportedcurrency_fmp`, `reportedcurrency_fmp_dup`, `reportedcurrency_fmp_dup.1`, `reportedcurrency_fmp_dup.2`, `reportedcurrency_fmp_dup.3`
+   - Almost always USD for US stocks (constant)
+
+5. **Filing Date Metadata** (3 columns):
+   - `accepteddate_fmp`, `accepteddate_fmp_dup`, `accepteddate_fmp_dup.1`
+   - Filing acceptance date - not fundamental data
+
+**Why Excluded**:
+- Identifiers are not predictive (just IDs)
+- Fiscal year/period redundant with `Date` column
+- Currency is constant for US stocks (no variance)
+- Filing dates are administrative metadata, not fundamentals
+- Prevents potential data leakage from metadata
+
+**Impact**:
+- Before: ~290 features (including 21 non-predictive)
+- After: ~269 features (only predictive fundamentals)
+- Cleaner feature set, reduced noise
+- Slightly faster training
+
+---
+
 ## [3.3.14] - 2026-01-20
 
 ### 🔒 New Feature: --preserve-existing Flag (Forecast Stability)

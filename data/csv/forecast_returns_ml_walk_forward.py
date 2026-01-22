@@ -599,6 +599,13 @@ class ReturnForecaster:
             'sharadar_sicsector', 'sharadar_sicindustry', 'forward_return',
             'volume_ma_20',  # Intermediate calculation
             'RefPriceClose', 'RefVolume', 'CompanyMarketCap',  # ALWAYS exclude (we use lagged versions)
+            # Identifiers (not features)
+            'cik_fmp', 'cik_fmp_dup', 'cik_fmp_dup.1',  # CIK (Central Index Key)
+            # Metadata (not features)
+            'fiscalyear_fmp', 'fiscalyear_fmp_dup', 'fiscalyear_fmp_dup.1', 'fiscalyear_fmp_dup.2', 'fiscalyear_fmp_dup.3',
+            'period_fmp', 'period_fmp_dup', 'period_fmp_dup.1', 'period_fmp_dup.2', 'period_fmp_dup.3',
+            'reportedcurrency_fmp', 'reportedcurrency_fmp_dup', 'reportedcurrency_fmp_dup.1', 'reportedcurrency_fmp_dup.2', 'reportedcurrency_fmp_dup.3',
+            'accepteddate_fmp', 'accepteddate_fmp_dup', 'accepteddate_fmp_dup.1',
         ]
 
         # Exclude original (non-lagged) columns ONLY if not using no_lag mode

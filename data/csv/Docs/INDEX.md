@@ -13,6 +13,20 @@ Start here for general usage:
 
 ## 🔧 Technical Deep Dives
 
+### v3.3.14 - Forecast Stability (2026-01-20)
+
+**Core Design Document:**
+- **[FORECAST_STABILITY.md](FORECAST_STABILITY.md)** - Why predictions change & --preserve-existing flag ⭐ **PRODUCTION CRITICAL**
+
+**Key Topics:**
+- 🔒 Why historical predictions change when adding new data
+- 📊 Three sources of variance: Stock universe, cross-sectional rankings, data revisions
+- ✅ How --preserve-existing freezes historical forecasts
+- 🎯 Production best practices for stable backtests
+- ❓ FAQ: When to use --overwrite-months vs --preserve-existing
+
+---
+
 ### v3.2.2 - Deterministic Design (2026-01-07)
 
 **Core Design Documents:**
@@ -41,6 +55,10 @@ Start here for general usage:
 
 ### By Topic
 
+**Production Stability** (⭐ CRITICAL):
+- [FORECAST_STABILITY.md](FORECAST_STABILITY.md) - Why predictions change & how to freeze them
+- [LOOK_AHEAD_BIAS_AUDIT.md](LOOK_AHEAD_BIAS_AUDIT.md) - Production safety verification
+
 **Reproducibility:**
 - [REPRODUCIBILITY_FIX.md](REPRODUCIBILITY_FIX.md) - Complete analysis
 - [DETERMINISTIC_DESIGN.md](DETERMINISTIC_DESIGN.md) - Design rationale
@@ -55,6 +73,7 @@ Start here for general usage:
 - [ML_FORECASTING_VERSIONS.md](ML_FORECASTING_VERSIONS.md) - Version tracking
 
 **Usage:**
+- [../USAGE.md](../USAGE.md) - Command-line reference
 - [../README.md](../README.md) - Main usage guide
 - [../CHANGELOG.md](../CHANGELOG.md) - Version-specific usage notes
 
@@ -67,15 +86,17 @@ data/csv/
 ├── USAGE.md                           # Command-line reference (START HERE) ⭐
 ├── README.md                          # Feature overview and what's new
 ├── CHANGELOG.md                       # Version history
-├── LOOK_AHEAD_BIAS_AUDIT.md           # Production safety verification
 │
 ├── Docs/                              # Detailed documentation
 │   ├── INDEX.md                       # This file
 │   │
+│   ├── FORECAST_STABILITY.md          # ⭐ Production stability (v3.3.14)
+│   ├── LOOK_AHEAD_BIAS_AUDIT.md       # Production safety verification
+│   │
 │   ├── DETERMINISTIC_DESIGN.md        # Core design philosophy (v3.2.2)
 │   ├── REPRODUCIBILITY_FIX.md         # Technical analysis (v3.2.2)
 │   ├── MERGE_OPTIMIZATION_ANALYSIS.md # Performance details (v3.2.2)
-│   ├── SUMMARY_v3.2.2.md              # Latest version summary
+│   ├── SUMMARY_v3.2.2.md              # Version 3.2.2 summary
 │   │
 │   └── ML_FORECASTING_VERSIONS.md     # Script comparison guide
 │
@@ -93,18 +114,20 @@ data/csv/
 3. [../CHANGELOG.md](../CHANGELOG.md) - What's new in latest version
 
 ### For Understanding Design:
-1. [DETERMINISTIC_DESIGN.md](DETERMINISTIC_DESIGN.md) - Why fully deterministic
-2. [REPRODUCIBILITY_FIX.md](REPRODUCIBILITY_FIX.md) - What problems were fixed
-3. [MERGE_OPTIMIZATION_ANALYSIS.md](MERGE_OPTIMIZATION_ANALYSIS.md) - How memory was optimized
+1. [FORECAST_STABILITY.md](FORECAST_STABILITY.md) - Why predictions change & how to prevent it ⭐
+2. [DETERMINISTIC_DESIGN.md](DETERMINISTIC_DESIGN.md) - Why fully deterministic
+3. [REPRODUCIBILITY_FIX.md](REPRODUCIBILITY_FIX.md) - What problems were fixed
+4. [MERGE_OPTIMIZATION_ANALYSIS.md](MERGE_OPTIMIZATION_ANALYSIS.md) - How memory was optimized
 
 ### For Production Deployment:
 1. [../USAGE.md](../USAGE.md) - Command-line reference and common workflows
-2. [../README.md](../README.md) - Feature overview and production guide
-3. [../LOOK_AHEAD_BIAS_AUDIT.md](../LOOK_AHEAD_BIAS_AUDIT.md) - Safety verification
-4. [REPRODUCIBILITY_FIX.md](REPRODUCIBILITY_FIX.md) - Verification checklist
-5. [DETERMINISTIC_DESIGN.md](DETERMINISTIC_DESIGN.md) - Production considerations
+2. [FORECAST_STABILITY.md](FORECAST_STABILITY.md) - **CRITICAL**: Freeze historical forecasts ⭐
+3. [LOOK_AHEAD_BIAS_AUDIT.md](LOOK_AHEAD_BIAS_AUDIT.md) - Safety verification
+4. [../README.md](../README.md) - Feature overview and production guide
+5. [REPRODUCIBILITY_FIX.md](REPRODUCIBILITY_FIX.md) - Verification checklist
+6. [DETERMINISTIC_DESIGN.md](DETERMINISTIC_DESIGN.md) - Production considerations
 
 ---
 
-**Last Updated:** 2026-01-16
-**Current Version:** v3.3.12
+**Last Updated:** 2026-01-20
+**Current Version:** v3.3.14

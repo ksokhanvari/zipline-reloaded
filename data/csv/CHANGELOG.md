@@ -2,6 +2,57 @@
 
 ## [3.3.15] - 2026-01-20
 
+### 📊 Feature Enhancement: Include Sector/Industry Classifications
+
+**ADDED**: GICS and SIC sector/industry classifications now included as categorical features for market regime detection.
+
+**Features Now Included** (3 categorical):
+- `GICSSectorName` - GICS sector (Technology, Healthcare, Financials, etc.)
+- `sharadar_sicsector` - SIC sector classification
+- `sharadar_sicindustry` - SIC industry classification
+
+**Why These Matter**:
+- **Market regime detection**: Which sectors are performing well
+- **Sector rotation**: Cyclical vs defensive sector patterns
+- **Industry dynamics**: Industry-specific trends
+- **Sector momentum**: Cross-sector relationships
+- **Mean reversion**: Sector over/under-performance
+
+**How They're Handled**:
+1. Automatically detected as object dtype (string columns)
+2. Missing values filled with 'Unknown' category
+3. Converted to numeric codes (0, 1, 2, ... for each unique category)
+4. Treated as ordinal features by HistGradientBoosting
+
+**Console Output**:
+```
+• Converted 3 categorical columns to numeric codes: GICSSectorName,
+  sharadar_sicsector, sharadar_sicindustry
+```
+
+**Example Encoding**:
+```
+GICSSectorName:
+  Technology → 0
+  Healthcare → 1
+  Financials → 2
+  Consumer Discretionary → 3
+  ... (11 GICS sectors total)
+```
+
+**Still Excluded** (less predictive):
+- `sharadar_exchange` - NYSE vs NASDAQ (not predictive of returns)
+- `sharadar_category` - Domestic vs ADR (captured by is_adr flag)
+- `sharadar_location` - State/country (too granular)
+- `sharadar_sector` - Redundant with GICSSectorName
+- `sharadar_industry` - Redundant with sharadar_sicindustry
+
+**Impact**:
+- Before: ~269 features (missing sector information)
+- After: ~272 features (includes sector/industry for regime detection)
+
+---
+
 ### 🛡️ Bug Fix: Skip Training Months with Insufficient Data
 
 **FIXED**: Walk-forward training now skips months with < 2,000 training samples.

@@ -1495,6 +1495,12 @@ class ReturnForecaster:
                     print(f"  [{i:3d}/{len(unique_months)}] {current_month}: ⏭️  SKIPPED (no training data yet) - {len(predict_positions):,} rows")
                 continue
 
+            # Skip if insufficient training data (< 2000 samples)
+            # Training on very few samples produces meaningless models and R^2 warnings
+            if len(train_positions) < 2000:
+                print(f"  [{i:3d}/{len(unique_months)}] {current_month}: ⏭️  SKIPPED (insufficient training data: {len(train_positions):,} < 2,000) - {len(predict_positions):,} rows")
+                continue
+
             # REPRODUCIBILITY FIX: Compute rankings on training window + current month only
             # This ensures adding new data doesn't change historical rankings
             # Combine training and prediction positions for ranking

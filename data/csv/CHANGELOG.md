@@ -1,5 +1,75 @@
 # Changelog - ML Return Forecasting
 
+## [3.3.14] - 2026-01-20
+
+### 🔒 New Feature: --preserve-existing Flag (Forecast Stability)
+
+**ADDED**: New `--preserve-existing` flag to freeze historical forecasts when adding new data.
+
+**The Problem**:
+When you run walk-forward training with new data, the model retrains on historical months and produces slightly different predictions:
+
+```
+Before (2025-12-31 prediction):  9.772%
+After adding Jan 2026 data:     10.981%   ← Changed by 1.2%!
+```
+
+This happens because:
+1. New training data changes the model
+2. Cross-sectional rankings recalculated with new data
+3. Model adapts to new patterns
+
+**The Solution**:
+Use `--preserve-existing` to freeze historical predictions:
+
+```bash
+python forecast_returns_ml_walk_forward.py \
+    --input-file data_2026_jan.csv \
+    --output predictions_2026_jan.parquet \
+    --resume-file predictions_2025.parquet \
+    --preserve-existing
+```
+
+**What It Does**:
+- Loads previous predictions
+- **Never overwrites existing predictions** (keeps historical forecasts frozen)
+- Only computes predictions for rows with NaN
+- Ensures forecast stability for backtesting
+- Prevents "future data" from changing historical predictions
+
+**Comparison**:
+
+| Mode | Behavior | Use Case |
+|------|----------|----------|
+| **Default** (--overwrite-months 1) | Recomputes last 1 month | Handle data revisions |
+| **--preserve-existing** | Never overwrites | Production backtesting (stable forecasts) |
+
+**Example Output**:
+```
+📂 Aligning previous predictions with sorted dataframe...
+  • Previous predictions with values: 9,281,661
+  • Aligned predictions: 9,281,661 rows
+
+🔒 PRESERVE MODE: Skipping 195 months with existing predictions
+  • Processing 1 months with missing predictions
+
+  [196/196] 2026-01: Trained on 9,240,123 rows → Predicted 41,538 rows (45.2s)
+```
+
+**When to Use**:
+- ✅ **Production backtesting**: Maintain stable historical forecasts
+- ✅ **Weekly updates**: Add new predictions without changing history
+- ✅ **Reproducible research**: Ensure results don't change when adding data
+- ❌ **Data revisions**: Use `--overwrite-months` instead to fix errors
+
+**Technical Details**:
+- Checks each month for existing predictions (non-NaN values)
+- Skips months where ALL rows have predictions
+- Only trains for months with ANY NaN predictions
+- Overrides `--overwrite-months` when enabled
+
+---
+
 ## [3.3.13] - 2026-01-20
 
 ### 📊 New Feature: Feature Importance Logging (--log-features)

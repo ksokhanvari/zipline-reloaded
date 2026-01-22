@@ -129,7 +129,8 @@ python forecast_returns_ml_walk_forward.py \
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--resume-file PATH` | None | Resume from previous predictions file |
-| `--overwrite-months N` | 0 | Re-train last N months (for data revisions) |
+| `--overwrite-months N` | 1 | Re-train last N months (for data revisions) |
+| `--preserve-existing` | False | 🔒 **Never overwrite existing predictions** (freeze historical forecasts) |
 
 **Resume workflow**:
 ```bash
@@ -150,6 +151,13 @@ python forecast_returns_ml_walk_forward.py \
     --output predictions_2026_jan.parquet \
     --resume-file predictions_2025.parquet \
     --overwrite-months 2
+
+# 🔒 FREEZE historical forecasts (recommended for backtesting stability)
+python forecast_returns_ml_walk_forward.py \
+    --input-file data_2026_jan.csv \
+    --output predictions_2026_jan.parquet \
+    --resume-file predictions_2025.parquet \
+    --preserve-existing
 ```
 
 **What resume does**:
@@ -157,6 +165,13 @@ python forecast_returns_ml_walk_forward.py \
 2. Finds last prediction date
 3. Skips months already predicted
 4. Trains only for new months
+
+**What --preserve-existing does** (⭐ RECOMMENDED for backtesting stability):
+1. Loads previous predictions
+2. **Never overwrites existing predictions** (keeps historical forecasts frozen)
+3. Only computes predictions for rows with NaN
+4. Ensures forecast stability when adding new data
+5. Prevents historical predictions from changing due to new training data
 
 ---
 

@@ -1333,7 +1333,7 @@ class ReturnForecaster:
         }
 
     def _walk_forward_predict(self, df, X, y, sample_weights, valid_idx,
-                              resume_from_date=None, previous_predictions=None):
+                              resume_from_date=None, previous_predictions=None, preserve_existing=False):
         """
         Walk-forward prediction with monthly retraining (expanding or rolling window).
 
@@ -1352,6 +1352,7 @@ class ReturnForecaster:
             valid_idx: Boolean mask for rows with valid forward_return
             resume_from_date: Optional date to resume from (skips earlier months)
             previous_predictions: Optional array of previous predictions to keep
+            preserve_existing: If True, never overwrite existing predictions (freeze historical forecasts)
 
         Returns:
             Array of predictions (one per row)
@@ -1402,6 +1403,32 @@ class ReturnForecaster:
             print(f"  • Months to process: {len(months_to_process)} (skipping {len(unique_months) - len(months_to_process)})")
         else:
             months_to_process = unique_months
+
+        # If preserve_existing, skip months that already have predictions
+        if preserve_existing and previous_predictions is not None:
+            months_with_predictions = []
+            months_without_predictions = []
+
+            for month in months_to_process:
+                # Get rows for this month
+                month_mask = df['_year_month'] == month
+                month_positions = np.where(month_mask)[0]
+
+                # Check if ALL rows in this month have predictions (not NaN)
+                month_preds = predictions[month_positions]
+                has_all_predictions = np.all(~np.isnan(month_preds))
+
+                if has_all_predictions:
+                    months_with_predictions.append(month)
+                else:
+                    months_without_predictions.append(month)
+
+            # Only process months without predictions
+            months_to_process = months_without_predictions
+
+            if len(months_with_predictions) > 0:
+                print(f"  • 🔒 PRESERVE MODE: Skipping {len(months_with_predictions)} months with existing predictions")
+                print(f"  • Processing {len(months_to_process)} months with missing predictions")
 
         # Track statistics
         months_trained = 0
@@ -1540,7 +1567,8 @@ class ReturnForecaster:
         return predictions
 
     def fit_predict(self, df, use_cv=True, keep_engineered_features=False, walk_forward=True,
-                   resume_from_date=None, previous_predictions=None, run_temporal_diagnostics=False):
+                   resume_from_date=None, previous_predictions=None, run_temporal_diagnostics=False,
+                   preserve_existing=False):
         """
         Complete pipeline: engineer features, train model, make predictions.
 
@@ -1555,6 +1583,7 @@ class ReturnForecaster:
             resume_from_date: Optional date to resume from (for checkpoint resume)
             previous_predictions: Optional DataFrame of previous predictions (for checkpoint resume)
             run_temporal_diagnostics: If True, run temporal diagnostics after predictions (default: False)
+            preserve_existing: If True, never overwrite existing predictions (freeze historical forecasts)
 
         Returns:
             DataFrame with predictions (and original columns only by default)
@@ -1793,7 +1822,8 @@ class ReturnForecaster:
             # EXPANDING WINDOW WALK-FORWARD (NO LOOK-AHEAD BIAS)
             predictions = self._walk_forward_predict(df, X, y, sample_weights, valid_idx,
                                                      resume_from_date=resume_from_date,
-                                                     previous_predictions=previous_predictions_array)
+                                                     previous_predictions=previous_predictions_array,
+                                                     preserve_existing=preserve_existing)
         else:
             # SINGLE MODEL (FASTER BUT HAS LOOK-AHEAD BIAS)
             # Filter for training (only rows with valid forward_return)
@@ -1945,6 +1975,10 @@ For full documentation, see README.md in this directory.
     parser.add_argument('--overwrite-months', type=int, default=1,
                         help='When using --resume-file, re-predict last N months (default: 1). '
                              'Helps handle data revisions. Use 0 to only predict new data.')
+    parser.add_argument('--preserve-existing', action='store_true',
+                        help='When resuming, NEVER overwrite existing predictions (freeze historical forecasts). '
+                             'Only compute predictions for rows with NaN. Ensures forecast stability. '
+                             'Overrides --overwrite-months when enabled.')
     parser.add_argument('--skip-feature-importance', action='store_true',
                         help='Skip feature importance calculation at the end (saves 1-3 minutes)')
     parser.add_argument('--no-lag', action='store_true',
@@ -2377,7 +2411,8 @@ For full documentation, see README.md in this directory.
         walk_forward=not args.no_walk_forward,
         resume_from_date=resume_from_date,
         previous_predictions=previous_predictions,
-        run_temporal_diagnostics=args.temporal_diagnostics
+        run_temporal_diagnostics=args.temporal_diagnostics,
+        preserve_existing=args.preserve_existing
     )
 
     # Save results (output_path already generated earlier)

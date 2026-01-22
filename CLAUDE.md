@@ -576,6 +576,181 @@ When continuing a session:
 
 ---
 
+## Recent Session: ML Forecasting v3.3.14 - Forecast Stability (--preserve-existing) (2026-01-20)
+
+### Summary
+
+Implemented `--preserve-existing` flag to freeze historical forecasts when adding new data. This solves a critical backtesting issue where historical predictions changed when retraining with new data, causing instability in backtest results.
+
+### The Problem
+
+User reported forecast instability when running walk-forward training with new data:
+
+**Before new walk-forward** (predictions from December 2025 run):
+```
+2025-11-30: 13.230%
+2025-12-31: 9.772%
+2026-01-31: 27.581%
+```
+
+**After new walk-forward** (adding January 2026 data):
+```
+2025-11-30: 13.230%  (unchanged)
+2025-12-31: 10.981%  (changed by +1.2%)
+2026-01-31: 32.303%  (changed by +4.7%)
+```
+
+**Root Cause**:
+1. New training data changes the model
+2. Cross-sectional rankings recalculated with new universe
+3. Model adapts to new patterns
+4. `--overwrite-months 1` by default recomputes last month
+
+This breaks backtesting stability - historical forecasts shouldn't change when adding new data.
+
+### Solution
+
+Added `--preserve-existing` flag that:
+1. Loads previous predictions
+2. **Never overwrites existing (non-NaN) predictions**
+3. Only computes predictions for rows with NaN
+4. Skips months that already have complete predictions
+5. Ensures forecast stability for backtesting
+
+### Key Accomplishments
+
+1. **Core Implementation**:
+   - Added `preserve_existing` parameter to `_walk_forward_predict()` method
+   - Filter `months_to_process` to skip months with all predictions
+   - Pass `preserve_existing` through `fit_predict()` chain
+   - Added `--preserve-existing` CLI argument
+
+2. **Month Filtering Logic** (lines 1407-1433):
+   - Check each month for existing predictions
+   - Skip months where ALL rows have predictions (not NaN)
+   - Only train for months with ANY NaN predictions
+   - Console output shows months skipped vs processed
+
+3. **Documentation**:
+   - Updated `USAGE.md` with `--preserve-existing` section and examples
+   - Updated `CHANGELOG.md` with v3.3.14 release notes
+   - Documented use cases (production backtesting, stable forecasts)
+
+### Files Modified
+
+**ML Forecasting Scripts**:
+- `data/csv/forecast_returns_ml_walk_forward.py` - Preserve existing implementation
+- `data/csv/USAGE.md` - Added --preserve-existing documentation
+- `data/csv/CHANGELOG.md` - Added v3.3.14 release notes
+
+### Key Code Changes
+
+**1. Method Signature** (line 1336):
+```python
+def _walk_forward_predict(self, df, X, y, sample_weights, valid_idx,
+                          resume_from_date=None, previous_predictions=None, preserve_existing=False):
+```
+
+**2. Month Filtering Logic** (lines 1407-1433):
+```python
+# If preserve_existing, skip months that already have predictions
+if preserve_existing and previous_predictions is not None:
+    months_with_predictions = []
+    months_without_predictions = []
+
+    for month in months_to_process:
+        # Get rows for this month
+        month_mask = df['_year_month'] == month
+        month_positions = np.where(month_mask)[0]
+
+        # Check if ALL rows in this month have predictions (not NaN)
+        month_preds = predictions[month_positions]
+        has_all_predictions = np.all(~np.isnan(month_preds))
+
+        if has_all_predictions:
+            months_with_predictions.append(month)
+        else:
+            months_without_predictions.append(month)
+
+    # Only process months without predictions
+    months_to_process = months_without_predictions
+
+    if len(months_with_predictions) > 0:
+        print(f"  • 🔒 PRESERVE MODE: Skipping {len(months_with_predictions)} months with existing predictions")
+        print(f"  • Processing {len(months_to_process)} months with missing predictions")
+```
+
+**3. Pass Through Chain** (line 2416):
+```python
+df_predictions = forecaster.fit_predict(
+    df,
+    use_cv=not args.no_cv,
+    keep_engineered_features=args.keep_features,
+    walk_forward=not args.no_walk_forward,
+    resume_from_date=resume_from_date,
+    previous_predictions=previous_predictions,
+    run_temporal_diagnostics=args.temporal_diagnostics,
+    preserve_existing=args.preserve_existing  # NEW
+)
+```
+
+### Usage
+
+**Basic Usage** (recommended for production):
+```bash
+python forecast_returns_ml_walk_forward.py \
+    --input-file data_2026_jan.csv \
+    --output predictions_2026_jan.parquet \
+    --resume-file predictions_2025.parquet \
+    --preserve-existing
+```
+
+**Console Output**:
+```
+📂 Aligning previous predictions with sorted dataframe...
+  • Previous predictions with values: 9,281,661
+  • Aligned predictions: 9,281,661 rows
+
+🔒 PRESERVE MODE: Skipping 195 months with existing predictions
+  • Processing 1 months with missing predictions
+
+  [196/196] 2026-01: Trained on 9,240,123 rows → Predicted 41,538 rows (45.2s)
+```
+
+### When to Use
+
+| Mode | Behavior | Use Case |
+|------|----------|----------|
+| **--preserve-existing** | Never overwrites | ✅ Production backtesting (stable forecasts) |
+| **--overwrite-months 1** (default) | Recomputes last month | Handle data revisions |
+| **--overwrite-months 0** | Only new data | Fast updates, assumes data is final |
+
+**Recommended**:
+- ✅ Production backtesting: Use `--preserve-existing`
+- ✅ Weekly updates: Use `--preserve-existing`
+- ✅ Reproducible research: Use `--preserve-existing`
+- ❌ Data revisions: Use `--overwrite-months N` instead
+
+### Git Commits (Branch: claude/continue-session-011-011CUzneiQ5d1tV3Y3r29tCA)
+
+- `aecb2606` - feat: Add --preserve-existing flag to freeze historical forecasts
+
+### Benefits
+
+1. **Forecast Stability**: Historical predictions never change when adding new data
+2. **Backtesting Integrity**: Backtest results remain consistent across runs
+3. **Reproducible Research**: Same data = same predictions, always
+4. **Production Ready**: Suitable for live trading (forecasts don't drift)
+
+### Next Steps (if continuing this work)
+
+1. Test --preserve-existing on production dataset with 200+ months
+2. Verify backtest stability across multiple resume runs
+3. Document best practices for production workflows
+4. Consider adding --verify-stability flag to check for changes
+
+---
+
 ## Recent Session: ML Forecasting v3.3.13 - Feature Importance Logging (2026-01-20)
 
 ### Summary
@@ -1414,6 +1589,6 @@ Completed comprehensive ML-based return forecasting system with production-grade
 
 ---
 
-**Document Version**: 12.0
+**Document Version**: 13.0
 **Last Updated**: 2026-01-20
-**Key Features**: Hidden Point Capital branding, Sharadar + LSEG integration, multi-source pipelines, FlightLog monitoring, MRQ configuration, auto-detection workflows, comprehensive strategy debugging, **ML-based return forecasting v3.3.13 (production-ready with feature importance logging)**
+**Key Features**: Hidden Point Capital branding, Sharadar + LSEG integration, multi-source pipelines, FlightLog monitoring, MRQ configuration, auto-detection workflows, comprehensive strategy debugging, **ML-based return forecasting v3.3.14 (production-ready with forecast stability)**

@@ -1,5 +1,77 @@
 # Changelog - ML Return Forecasting
 
+## [3.3.16] - 2026-01-22
+
+### 🔧 Feature Fix: Re-include Quarterly Period for Seasonality
+
+**RESTORED**: `period_fmp` (Q1/Q2/Q3/Q4/FY) now included as categorical feature to capture quarterly seasonality patterns.
+
+**Why This Matters**:
+- **Seasonal patterns are real**: Different quarters have distinct market characteristics
+  - Q4: Holiday season boost for retail, year-end tax effects
+  - Q1: Post-holiday weakness, budget planning period
+  - Q2/Q3: Mid-year patterns, earnings cycles
+- **Sector-specific seasonality**:
+  - Retail surges in Q4
+  - Tax software companies peak in Q1
+  - Agricultural sectors vary by growing seasons
+- **Earnings calendar effects**: Quarterly reporting impacts stock behavior
+
+**Issue Identified**:
+- v3.3.15 excluded `period_fmp` as "metadata"
+- User reported **higher volatility** in trading algo using forecasts
+- Model lost seasonal awareness → predictions varied unexpectedly across quarters
+- Trading algo saw unexpected forecast changes → increased turnover/volatility
+
+**Solution**:
+- Removed `period_fmp` (and duplicates) from `exclude_cols` list
+- Added `period_fmp` to `categorical_features` list
+- Model now learns quarterly patterns automatically
+
+**What Was Re-included**:
+```python
+categorical_features = [
+    'GICSSectorName',        # GICS sector (11 sectors)
+    'sharadar_sicsector',    # SIC sector classification
+    'sharadar_sicindustry',  # SIC industry classification
+    'period_fmp',            # Q1/Q2/Q3/Q4/FY - quarterly seasonality  ← NEW
+]
+```
+
+**Typical Encoding**:
+```
+Q1 → 0
+Q2 → 1
+Q3 → 2
+Q4 → 3
+FY → 4 (annual filings)
+```
+
+**Expected Impact**:
+- ✅ **Reduced volatility**: More stable predictions across quarters
+- ✅ **Better seasonality capture**: Model learns Q4 strength, Q1 weakness, etc.
+- ✅ **Improved sector predictions**: Seasonal sectors (retail, agriculture) better modeled
+- ✅ **Smoother trading signals**: Less unexpected forecast changes
+
+**Still Excluded** (truly non-predictive):
+- `fiscalyear_fmp` - Redundant with Date column
+- `reportedcurrency_fmp` - Almost always USD for US stocks
+- `accepteddate_fmp` - Filing date (administrative, not predictive)
+- `cik_fmp` - SEC identifier (not a feature)
+
+**Console Output** (updated):
+```
+• Converted 4 categorical columns to numeric codes: GICSSectorName,
+  sharadar_sicsector, sharadar_sicindustry, period_fmp
+```
+
+**Migration Note**:
+- If you're experiencing high volatility, retrain with v3.3.16
+- Seasonality signal will be restored
+- Predictions should be more stable across quarters
+
+---
+
 ## [3.3.15] - 2026-01-20
 
 ### 📊 Feature Enhancement: Include Sector/Industry Classifications

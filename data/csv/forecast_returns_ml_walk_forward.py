@@ -603,7 +603,7 @@ class ReturnForecaster:
             'cik_fmp', 'cik_fmp_dup', 'cik_fmp_dup.1',  # CIK (Central Index Key)
             # Metadata (not features)
             'fiscalyear_fmp', 'fiscalyear_fmp_dup', 'fiscalyear_fmp_dup.1', 'fiscalyear_fmp_dup.2', 'fiscalyear_fmp_dup.3',
-            'period_fmp', 'period_fmp_dup', 'period_fmp_dup.1', 'period_fmp_dup.2', 'period_fmp_dup.3',
+            # NOTE: period_fmp (Q1/Q2/Q3/Q4) is now INCLUDED as categorical feature for seasonality
             'reportedcurrency_fmp', 'reportedcurrency_fmp_dup', 'reportedcurrency_fmp_dup.1', 'reportedcurrency_fmp_dup.2', 'reportedcurrency_fmp_dup.3',
             'accepteddate_fmp', 'accepteddate_fmp_dup', 'accepteddate_fmp_dup.1',
         ]
@@ -614,6 +614,7 @@ class ReturnForecaster:
             'GICSSectorName',        # GICS sector (11 sectors: Technology, Healthcare, etc.)
             'sharadar_sicsector',    # SIC sector classification
             'sharadar_sicindustry',  # SIC industry classification
+            'period_fmp',            # Q1/Q2/Q3/Q4/FY - quarterly seasonality patterns
         ]
 
         # Exclude original (non-lagged) columns ONLY if not using no_lag mode

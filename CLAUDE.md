@@ -577,6 +577,153 @@ When continuing a session:
 
 ---
 
+## Recent Session: ML Forecasting v3.3.16 - Restore Quarterly Seasonality (2026-01-22)
+
+### Summary
+
+Restored `period_fmp` (Q1/Q2/Q3/Q4/FY) as a categorical feature to capture quarterly seasonality patterns. User reported higher volatility in trading algo after v3.3.15 excluded this column as "metadata". Analysis revealed that quarterly period is a critical signal for seasonal patterns.
+
+### The Problem
+
+**User Report**: "Higher volatility in our trading algo which uses the forecasts"
+
+**Root Cause Analysis**:
+- v3.3.15 (commit `41362181`) excluded `period_fmp` as non-predictive metadata
+- This removed the model's ability to learn quarterly seasonality:
+  - Q4: Holiday season boost for retail stocks
+  - Q1: Post-holiday weakness, tax effects
+  - Q2/Q3: Mid-year patterns, earnings cycles
+- Without seasonal awareness, predictions varied unexpectedly across quarters
+- Trading algo saw unexpected forecast changes → increased turnover and volatility
+
+### Key Accomplishments
+
+1. **Re-included Quarterly Period Feature**:
+   - Removed `period_fmp` and duplicates from `exclude_cols` list
+   - Added `period_fmp` to `categorical_features` list (alongside GICS, SIC sectors)
+   - Model now learns Q1/Q2/Q3/Q4/FY patterns automatically
+
+2. **Updated Documentation**:
+   - Added CHANGELOG.md v3.3.16 entry explaining the fix
+   - Documented why quarterly seasonality matters
+   - Explained expected impact on volatility
+
+### Files Modified
+
+**ML Forecasting Script**:
+- `data/csv/forecast_returns_ml_walk_forward.py`:
+  - Line 606: Commented out `period_fmp` exclusion with explanation
+  - Line 617: Added `period_fmp` to categorical_features
+
+**Documentation**:
+- `data/csv/CHANGELOG.md` - Added comprehensive v3.3.16 release notes
+
+### Technical Details
+
+**What Changed**:
+```python
+# BEFORE (v3.3.15):
+exclude_cols = [
+    # ...
+    'period_fmp', 'period_fmp_dup', ...  # Excluded as metadata
+]
+
+categorical_features = [
+    'GICSSectorName',
+    'sharadar_sicsector',
+    'sharadar_sicindustry',
+]
+
+# AFTER (v3.3.16):
+exclude_cols = [
+    # ...
+    # NOTE: period_fmp now INCLUDED as categorical feature
+]
+
+categorical_features = [
+    'GICSSectorName',
+    'sharadar_sicsector',
+    'sharadar_sicindustry',
+    'period_fmp',  # Q1/Q2/Q3/Q4/FY seasonality
+]
+```
+
+**Encoding**:
+- Q1 → 0
+- Q2 → 1
+- Q3 → 2
+- Q4 → 3
+- FY → 4 (annual filings)
+
+### Why Quarterly Period Matters
+
+**Sector-Specific Seasonality**:
+- **Retail**: Q4 surge (holiday shopping)
+- **Tax Software**: Q1 peak (tax season)
+- **Agriculture**: Growing/harvest seasons
+- **Construction**: Weather-dependent patterns
+
+**Market-Wide Patterns**:
+- Q4: Year-end tax loss harvesting, window dressing
+- Q1: New year optimism, budget planning
+- Q2: Mid-year earnings, summer weakness
+- Q3: Back-to-school, pre-holiday preparation
+
+**Earnings Calendar Effects**:
+- Different sectors report at different times
+- Q4 often includes annual guidance
+- Model can learn which stocks benefit from quarterly patterns
+
+### Expected Impact
+
+- ✅ **Reduced forecast volatility**: More stable predictions across quarters
+- ✅ **Better seasonal modeling**: Q4 strength, Q1 weakness properly captured
+- ✅ **Improved sector predictions**: Retail, agriculture, tax software better modeled
+- ✅ **Smoother trading signals**: Less unexpected forecast changes
+- ✅ **Lower turnover**: Trading algo won't react to spurious quarter-to-quarter changes
+
+### Migration Guide
+
+**If experiencing high volatility**:
+1. Pull latest code (commit `8dbd1526` or later)
+2. Retrain model with v3.3.16:
+   ```bash
+   python forecast_returns_ml_walk_forward.py \
+       --input-file data.csv \
+       --output predictions.parquet \
+       --lookback-months 12 \
+       --preserve-existing
+   ```
+3. Seasonal signal will be restored
+4. Predictions should stabilize across quarters
+
+**Console Output** (updated):
+```
+• Converted 4 categorical columns to numeric codes: GICSSectorName,
+  sharadar_sicsector, sharadar_sicindustry, period_fmp
+```
+
+### Git Commits (Branch: claude/continue-session-011-011CUzneiQ5d1tV3Y3r29tCA)
+
+- Pending commit for v3.3.16 changes
+
+### Still Excluded (Truly Non-Predictive)
+
+✅ These remain excluded:
+- `fiscalyear_fmp` - Redundant with Date column
+- `reportedcurrency_fmp` - Almost always USD
+- `accepteddate_fmp` - Filing date (administrative)
+- `cik_fmp` - SEC identifier
+
+### Next Steps
+
+1. Monitor trading algo volatility after retraining
+2. Compare backtest results before/after v3.3.16
+3. Verify seasonal patterns are captured in feature importance logs
+4. Consider adding additional seasonal features if needed (month, day-of-week)
+
+---
+
 ## Recent Session: ML Forecasting Analysis - Feature Importance Visualization (2026-01-22)
 
 ### Summary
@@ -1913,6 +2060,6 @@ Completed comprehensive ML-based return forecasting system with production-grade
 
 ---
 
-**Document Version**: 15.0
+**Document Version**: 16.0
 **Last Updated**: 2026-01-22
-**Key Features**: Hidden Point Capital branding, Sharadar + LSEG integration, multi-source pipelines, FlightLog monitoring, MRQ configuration, auto-detection workflows, comprehensive strategy debugging, **ML-based return forecasting v3.3.15 (production-ready with forecast stability, feature quality, and sector regime detection)**, **Feature importance analysis notebook (10 visualizations for model interpretability)**
+**Key Features**: Hidden Point Capital branding, Sharadar + LSEG integration, multi-source pipelines, FlightLog monitoring, MRQ configuration, auto-detection workflows, comprehensive strategy debugging, **ML-based return forecasting v3.3.16 (production-ready with forecast stability, quarterly seasonality, and sector regime detection)**, **Feature importance analysis notebook (10 visualizations for model interpretability)**

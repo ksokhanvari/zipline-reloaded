@@ -97,6 +97,7 @@ zipline-reloaded/
 │   └── csv/                        # ML forecasting and data processing tools
 │       ├── forecast_returns_ml_walk_forward.py  # Production walk-forward ML forecasting
 │       ├── forecast_returns_ml.py  # Single-model ML forecasting (exploration)
+│       ├── analyze_feature_importance.ipynb  # Feature importance visualization notebook
 │       ├── README.md               # ML forecasting documentation (v3.1.0)
 │       ├── CHECKPOINT_RESUME_GUIDE.md  # Checkpoint/resume workflow
 │       ├── ML_FORECASTING_VERSIONS.md  # Version tracking
@@ -573,6 +574,131 @@ When continuing a session:
 3. **Review recent commits**: `git log --oneline -10`
 4. **Check running containers**: `docker compose ps`
 5. **Review this file**: For project context and conventions
+
+---
+
+## Recent Session: ML Forecasting Analysis - Feature Importance Visualization (2026-01-22)
+
+### Summary
+
+Created comprehensive Jupyter notebook for analyzing and visualizing how feature importance evolves during walk-forward training. The notebook provides 10 detailed visualizations showing feature ranking changes, stability metrics, and category-level trends over time.
+
+### Key Accomplishments
+
+1. **Auto-Detection of Latest Feature Importance File**:
+   - Automatic discovery of newest `feature_importance_YYYYMMDD_HHMMSS.csv` by timestamp
+   - No manual file path configuration needed
+   - Located in `data/csv/logs/` directory
+
+2. **10 Comprehensive Visualizations**:
+   - **Heatmap**: Ranking evolution for top 30 most stable features (RdYlGn colormap)
+   - **Rank Evolution Lines**: Top 20 features with rank position tracking over time
+   - **Importance Score Trends**: Absolute importance values (not just ranks)
+   - **Stability Analysis**: Statistical metrics for feature consistency
+   - **Monthly Top 5 Bar Charts**: Evolution of top features across sampled months
+   - **Feature Category Analysis**: 9 categories (Sector/Industry, Ratios, Momentum, etc.)
+   - **Category Importance Trends**: How different feature types perform over time
+   - **Export to CSV**: Stability metrics saved for further analysis
+
+3. **Feature Categorization**:
+   - Automatic classification into 9 categories:
+     - Sector/Industry (GICS, SIC)
+     - Lagged Features (_lag1, _lag2)
+     - Rankings (_rank features)
+     - Ratios (_to_, ratio)
+     - Momentum/Vol (volatility, returns)
+     - Growth Metrics (growth*)
+     - Estimates/Targets (forward, target)
+     - Fundamentals (earnings, cash, debt)
+     - Price/Volume (marketcap, price)
+
+4. **Stability Metrics**:
+   - Appearance count (how often in top 50)
+   - Average rank and median rank
+   - Standard deviation of rank (stability measure)
+   - Rank range (min to max)
+   - Top 10/20 appearance counts
+
+### Files Created
+
+**Analysis Notebook**:
+- `data/csv/analyze_feature_importance.ipynb` - 10-section interactive notebook (20KB)
+
+**Updated Documentation**:
+- `CLAUDE.md` - Added notebook to project structure
+
+### Key Visualizations
+
+**1. Ranking Evolution Heatmap**:
+```
+Green bands = Highly ranked (important)
+Red bands = Lower ranked
+White/missing = Not in top 50
+Horizontal consistency = Stable feature
+Vertical changes = Market regime shifts
+```
+
+**2. Feature Stability Metrics**:
+- Most stable features (lowest rank std)
+- Best performers (lowest avg rank)
+- Top 10/20 appearance counts
+
+**3. Category Importance**:
+- How Sector/Industry, Ratios, Momentum, etc. evolve
+- Identifies which feature types dominate in different periods
+
+### Use Cases
+
+1. **Feature Engineering Insights**:
+   - Identify consistently important features for new strategies
+   - Detect which categories are most predictive
+   - Guide feature creation efforts
+
+2. **Market Regime Detection**:
+   - Spot when feature importance shifts dramatically
+   - Correlate with known market events
+   - Understand what drives predictions in different environments
+
+3. **Model Validation**:
+   - Verify features make economic sense
+   - Detect if model is overfitting to spurious patterns
+   - Ensure feature diversity across categories
+
+4. **Production Monitoring**:
+   - Track if recent feature importance deviates from historical
+   - Alert when top features change unexpectedly
+   - Validate model stability
+
+### Example Insights
+
+From `feature_importance_20260122_060541.csv`:
+
+**Most Stable Top Features**:
+- PriceTarget_Median
+- CompanyMarketCap_lag1_rank
+- RefPriceClose_lag1
+- fcf_to_marketcap
+- debt_to_marketcap
+- sharadar_sicindustry (sector/industry)
+- GICSSectorName (sector/industry)
+
+**Category Trends**:
+- Estimates/Targets: Strong early, moderate later
+- Rankings: Consistently important throughout
+- Ratios: Stable mid-tier importance
+- Sector/Industry: Important for regime detection
+
+### Git Commits (Branch: claude/continue-session-011-011CUzneiQ5d1tV3Y3r29tCA)
+
+- `c79d1c0c` - feat: Add comprehensive feature importance analysis notebook
+
+### Next Steps
+
+1. Run notebook on latest feature_importance CSV after each training run
+2. Export stability metrics and track changes over time
+3. Use insights to guide new feature engineering
+4. Integrate category importance into strategy design
+5. Create automated alerts for unexpected feature shifts
 
 ---
 
@@ -1787,6 +1913,6 @@ Completed comprehensive ML-based return forecasting system with production-grade
 
 ---
 
-**Document Version**: 14.0
-**Last Updated**: 2026-01-20
-**Key Features**: Hidden Point Capital branding, Sharadar + LSEG integration, multi-source pipelines, FlightLog monitoring, MRQ configuration, auto-detection workflows, comprehensive strategy debugging, **ML-based return forecasting v3.3.15 (production-ready with forecast stability, feature quality, and sector regime detection)**
+**Document Version**: 15.0
+**Last Updated**: 2026-01-22
+**Key Features**: Hidden Point Capital branding, Sharadar + LSEG integration, multi-source pipelines, FlightLog monitoring, MRQ configuration, auto-detection workflows, comprehensive strategy debugging, **ML-based return forecasting v3.3.15 (production-ready with forecast stability, feature quality, and sector regime detection)**, **Feature importance analysis notebook (10 visualizations for model interpretability)**

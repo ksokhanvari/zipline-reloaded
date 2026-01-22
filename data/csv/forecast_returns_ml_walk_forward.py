@@ -594,9 +594,9 @@ class ReturnForecaster:
         # Exclude non-feature columns
         exclude_cols = [
             'Date', 'Symbol', 'Instrument', 'TradeDate', 'CompanyCommonName',
-            'GICSSectorName', 'sharadar_exchange', 'sharadar_category',
-            'sharadar_location', 'sharadar_sector', 'sharadar_industry',
-            'sharadar_sicsector', 'sharadar_sicindustry', 'forward_return',
+            'sharadar_exchange', 'sharadar_category',  # Exchange/category not predictive
+            'sharadar_location', 'sharadar_sector', 'sharadar_industry',  # Redundant with GICS/SIC
+            'forward_return',  # Target variable
             'volume_ma_20',  # Intermediate calculation
             'RefPriceClose', 'RefVolume', 'CompanyMarketCap',  # ALWAYS exclude (we use lagged versions)
             # Identifiers (not features)
@@ -606,6 +606,14 @@ class ReturnForecaster:
             'period_fmp', 'period_fmp_dup', 'period_fmp_dup.1', 'period_fmp_dup.2', 'period_fmp_dup.3',
             'reportedcurrency_fmp', 'reportedcurrency_fmp_dup', 'reportedcurrency_fmp_dup.1', 'reportedcurrency_fmp_dup.2', 'reportedcurrency_fmp_dup.3',
             'accepteddate_fmp', 'accepteddate_fmp_dup', 'accepteddate_fmp_dup.1',
+        ]
+
+        # Categorical features to include (for market regime/sector rotation)
+        # These will be label-encoded and marked as categorical for HistGradientBoosting
+        categorical_features = [
+            'GICSSectorName',        # GICS sector (11 sectors: Technology, Healthcare, etc.)
+            'sharadar_sicsector',    # SIC sector classification
+            'sharadar_sicindustry',  # SIC industry classification
         ]
 
         # Exclude original (non-lagged) columns ONLY if not using no_lag mode
@@ -713,17 +721,20 @@ class ReturnForecaster:
             print(f"  • Added {len(self._rank_cols)} ranking feature placeholders (computed per-month)")
 
         # Handle categorical columns (convert to codes)
+        # Expected categorical features: GICSSectorName, sharadar_sicsector, sharadar_sicindustry
         categorical_cols = []
         for col in X.columns:
             if X[col].dtype == 'object' or X[col].dtype.name == 'category':
                 categorical_cols.append(col)
+                # Fill missing with 'Unknown' category
                 X[col] = X[col].fillna('Unknown')
+                # Convert to numeric codes (0, 1, 2, ... for each unique category)
                 X[col] = pd.Categorical(X[col]).codes
                 # Ensure it's numeric after conversion
                 X[col] = X[col].astype('int64')
 
         if categorical_cols:
-            print(f"  • Converted {len(categorical_cols)} categorical columns to numeric codes")
+            print(f"  • Converted {len(categorical_cols)} categorical columns to numeric codes: {', '.join(categorical_cols)}")
 
         # Any remaining NaNs should be very rare (already forward-filled)
         # Fill with 0 as a safe default (e.g., first row per symbol before any data)

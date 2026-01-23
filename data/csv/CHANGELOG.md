@@ -6,6 +6,14 @@
 
 **FIXED**: Cross-sectional rankings now computed ONLY on complete months, frozen during partial month updates.
 
+**UNIVERSAL PRINCIPLE**: This applies to ALL lookback window configurations:
+- ✅ `--lookback-months 3` (3-month rolling)
+- ✅ `--lookback-months 12` (12-month rolling)
+- ✅ `--lookback-months 24` (24-month rolling)
+- ✅ No flag (expanding window)
+
+**Core rule**: Rankings = Last complete month boundary. Always. No exceptions.
+
 **The Problem** (Resume with partial data):
 ```
 1. Start with data through Dec 31, 2025

@@ -577,11 +577,11 @@ When continuing a session:
 
 ---
 
-## Recent Session: ML Forecasting v3.3.16 - Restore Quarterly Seasonality (2026-01-22)
+## Recent Session: ML Forecasting v3.3.16 - Forecast Stability Suite (2026-01-22)
 
 ### Summary
 
-Restored `period_fmp` (Q1/Q2/Q3/Q4/FY) as a categorical feature to capture quarterly seasonality patterns. User reported higher volatility in trading algo after v3.3.15 excluded this column as "metadata". Analysis revealed that quarterly period is a critical signal for seasonal patterns.
+Implemented three critical fixes to eliminate forecast volatility: (1) Restored quarterly seasonality signal (`period_fmp`), (2) **CRITICAL**: Anchored cross-sectional rankings to complete month boundaries only, (3) Improved ETA calculation with moving average. Combined impact: Stable forecasts during incremental data updates regardless of lookback window configuration.
 
 ### The Problem
 
@@ -604,12 +604,13 @@ Restored `period_fmp` (Q1/Q2/Q3/Q4/FY) as a categorical feature to capture quart
    - Model now learns Q1/Q2/Q3/Q4/FY patterns automatically
 
 2. **🔒 CRITICAL FIX: Freeze Rankings at Complete Month Boundaries**:
-   - Cross-sectional rankings now computed ONLY on complete months
-   - Training rankings frozen at last complete month (e.g., Dec 31)
-   - Prediction rankings computed on current month data (even if partial)
-   - **Key insight**: Adding partial month data (Jan 1-15) no longer changes training features
-   - Prevents ranking drift during resume runs with incremental data
-   - Works seamlessly with `--preserve-existing` flag
+   - **Universal principle**: Cross-sectional rankings computed ONLY on complete months
+   - **Applies to ANY lookback window**: 3 months, 12 months, 24 months, or expanding window
+   - **Complete months only**: Rankings computed through last complete month boundary (e.g., Dec 31)
+   - **Incomplete months**: Rankings forward-filled from last complete month per symbol
+   - **Key insight**: Adding partial month data (Jan 1-15) no longer changes ANY training features
+   - **Prevents ranking drift**: Works for both initial training and resume runs
+   - **Complements --preserve-existing**: Feature freezing + prediction freezing = total stability
 
 3. **Intelligent ETA Calculation**:
    - Replaced simple average with moving average of recent 10 months
@@ -819,28 +820,94 @@ New ETA at Month 100:
 - **Feature engineering**: More rows to lag, rank, and transform
 - **Model complexity**: More training samples for gradient boosting
 
+### Universal Principle: Complete Month Boundaries
+
+**The Core Insight**: Cross-sectional rankings are percentiles computed within each date. They MUST use complete month boundaries to remain stable.
+
+**Applies to ALL configurations**:
+- ✅ `--lookback-months 3` (3-month rolling window)
+- ✅ `--lookback-months 12` (12-month rolling window)
+- ✅ `--lookback-months 24` (24-month rolling window)
+- ✅ No flag (expanding window - all historical data)
+
+**Why It Matters**:
+- Cross-sectional rankings = **15+ features** in the model
+- Each stock's percentile depends on the **complete universe** that day
+- Partial month = incomplete universe = incorrect percentiles
+- Incomplete percentiles → Training features change → Forecasts drift
+
+**Examples Across Different Windows**:
+
+**3-month rolling + partial April**:
+```
+Training: Jan - Mar (3 complete months)
+Rankings: Computed through Mar 31 only
+April predictions: Forward-fill from Mar 31
+Result: Stable ✅
+```
+
+**24-month rolling + partial June**:
+```
+Training: Jul 2024 - May 2026 (24 complete months)
+Rankings: Computed through May 31 only
+June predictions: Forward-fill from May 31
+Result: Stable ✅
+```
+
+**Expanding window + partial Dec 2026**:
+```
+Training: 2010 - Nov 2026 (all complete months)
+Rankings: Computed through Nov 30 only
+Dec predictions: Forward-fill from Nov 30
+Result: Stable ✅
+```
+
+**The rule is simple**: Rankings = Last complete month boundary. Always. No exceptions.
+
 ### Expected Impact
 
-- ✅ **Reduced forecast volatility**: More stable predictions across quarters
+**From Quarterly Seasonality** (`period_fmp`):
 - ✅ **Better seasonal modeling**: Q4 strength, Q1 weakness properly captured
 - ✅ **Improved sector predictions**: Retail, agriculture, tax software better modeled
+- ✅ **Reduced quarter-to-quarter volatility**: Model understands seasonal patterns
+
+**From Complete Month Rankings** (CRITICAL):
+- ✅ **Eliminated ranking drift**: Training features stable during incremental updates
+- ✅ **Reproducible forecasts**: Adding partial month data doesn't change anything
+- ✅ **Stable cross-sections**: Same percentiles across resume runs
+- ✅ **Works with any lookback window**: 3m, 12m, 24m, or expanding
+
+**From Intelligent ETA**:
+- ✅ **Accurate time estimates**: Better planning for long training runs
+- ✅ **Adapts to data growth**: Moving average accounts for increasing times
+
+**Combined Result**:
 - ✅ **Smoother trading signals**: Less unexpected forecast changes
-- ✅ **Lower turnover**: Trading algo won't react to spurious quarter-to-quarter changes
+- ✅ **Lower turnover**: Trading algo won't react to spurious changes
+- ✅ **Stable backtests**: Historical predictions remain unchanged
 
 ### Migration Guide
 
 **If experiencing high volatility**:
-1. Pull latest code (commit `8dbd1526` or later)
-2. Retrain model with v3.3.16:
+1. Pull latest code (commit `3379a54a` or later)
+2. Retrain model with v3.3.16 (use YOUR preferred lookback window):
    ```bash
+   # Example with 12-month rolling window
    python forecast_returns_ml_walk_forward.py \
        --input-file data.csv \
        --output predictions.parquet \
        --lookback-months 12 \
        --preserve-existing
+
+   # Or 3-month rolling
+   --lookback-months 3 \
+
+   # Or expanding window (all data)
+   # Just omit --lookback-months flag
    ```
-3. Seasonal signal will be restored
-4. Predictions should stabilize across quarters
+3. Seasonal signal will be restored (`period_fmp`)
+4. Rankings will anchor to complete month boundaries
+5. Predictions should stabilize immediately
 
 **Console Output** (updated):
 ```
@@ -853,6 +920,7 @@ New ETA at Month 100:
 - `e96b14e3` - fix: Restore quarterly period (Q1/Q2/Q3/Q4) for seasonality - v3.3.16
 - `ff69500b` - feat: Intelligent ETA using moving average of recent training times
 - `6ac86ba3` - fix: CRITICAL - Freeze cross-sectional rankings at complete month boundaries
+- `3379a54a` - fix: Rankings computed ONLY on complete months, forward-filled for incomplete
 
 ### Still Excluded (Truly Non-Predictive)
 
@@ -2209,4 +2277,4 @@ Completed comprehensive ML-based return forecasting system with production-grade
 
 **Document Version**: 16.0
 **Last Updated**: 2026-01-22
-**Key Features**: Hidden Point Capital branding, Sharadar + LSEG integration, multi-source pipelines, FlightLog monitoring, MRQ configuration, auto-detection workflows, comprehensive strategy debugging, **ML-based return forecasting v3.3.16 (production-ready with forecast stability, quarterly seasonality, and sector regime detection)**, **Feature importance analysis notebook (10 visualizations for model interpretability)**
+**Key Features**: Hidden Point Capital branding, Sharadar + LSEG integration, multi-source pipelines, FlightLog monitoring, MRQ configuration, auto-detection workflows, comprehensive strategy debugging, **ML-based return forecasting v3.3.16 (production-ready with COMPLETE MONTH BOUNDARY rankings - universal principle for any lookback window, quarterly seasonality, intelligent ETA, total forecast stability)**, **Feature importance analysis notebook (10 visualizations for model interpretability)**

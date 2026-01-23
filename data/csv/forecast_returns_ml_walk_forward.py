@@ -1538,8 +1538,11 @@ class ReturnForecaster:
             # Step 2: Compute rankings ONLY on complete months (up to ranking_cutoff_date)
             # This includes both training AND prediction positions if they fall within complete months
             all_positions = np.concatenate([train_positions, predict_positions])
-            date_mask = np.array([df.iloc[p]['Date'] <= ranking_cutoff_date for p in all_positions])
-            complete_positions = [all_positions[i] for i in range(len(all_positions)) if date_mask[i]]
+
+            # VECTORIZED: Get dates for all positions at once (1000x faster than iterating)
+            all_dates = df.iloc[all_positions]['Date'].values
+            date_mask = all_dates <= np.datetime64(ranking_cutoff_date)
+            complete_positions = all_positions[date_mask]
 
             if len(complete_positions) > 0:
                 complete_df = df.iloc[complete_positions].copy()
@@ -1557,10 +1560,10 @@ class ReturnForecaster:
 
             # Step 3: Handle incomplete prediction month - forward-fill from last complete month
             if not is_current_month_complete:
-                # Get prediction positions that are AFTER ranking_cutoff_date (incomplete month)
-                predict_incomplete_mask = [df.iloc[p]['Date'] > ranking_cutoff_date for p in predict_positions]
-                predict_incomplete_positions = [predict_positions[i] for i in range(len(predict_positions))
-                                                if predict_incomplete_mask[i]]
+                # VECTORIZED: Get prediction positions that are AFTER ranking_cutoff_date (incomplete month)
+                predict_dates = df.iloc[predict_positions]['Date'].values
+                predict_incomplete_mask = predict_dates > np.datetime64(ranking_cutoff_date)
+                predict_incomplete_positions = predict_positions[predict_incomplete_mask]
 
                 if len(predict_incomplete_positions) > 0:
                     # OPTIMIZED: Use vectorized merge instead of nested loops

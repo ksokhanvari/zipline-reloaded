@@ -2,6 +2,34 @@
 
 ## [3.3.16] - 2026-01-22
 
+### ⚡ Enhancement: Intelligent ETA with Moving Average
+
+**IMPROVED**: ETA calculation now uses moving average of recent 10 months instead of overall average.
+
+**Why This Matters**:
+- Training times **increase** as more data accumulates in expanding/rolling window
+- Old ETA: Used overall average → overestimated early, underestimated later
+- New ETA: Uses recent 10-month average → adapts to increasing training times
+
+**Example**:
+```
+Month   1: 10s  → Old ETA (avg 10s): 204 months × 10s = 34m
+Month 100: 75s  → Old ETA (avg 45s): 105 months × 45s = 79m  ❌ (actual ~90m)
+Month 100: 75s  → New ETA (avg 70s): 105 months × 70s = 122m ✅ (more accurate)
+```
+
+**Benefits**:
+- ✅ More accurate ETA as training progresses
+- ✅ Accounts for data accumulation in rolling/expanding windows
+- ✅ Better hour-based formatting for long runs (e.g., "2h 15m" instead of "135m 0s")
+
+**Technical Details**:
+- Tracks individual month times in `recent_month_times` list
+- Uses last 10 months for ETA calculation (or all if < 10 completed)
+- Improved formatting: Hours for long runs (≥1h), minutes for medium (≥1m), seconds for short
+
+---
+
 ### 🔧 Feature Fix: Re-include Quarterly Period for Seasonality
 
 **RESTORED**: `period_fmp` (Q1/Q2/Q3/Q4/FY) now included as categorical feature to capture quarterly seasonality patterns.

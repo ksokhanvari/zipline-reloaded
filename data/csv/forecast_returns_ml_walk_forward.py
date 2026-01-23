@@ -1452,6 +1452,7 @@ class ReturnForecaster:
         # Track statistics
         months_trained = 0
         total_training_time = 0
+        recent_month_times = []  # Track recent training times for intelligent ETA
 
         # Initialize feature importance logging if requested
         if self.log_features:
@@ -1565,12 +1566,24 @@ class ReturnForecaster:
             month_time = (pd.Timestamp.now() - month_start_time).total_seconds()
             total_training_time += month_time
             months_trained += 1
+            recent_month_times.append(month_time)
 
-            # Progress update
-            avg_time = total_training_time / months_trained
+            # Progress update with intelligent ETA
+            # Use moving average of recent 10 months (or all if less than 10)
+            # This accounts for increasing training times as data accumulates
+            window_size = min(10, len(recent_month_times))
+            recent_avg_time = sum(recent_month_times[-window_size:]) / window_size
+
             remaining_months = len(unique_months) - i
-            eta_seconds = avg_time * remaining_months
-            eta_str = f"{int(eta_seconds // 60)}m {int(eta_seconds % 60)}s" if eta_seconds > 60 else f"{int(eta_seconds)}s"
+            eta_seconds = recent_avg_time * remaining_months
+
+            # Format ETA string
+            if eta_seconds >= 3600:  # >= 1 hour
+                eta_str = f"{int(eta_seconds // 3600)}h {int((eta_seconds % 3600) // 60)}m"
+            elif eta_seconds >= 60:  # >= 1 minute
+                eta_str = f"{int(eta_seconds // 60)}m {int(eta_seconds % 60)}s"
+            else:
+                eta_str = f"{int(eta_seconds)}s"
 
             print(f"  [{i:3d}/{len(unique_months)}] {current_month}: Trained on {len(train_positions):5,} rows → Predicted {len(predict_positions):4,} rows ({month_time:4.1f}s) ETA: {eta_str}")
 

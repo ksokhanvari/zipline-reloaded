@@ -838,6 +838,7 @@ New ETA at Month 100:
 
 - `e96b14e3` - fix: Restore quarterly period (Q1/Q2/Q3/Q4) for seasonality - v3.3.16
 - `ff69500b` - feat: Intelligent ETA using moving average of recent training times
+- `6ac86ba3` - fix: CRITICAL - Freeze cross-sectional rankings at complete month boundaries
 
 ### Still Excluded (Truly Non-Predictive)
 

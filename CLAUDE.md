@@ -603,10 +603,16 @@ Restored `period_fmp` (Q1/Q2/Q3/Q4/FY) as a categorical feature to capture quart
    - Added `period_fmp` to `categorical_features` list (alongside GICS, SIC sectors)
    - Model now learns Q1/Q2/Q3/Q4/FY patterns automatically
 
-2. **Updated Documentation**:
-   - Added CHANGELOG.md v3.3.16 entry explaining the fix
+2. **Intelligent ETA Calculation**:
+   - Replaced simple average with moving average of recent 10 months
+   - Accounts for increasing training times as data accumulates
+   - More accurate time estimates (e.g., Month 100: 70s/month vs old 45s/month)
+   - Enhanced formatting: "2h 15m" for long runs instead of "135m 0s"
+
+3. **Updated Documentation**:
+   - Added CHANGELOG.md v3.3.16 entry explaining both enhancements
    - Documented why quarterly seasonality matters
-   - Explained expected impact on volatility
+   - Explained ETA improvement rationale
 
 ### Files Modified
 
@@ -614,9 +620,11 @@ Restored `period_fmp` (Q1/Q2/Q3/Q4/FY) as a categorical feature to capture quart
 - `data/csv/forecast_returns_ml_walk_forward.py`:
   - Line 606: Commented out `period_fmp` exclusion with explanation
   - Line 617: Added `period_fmp` to categorical_features
+  - Line 1455: Added `recent_month_times = []` tracker
+  - Lines 1567-1584: Intelligent ETA calculation using moving average
 
 **Documentation**:
-- `data/csv/CHANGELOG.md` - Added comprehensive v3.3.16 release notes
+- `data/csv/CHANGELOG.md` - Added comprehensive v3.3.16 release notes (both enhancements)
 
 ### Technical Details
 
@@ -674,6 +682,42 @@ categorical_features = [
 - Q4 often includes annual guidance
 - Model can learn which stocks benefit from quarterly patterns
 
+### Intelligent ETA Details
+
+**The Problem with Simple Average**:
+```
+Month   1: Training time = 10s  (100K rows)
+Month  50: Training time = 45s  (2.5M rows)
+Month 100: Training time = 75s  (5M rows)
+
+Old ETA at Month 100:
+  Overall average = (10s + 45s + 75s + ...) / 100 = 45s
+  Remaining: 105 months × 45s = 79 minutes
+  ACTUAL: 105 months × ~75s = 131 minutes  ❌ 52 min underestimate!
+```
+
+**The Solution - Moving Average**:
+```
+New ETA at Month 100:
+  Recent 10-month average = (70s + 72s + 75s + ...) / 10 = 72s
+  Remaining: 105 months × 72s = 126 minutes  ✅ Much more accurate!
+```
+
+**Implementation**:
+- Tracks each month's training time in `recent_month_times` list
+- Uses last 10 months for ETA calculation (or all if < 10 completed)
+- Dynamically adapts as training times increase with data accumulation
+- Enhanced formatting:
+  - Short runs: "45s"
+  - Medium runs: "15m 30s"
+  - Long runs: "2h 15m"
+
+**Why Training Times Increase**:
+- **Expanding window**: Each month adds more historical data
+- **Rolling window**: Later months have more complex patterns
+- **Feature engineering**: More rows to lag, rank, and transform
+- **Model complexity**: More training samples for gradient boosting
+
 ### Expected Impact
 
 - ✅ **Reduced forecast volatility**: More stable predictions across quarters
@@ -705,7 +749,8 @@ categorical_features = [
 
 ### Git Commits (Branch: claude/continue-session-011-011CUzneiQ5d1tV3Y3r29tCA)
 
-- Pending commit for v3.3.16 changes
+- `e96b14e3` - fix: Restore quarterly period (Q1/Q2/Q3/Q4) for seasonality - v3.3.16
+- `ff69500b` - feat: Intelligent ETA using moving average of recent training times
 
 ### Still Excluded (Truly Non-Predictive)
 

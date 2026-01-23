@@ -34,16 +34,22 @@
 
 **Implementation**:
 - Detect if current prediction month is complete (has data for last day of month)
-- If **incomplete**: Use previous month's end date as ranking cutoff for training
+- If **incomplete**: Use previous month's end date as ranking cutoff
 - If **complete**: Use current month's end date as ranking cutoff
-- Training rankings: Computed on complete months only
-- Prediction rankings: Computed on whatever data exists for prediction month
+- **All rankings**: Computed on complete months ONLY (up to ranking_cutoff_date)
+- **Incomplete prediction month**: Rankings forward-filled from last complete month per symbol
 
 **Example Console Output** (during partial month):
 ```
 [ 93/205] 2016-09: Trained on 513,753 rows → Predicted 43,438 rows (74.7s) ETA: 2h 20m
-  📊 Ranking window: Training through 2016-08-31 (complete), Predicting 2016-09 (partial: 15 rows)
+  📊 Rankings: Computed through 2016-08-31 (complete), Forward-filled to 2016-09 (partial: 15 rows)
 ```
+
+**Forward-Fill Logic**:
+- For each stock in incomplete January (e.g., AAPL on Jan 1-15)
+- Find its ranking from December 31 (last complete month)
+- Use that December ranking for January predictions
+- When January completes (Jan 31 added), compute fresh January rankings
 
 **Benefits**:
 - ✅ **Forecast stability**: Adding Jan 1-15 doesn't change Dec training features
@@ -57,10 +63,12 @@
 - Combined with `period_fmp` seasonality, should significantly reduce trading algo volatility
 
 **Technical Details**:
-- Lines 1517-1565: Complete month detection and split ranking computation
-- Training positions filtered to include only complete month data
-- Prediction positions ranked separately using current month data
+- Lines 1517-1575: Complete month detection and ranking computation
+- All positions (training + prediction) filtered to complete months only
+- Rankings computed on complete month data (through Dec 31)
+- Incomplete prediction month: Rankings forward-filled per symbol from last complete date
 - Cutoff date: `ranking_cutoff_month.end_time.normalize()` (last day of last complete month)
+- Forward-fill ensures predictions use stable cross-sectional percentiles
 
 ---
 

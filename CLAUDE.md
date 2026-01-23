@@ -672,26 +672,40 @@ if df['Date'].max() >= last_day_of_month:
 else:
     ranking_cutoff_date = (current_month_period - 1).end_time  # Incomplete
 
-# Step 2: Compute TRAINING rankings on complete months only
-train_mask = [df.iloc[p]['Date'] <= ranking_cutoff_date for p in train_positions]
-train_df = df.iloc[complete_positions].copy()
-train_df[f'{col}_rank'] = train_df.groupby('Date')[col].rank(pct=True)
+# Step 2: Compute rankings on ALL data through complete months only
+all_positions = np.concatenate([train_positions, predict_positions])
+date_mask = [df.iloc[p]['Date'] <= ranking_cutoff_date for p in all_positions]
+complete_df = df.iloc[complete_positions].copy()
+complete_df[f'{col}_rank'] = complete_df.groupby('Date')[col].rank(pct=True)
 
-# Step 3: Compute PREDICTION rankings separately (can use partial month)
-predict_df = df.iloc[predict_positions].copy()
-predict_df[f'{col}_rank'] = predict_df.groupby('Date')[col].rank(pct=True)
+# Step 3: Forward-fill for incomplete prediction month
+# For each stock in January (incomplete), use its December ranking
+for incomplete_position in predict_incomplete_positions:
+    symbol = df.loc[idx, 'Symbol']
+    # Find last ranking from complete months (Dec 31)
+    last_complete_ranking = X.loc[last_december_idx, f'{col}_rank']
+    X.loc[idx, f'{col}_rank'] = last_complete_ranking
 ```
 
 **Key Benefits**:
-- ✅ Training window rankings unchanged when adding Jan 1-15
-- ✅ December rankings frozen at Dec 31 values
-- ✅ January rankings computed on whatever data exists
-- ✅ When January completes (Jan 31 added), it joins the "frozen" training set
+- ✅ ALL rankings computed ONLY on complete months (through Dec 31)
+- ✅ Incomplete January uses forward-filled December rankings
+- ✅ Training and prediction both use same complete-month cross-sections
+- ✅ When January completes (Jan 31 added), fresh rankings computed
 
 **Console Output** (partial month):
 ```
 [ 93/205] 2016-09: Trained on 513,753 rows → Predicted 43,438 rows (74.7s) ETA: 2h 20m
-  📊 Ranking window: Training through 2016-08-31 (complete), Predicting 2016-09 (partial: 15 rows)
+  📊 Rankings: Computed through 2016-08-31 (complete), Forward-filled to 2016-09 (partial: 15 rows)
+```
+
+**Forward-Fill Example**:
+```
+Stock: AAPL
+Dec 31, 2025: MarketCap = $3.0T, Rank = 0.999 (99.9th percentile)
+Jan 15, 2026: MarketCap = $3.1T, Rank = 0.999 (forward-filled from Dec 31)
+
+When Jan 31 complete: Fresh ranking computed for all January
 ```
 
 **Why This Matters**:

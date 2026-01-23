@@ -1514,24 +1514,63 @@ class ReturnForecaster:
                 print(f"  [{i:3d}/{len(unique_months)}] {current_month}: ⏭️  SKIPPED (insufficient training data: {len(train_positions):,} < 2,000) - {len(predict_positions):,} rows")
                 continue
 
-            # REPRODUCIBILITY FIX: Compute rankings on training window + current month only
-            # This ensures adding new data doesn't change historical rankings
-            # Combine training and prediction positions for ranking
-            month_positions = np.concatenate([train_positions, predict_positions])
-            month_df = df.iloc[month_positions].copy()
+            # REPRODUCIBILITY FIX v2: Compute rankings on COMPLETE months only
+            # Key insight: Rankings should only use data through last COMPLETE month boundary
+            # This ensures adding partial month data (e.g., Jan 1-15) doesn't change training rankings
 
-            # Compute rankings within each date using only this month's universe
+            # Step 1: Determine last complete month
+            current_month_period = pd.Period(current_month, freq='M')
+            last_day_of_current_month = current_month_period.end_time.normalize()
+            max_date_in_data = df['Date'].max()
+
+            # Check if current month has complete data
+            if max_date_in_data >= last_day_of_current_month:
+                # Current month is complete - use it for training rankings
+                ranking_cutoff_month = current_month_period
+                is_current_month_complete = True
+            else:
+                # Current month is incomplete - use previous month for training rankings
+                ranking_cutoff_month = current_month_period - 1
+                is_current_month_complete = False
+
+            ranking_cutoff_date = ranking_cutoff_month.end_time.normalize()
+
+            # Step 2: Compute rankings on TRAINING data using complete months only
+            train_mask = np.array([df.iloc[p]['Date'] <= ranking_cutoff_date for p in train_positions])
+            train_positions_complete = [train_positions[i] for i in range(len(train_positions)) if train_mask[i]]
+
+            if len(train_positions_complete) > 0:
+                train_df = df.iloc[train_positions_complete].copy()
+
+                if hasattr(self, '_rank_cols') and self._rank_cols:
+                    for col in self._rank_cols:
+                        if col in train_df.columns:
+                            train_df[f'{col}_rank'] = train_df.groupby('Date')[col].rank(pct=True)
+
+                # Update X with training rankings
+                rank_feature_cols = [f'{col}_rank' for col in self._rank_cols if col in train_df.columns]
+                for rank_col in rank_feature_cols:
+                    if rank_col in train_df.columns:
+                        X.loc[train_df.index, rank_col] = train_df[rank_col]
+
+            # Step 3: Compute rankings on PREDICTION data (current month, even if incomplete)
+            predict_df = df.iloc[predict_positions].copy()
+
             if hasattr(self, '_rank_cols') and self._rank_cols:
                 for col in self._rank_cols:
-                    if col in month_df.columns:
-                        month_df[f'{col}_rank'] = month_df.groupby('Date')[col].rank(pct=True)
+                    if col in predict_df.columns:
+                        predict_df[f'{col}_rank'] = predict_df.groupby('Date')[col].rank(pct=True)
 
-            # Update X with new ranking features for this month
-            rank_feature_cols = [f'{col}_rank' for col in self._rank_cols if col in month_df.columns]
+            # Update X with prediction rankings
+            rank_feature_cols = [f'{col}_rank' for col in self._rank_cols if col in predict_df.columns]
             for rank_col in rank_feature_cols:
-                if rank_col in month_df.columns:
-                    # Update the original X dataframe with this month's rankings
-                    X.loc[month_df.index, rank_col] = month_df[rank_col]
+                if rank_col in predict_df.columns:
+                    X.loc[predict_df.index, rank_col] = predict_df[rank_col]
+
+            # Debug output
+            if not is_current_month_complete:
+                print(f"    📊 Ranking window: Training through {ranking_cutoff_date.date()} (complete), " +
+                      f"Predicting {current_month} (partial: {len(predict_positions)} rows)")
 
             # Get training data using position-based indexing (now with updated rankings)
             X_train = X.iloc[train_positions]

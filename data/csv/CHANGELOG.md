@@ -2,6 +2,68 @@
 
 ## [3.3.16] - 2026-01-22
 
+### 🔒 CRITICAL FIX: Freeze Cross-Sectional Rankings at Complete Month Boundaries
+
+**FIXED**: Cross-sectional rankings now computed ONLY on complete months, frozen during partial month updates.
+
+**The Problem** (Resume with partial data):
+```
+1. Start with data through Dec 31, 2025
+2. Train for December → Rankings use data through Nov 30 → Predict Dec
+3. Add partial January data (Jan 1-15) and resume
+4. OLD BEHAVIOR:
+   - Rankings recomputed using ALL data including Jan 1-15
+   - Training window (last 12 months) has DIFFERENT features than original Dec training
+   - Historical forecasts drift due to changed training data
+```
+
+**The Solution** (Complete month boundaries):
+```
+1. Start with data through Dec 31, 2025
+2. Train for December → Rankings use data through Nov 30 → Predict Dec
+3. Add partial January data (Jan 1-15) and resume with --preserve-existing
+4. NEW BEHAVIOR:
+   - Training rankings: Use ONLY complete months (through Dec 31)
+   - Prediction rankings: Use Jan 1-15 data for January predictions
+   - December rankings FROZEN → Training features unchanged → Stable forecasts
+5. Add remaining January data (Jan 16-31)
+   - January now complete → Can be used for training next month (February)
+```
+
+**Key Insight**: Rankings should be anchored to the END OF LAST COMPLETE MONTH.
+
+**Implementation**:
+- Detect if current prediction month is complete (has data for last day of month)
+- If **incomplete**: Use previous month's end date as ranking cutoff for training
+- If **complete**: Use current month's end date as ranking cutoff
+- Training rankings: Computed on complete months only
+- Prediction rankings: Computed on whatever data exists for prediction month
+
+**Example Console Output** (during partial month):
+```
+[ 93/205] 2016-09: Trained on 513,753 rows → Predicted 43,438 rows (74.7s) ETA: 2h 20m
+  📊 Ranking window: Training through 2016-08-31 (complete), Predicting 2016-09 (partial: 15 rows)
+```
+
+**Benefits**:
+- ✅ **Forecast stability**: Adding Jan 1-15 doesn't change Dec training features
+- ✅ **Reproducible backtests**: Historical predictions remain unchanged
+- ✅ **Consistent cross-sections**: Training window uses same stock universe across runs
+- ✅ **Works with --preserve-existing**: Complements forecast freezing with feature freezing
+
+**Impact on Volatility**:
+- Eliminates ranking drift during incremental data updates
+- Training features stable across resume runs
+- Combined with `period_fmp` seasonality, should significantly reduce trading algo volatility
+
+**Technical Details**:
+- Lines 1517-1565: Complete month detection and split ranking computation
+- Training positions filtered to include only complete month data
+- Prediction positions ranked separately using current month data
+- Cutoff date: `ranking_cutoff_month.end_time.normalize()` (last day of last complete month)
+
+---
+
 ### ⚡ Enhancement: Intelligent ETA with Moving Average
 
 **IMPROVED**: ETA calculation now uses moving average of recent 10 months instead of overall average.

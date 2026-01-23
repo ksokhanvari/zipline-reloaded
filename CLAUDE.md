@@ -603,16 +603,25 @@ Restored `period_fmp` (Q1/Q2/Q3/Q4/FY) as a categorical feature to capture quart
    - Added `period_fmp` to `categorical_features` list (alongside GICS, SIC sectors)
    - Model now learns Q1/Q2/Q3/Q4/FY patterns automatically
 
-2. **Intelligent ETA Calculation**:
+2. **🔒 CRITICAL FIX: Freeze Rankings at Complete Month Boundaries**:
+   - Cross-sectional rankings now computed ONLY on complete months
+   - Training rankings frozen at last complete month (e.g., Dec 31)
+   - Prediction rankings computed on current month data (even if partial)
+   - **Key insight**: Adding partial month data (Jan 1-15) no longer changes training features
+   - Prevents ranking drift during resume runs with incremental data
+   - Works seamlessly with `--preserve-existing` flag
+
+3. **Intelligent ETA Calculation**:
    - Replaced simple average with moving average of recent 10 months
    - Accounts for increasing training times as data accumulates
    - More accurate time estimates (e.g., Month 100: 70s/month vs old 45s/month)
    - Enhanced formatting: "2h 15m" for long runs instead of "135m 0s"
 
-3. **Updated Documentation**:
-   - Added CHANGELOG.md v3.3.16 entry explaining both enhancements
+4. **Updated Documentation**:
+   - Added CHANGELOG.md v3.3.16 entry explaining all three enhancements
    - Documented why quarterly seasonality matters
-   - Explained ETA improvement rationale
+   - Explained ranking stability solution with examples
+   - Detailed ETA improvement rationale
 
 ### Files Modified
 
@@ -621,10 +630,88 @@ Restored `period_fmp` (Q1/Q2/Q3/Q4/FY) as a categorical feature to capture quart
   - Line 606: Commented out `period_fmp` exclusion with explanation
   - Line 617: Added `period_fmp` to categorical_features
   - Line 1455: Added `recent_month_times = []` tracker
+  - Lines 1517-1565: Complete month ranking computation with freeze logic
   - Lines 1567-1584: Intelligent ETA calculation using moving average
 
 **Documentation**:
-- `data/csv/CHANGELOG.md` - Added comprehensive v3.3.16 release notes (both enhancements)
+- `data/csv/CHANGELOG.md` - Added comprehensive v3.3.16 release notes (all three enhancements)
+
+### Ranking Stability Technical Details
+
+**The Problem - Ranking Drift During Resume**:
+
+User workflow:
+1. Train through Dec 31, 2025 → Forecast December
+2. Add partial January data (Jan 1-15) to CSV
+3. Resume with `--preserve-existing` → Skip December, train for January
+
+**Old behavior**:
+```python
+# Combined training + prediction positions
+month_positions = np.concatenate([train_positions, predict_positions])
+month_df = df.iloc[month_positions].copy()
+
+# Compute rankings using ALL data (including Jan 1-15)
+month_df[f'{col}_rank'] = month_df.groupby('Date')[col].rank(pct=True)
+
+# Problem: Training window (Feb-Dec) rankings now include Jan 1-15 impact
+# - New stocks in January affect December percentiles
+# - Training features change even though --preserve-existing skips December forecasts
+```
+
+**Result**: Model trains on different features → Forecasts drift
+
+**New behavior** (Complete month boundaries):
+```python
+# Step 1: Detect if current month is complete
+current_month_period = pd.Period(current_month, freq='M')
+last_day_of_month = current_month_period.end_time.normalize()
+
+if df['Date'].max() >= last_day_of_month:
+    ranking_cutoff_date = last_day_of_month  # Complete
+else:
+    ranking_cutoff_date = (current_month_period - 1).end_time  # Incomplete
+
+# Step 2: Compute TRAINING rankings on complete months only
+train_mask = [df.iloc[p]['Date'] <= ranking_cutoff_date for p in train_positions]
+train_df = df.iloc[complete_positions].copy()
+train_df[f'{col}_rank'] = train_df.groupby('Date')[col].rank(pct=True)
+
+# Step 3: Compute PREDICTION rankings separately (can use partial month)
+predict_df = df.iloc[predict_positions].copy()
+predict_df[f'{col}_rank'] = predict_df.groupby('Date')[col].rank(pct=True)
+```
+
+**Key Benefits**:
+- ✅ Training window rankings unchanged when adding Jan 1-15
+- ✅ December rankings frozen at Dec 31 values
+- ✅ January rankings computed on whatever data exists
+- ✅ When January completes (Jan 31 added), it joins the "frozen" training set
+
+**Console Output** (partial month):
+```
+[ 93/205] 2016-09: Trained on 513,753 rows → Predicted 43,438 rows (74.7s) ETA: 2h 20m
+  📊 Ranking window: Training through 2016-08-31 (complete), Predicting 2016-09 (partial: 15 rows)
+```
+
+**Why This Matters**:
+
+Cross-sectional rankings (percentiles) are **15+ features** in the model:
+- `CompanyMarketCap_rank`
+- `return_20d_rank`
+- `volatility_20d_rank`
+- `roe_rank`
+- `roa_rank`
+- etc.
+
+When these change during resume, the model sees different training patterns → predictions drift.
+
+**Combined Impact with Other Fixes**:
+1. `--preserve-existing`: Freezes historical predictions
+2. `period_fmp`: Restores seasonal signal
+3. **Complete month rankings**: Freezes training features
+
+→ **Result**: Stable forecasts during incremental data updates
 
 ### Technical Details
 

@@ -1563,27 +1563,32 @@ class ReturnForecaster:
                                                 if predict_incomplete_mask[i]]
 
                 if len(predict_incomplete_positions) > 0:
-                    # For each incomplete prediction row, find the ranking from last complete date
+                    # OPTIMIZED: Use vectorized merge instead of nested loops
                     predict_incomplete_df = df.iloc[predict_incomplete_positions].copy()
 
                     if hasattr(self, '_rank_cols') and self._rank_cols:
+                        # Get complete data with rankings for merge
+                        complete_df_full = df.iloc[complete_positions][['Symbol', 'Date'] +
+                                                                        [f'{col}_rank' for col in self._rank_cols
+                                                                         if f'{col}_rank' in X.columns]].copy()
+
+                        # For each symbol, get its most recent ranking from complete months
+                        # This is MUCH faster than nested loops
+                        complete_latest = complete_df_full.sort_values('Date').groupby('Symbol').last().reset_index()
+
+                        # Merge to get forward-filled rankings
+                        predict_with_ranks = predict_incomplete_df[['Symbol']].merge(
+                            complete_latest,
+                            on='Symbol',
+                            how='left',
+                            suffixes=('', '_complete')
+                        )
+
+                        # Update X with forward-filled rankings
                         for col in self._rank_cols:
                             rank_col = f'{col}_rank'
-                            if rank_col in X.columns and col in predict_incomplete_df.columns:
-                                # For each stock in incomplete month, use its ranking from the last complete date
-                                for idx in predict_incomplete_df.index:
-                                    symbol = df.loc[idx, 'Symbol']
-
-                                    # Find last ranking for this symbol from complete months
-                                    complete_symbol_mask = (df.iloc[complete_positions]['Symbol'] == symbol)
-                                    complete_symbol_positions = [complete_positions[i] for i in range(len(complete_positions))
-                                                                if complete_symbol_mask.iloc[i]]
-
-                                    if len(complete_symbol_positions) > 0:
-                                        # Get the most recent ranking from complete months
-                                        last_complete_idx = df.iloc[complete_symbol_positions]['Date'].idxmax()
-                                        if rank_col in X.columns and not pd.isna(X.loc[last_complete_idx, rank_col]):
-                                            X.loc[idx, rank_col] = X.loc[last_complete_idx, rank_col]
+                            if rank_col in predict_with_ranks.columns:
+                                X.loc[predict_incomplete_df.index, rank_col] = predict_with_ranks[rank_col].values
 
                     print(f"    📊 Rankings: Computed through {ranking_cutoff_date.date()} (complete), " +
                           f"Forward-filled to {current_month} (partial: {len(predict_incomplete_positions)} rows)")

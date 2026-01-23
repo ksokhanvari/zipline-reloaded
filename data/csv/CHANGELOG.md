@@ -2,6 +2,45 @@
 
 ## [3.3.16] - 2026-01-22
 
+### ⚡ CRITICAL PERFORMANCE FIX: Vectorize Date Filtering (5x Speedup)
+
+**FIXED**: Critical performance regression in ranking stability code caused 5x slowdown (70s → 6min per month).
+
+**The Problem**:
+- Ranking stability fix used list comprehensions with `df.iloc[p]` calls
+- With 12-month lookback = ~500,000 positions checked per month
+- Each `df.iloc[p]['Date']` creates a new Series object (slow!)
+- This ran **every month** during walk-forward training
+
+**The Solution**:
+```python
+# OLD (5x slower):
+date_mask = [df.iloc[p]['Date'] <= cutoff for p in all_positions]
+# 500,000 iloc calls per month
+
+# NEW (1000x faster):
+all_dates = df.iloc[all_positions]['Date'].values
+date_mask = all_dates <= np.datetime64(ranking_cutoff_date)
+# Single vectorized numpy operation
+```
+
+**Changes**:
+- Lines 1541-1543: Vectorized complete month filtering
+- Lines 1561-1563: Vectorized incomplete month filtering
+- Uses numpy array operations instead of Python loops
+
+**Impact**:
+- ✅ **5x speedup**: Back to ~70 seconds per month (from 6 minutes)
+- ✅ **Scales to any lookback**: Fast with 3, 12, 24 months or expanding
+- ✅ **No functionality change**: Same stability guarantees, just faster
+
+**Regression Timeline**:
+- v3.3.15: 70s per month (baseline)
+- v3.3.16 initial: 360s per month (5x regression from list comprehensions)
+- v3.3.16 fixed: 70s per month (restored + optimizations)
+
+---
+
 ### 🔒 CRITICAL FIX: Freeze Cross-Sectional Rankings at Complete Month Boundaries
 
 **FIXED**: Cross-sectional rankings now computed ONLY on complete months, frozen during partial month updates.

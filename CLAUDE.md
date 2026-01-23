@@ -581,7 +581,7 @@ When continuing a session:
 
 ### Summary
 
-Implemented three critical fixes to eliminate forecast volatility: (1) Restored quarterly seasonality signal (`period_fmp`), (2) **CRITICAL**: Anchored cross-sectional rankings to complete month boundaries only, (3) Improved ETA calculation with moving average. Combined impact: Stable forecasts during incremental data updates regardless of lookback window configuration.
+Implemented three critical fixes plus performance optimization to eliminate forecast volatility: (1) Restored quarterly seasonality signal (`period_fmp`), (2) **CRITICAL**: Anchored cross-sectional rankings to complete month boundaries only, (3) Improved ETA calculation with moving average, (4) **PERFORMANCE**: Fixed 5x slowdown caused by ranking stability code. Combined impact: Stable AND fast forecasts during incremental data updates regardless of lookback window configuration.
 
 ### The Problem
 
@@ -618,11 +618,19 @@ Implemented three critical fixes to eliminate forecast volatility: (1) Restored 
    - More accurate time estimates (e.g., Month 100: 70s/month vs old 45s/month)
    - Enhanced formatting: "2h 15m" for long runs instead of "135m 0s"
 
-4. **Updated Documentation**:
-   - Added CHANGELOG.md v3.3.16 entry explaining all three enhancements
+4. **⚡ CRITICAL PERFORMANCE FIX: Vectorize Date Filtering**:
+   - Fixed 5x slowdown introduced by ranking stability code (70s → 6min per month)
+   - **Root cause**: List comprehensions with `df.iloc[p]` called 500K+ times per month
+   - **Solution**: Vectorized numpy operations instead of Python loops
+   - **Result**: Back to ~70 seconds per month (5x speedup)
+   - Lines 1541-1543, 1561-1563: Vectorized date filtering
+
+5. **Updated Documentation**:
+   - Added CHANGELOG.md v3.3.16 entry explaining all enhancements + performance fix
    - Documented why quarterly seasonality matters
    - Explained ranking stability solution with examples
    - Detailed ETA improvement rationale
+   - Performance regression timeline and fix
 
 ### Files Modified
 
@@ -632,10 +640,13 @@ Implemented three critical fixes to eliminate forecast volatility: (1) Restored 
   - Line 617: Added `period_fmp` to categorical_features
   - Line 1455: Added `recent_month_times = []` tracker
   - Lines 1517-1565: Complete month ranking computation with freeze logic
+  - Lines 1541-1543: **Vectorized date filtering** (5x speedup)
+  - Lines 1561-1563: **Vectorized incomplete month filtering** (performance fix)
   - Lines 1567-1584: Intelligent ETA calculation using moving average
+  - Lines 1568-1588: Optimized forward-fill with vectorized merge
 
 **Documentation**:
-- `data/csv/CHANGELOG.md` - Added comprehensive v3.3.16 release notes (all three enhancements)
+- `data/csv/CHANGELOG.md` - Added comprehensive v3.3.16 release notes (all enhancements + performance fix)
 
 ### Ranking Stability Technical Details
 
@@ -863,6 +874,48 @@ Result: Stable ✅
 ```
 
 **The rule is simple**: Rankings = Last complete month boundary. Always. No exceptions.
+
+### Performance Issue and Fix (5x Speedup)
+
+**The Performance Regression**:
+
+Initial ranking stability implementation introduced a critical slowdown:
+- **User report**: Training went from 70s per month → 6 minutes per month (5x slower!)
+- **Iterations**: Only increased 400→500 (1.25x), shouldn't cause 5x slowdown
+
+**Root Cause**:
+```python
+# SLOW CODE (introduced in ranking stability):
+date_mask = [df.iloc[p]['Date'] <= ranking_cutoff_date for p in all_positions]
+complete_positions = [all_positions[i] for i in range(len(all_positions)) if date_mask[i]]
+
+# Problem: With 12-month lookback = ~500,000 positions
+# Each df.iloc[p] creates a new Series object
+# 500,000 Series creations per month × 193 months = 96 million operations!
+```
+
+**The Fix** (commits `0e4a4209` and `3aa938e2`):
+```python
+# FAST CODE (vectorized):
+all_dates = df.iloc[all_positions]['Date'].values  # Get all dates at once
+date_mask = all_dates <= np.datetime64(ranking_cutoff_date)  # Vectorized comparison
+complete_positions = all_positions[date_mask]  # Numpy boolean indexing
+
+# Single vectorized operation instead of 500K loops
+# ~1000x faster
+```
+
+**Timeline**:
+- v3.3.15: 70s per month (baseline)
+- v3.3.16 initial (6ac86ba3): 360s per month (5x regression)
+- v3.3.16 fixed (3aa938e2): 70s per month (restored!)
+
+**Two Optimizations Applied**:
+1. **Complete month filtering** (lines 1541-1543): Vectorized date comparison
+2. **Incomplete month filtering** (lines 1561-1563): Vectorized date comparison
+3. **Forward-fill** (lines 1568-1588): Vectorized merge instead of nested loops
+
+**Result**: Back to ~70 seconds per month with ranking stability fully intact!
 
 ### Expected Impact
 

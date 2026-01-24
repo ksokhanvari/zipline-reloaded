@@ -1570,28 +1570,31 @@ class ReturnForecaster:
                     predict_incomplete_df = df.iloc[predict_incomplete_positions].copy()
 
                     if hasattr(self, '_rank_cols') and self._rank_cols:
-                        # Get complete data with rankings for merge
-                        complete_df_full = df.iloc[complete_positions][['Symbol', 'Date'] +
-                                                                        [f'{col}_rank' for col in self._rank_cols
-                                                                         if f'{col}_rank' in X.columns]].copy()
+                        # Get rank columns that exist in X
+                        rank_cols_in_X = [f'{col}_rank' for col in self._rank_cols if f'{col}_rank' in X.columns]
 
-                        # For each symbol, get its most recent ranking from complete months
-                        # This is MUCH faster than nested loops
-                        complete_latest = complete_df_full.sort_values('Date').groupby('Symbol').last().reset_index()
+                        if len(rank_cols_in_X) > 0:
+                            # Get complete data: Symbol and Date from df, rank columns from X
+                            complete_df_metadata = df.iloc[complete_positions][['Symbol', 'Date']].copy()
+                            complete_df_ranks = X.iloc[complete_positions][rank_cols_in_X].copy()
+                            complete_df_full = pd.concat([complete_df_metadata, complete_df_ranks], axis=1)
 
-                        # Merge to get forward-filled rankings
-                        predict_with_ranks = predict_incomplete_df[['Symbol']].merge(
-                            complete_latest,
-                            on='Symbol',
-                            how='left',
-                            suffixes=('', '_complete')
-                        )
+                            # For each symbol, get its most recent ranking from complete months
+                            # This is MUCH faster than nested loops
+                            complete_latest = complete_df_full.sort_values('Date').groupby('Symbol').last().reset_index()
 
-                        # Update X with forward-filled rankings
-                        for col in self._rank_cols:
-                            rank_col = f'{col}_rank'
-                            if rank_col in predict_with_ranks.columns:
-                                X.loc[predict_incomplete_df.index, rank_col] = predict_with_ranks[rank_col].values
+                            # Merge to get forward-filled rankings
+                            predict_with_ranks = predict_incomplete_df[['Symbol']].merge(
+                                complete_latest,
+                                on='Symbol',
+                                how='left',
+                                suffixes=('', '_complete')
+                            )
+
+                            # Update X with forward-filled rankings
+                            for rank_col in rank_cols_in_X:
+                                if rank_col in predict_with_ranks.columns:
+                                    X.loc[predict_incomplete_df.index, rank_col] = predict_with_ranks[rank_col].values
 
                     print(f"    📊 Rankings: Computed through {ranking_cutoff_date.date()} (complete), " +
                           f"Forward-filled to {current_month} (partial: {len(predict_incomplete_positions)} rows)")

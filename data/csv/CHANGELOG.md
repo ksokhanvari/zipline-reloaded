@@ -1,5 +1,35 @@
 # Changelog - ML Return Forecasting
 
+## [3.3.17] - 2026-01-23
+
+### 🐛 BUG FIX: Forward-Fill Ranking Access Error
+
+**FIXED**: KeyError when accessing rank columns during forward-fill for incomplete prediction months.
+
+**The Problem**:
+- Forward-fill logic tried to access rank columns (e.g., `CompanyMarketCap_lag1_rank`) from `df` (original dataframe)
+- Rank columns only exist in `X` (feature matrix) after ranking computation
+- Caused crash: `KeyError: "['CompanyMarketCap_lag1_rank', ...] not in index"`
+
+**The Solution**:
+```python
+# Get Symbol/Date from df, rank columns from X
+complete_df_metadata = df.iloc[complete_positions][['Symbol', 'Date']].copy()
+complete_df_ranks = X.iloc[complete_positions][rank_cols_in_X].copy()
+complete_df_full = pd.concat([complete_df_metadata, complete_df_ranks], axis=1)
+```
+
+**Changes**:
+- Lines 1572-1594: Fixed forward-fill logic to access rank columns from `X` instead of `df`
+- Added safety check: `rank_cols_in_X = [col for col in ... if col in X.columns]`
+
+**Impact**:
+- ✅ Fixes crash when processing incomplete prediction months
+- ✅ Preserves ranking stability guarantees from v3.3.16
+- ✅ No performance impact (same vectorized merge logic)
+
+---
+
 ## [3.3.16] - 2026-01-22
 
 ### ⚡ CRITICAL PERFORMANCE FIX: Vectorize Date Filtering (5x Speedup)

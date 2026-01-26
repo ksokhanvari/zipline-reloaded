@@ -14,24 +14,6 @@ Start here for general usage:
 
 ## 🔧 Technical Deep Dives
 
-### v3.3.18 - Moving Average Features (2026-01-26)
-
-**New Features:**
-- **4 moving average indicators** - 50-day and 200-day MA features
-- return_50dma, return_200dma, above_50dma, above_200dma
-- Classic trend identification and momentum strength signals
-- Zero look-ahead bias (all use T-1 lagged prices)
-
-**Key Benefits:**
-- 📈 Trend identification (stocks above 200-day MA = uptrend)
-- 💪 Momentum strength (large deviations = strong moves)
-- 🔄 Mean reversion signals (far from MA may snap back)
-- 🎯 Production-safe for live trading (no future data used)
-
-**See [../CHANGELOG.md](../CHANGELOG.md) for complete implementation details**
-
----
-
 ### v3.3.14 - Forecast Stability (2026-01-20)
 
 **Core Design Document:**

@@ -8,7 +8,7 @@ This tool uses **Histogram-based Gradient Boosting** with extensive feature engi
 
 - ✅ **No look-ahead bias** - Forward-fill per symbol, proper lagging
 - ✅ **Flexible data support** - Works with any fundamental columns (LSEG, FMP, Sharadar, custom)
-- ✅ **Scalable features** - Handles 70-290+ features automatically based on your data
+- ✅ **Scalable features** - Handles 70-298+ features automatically based on your data
 - ✅ **Market cap weighting** - Focused training on large-cap stocks
 - ✅ **80%+ correlation** - Excellent predictive power
 - ✅ **Fast execution** - Processes millions of rows in seconds
@@ -22,6 +22,35 @@ This tool uses **Histogram-based Gradient Boosting** with extensive feature engi
 - **[CHANGELOG.md](CHANGELOG.md)** - Version history with detailed explanations
 - **[LOOK_AHEAD_BIAS_AUDIT.md](LOOK_AHEAD_BIAS_AUDIT.md)** - Production safety verification
 - **[Docs/INDEX.md](Docs/INDEX.md)** - Technical deep dives and advanced topics
+
+## 🆕 What's New in v3.3.18 (2026-01-26)
+
+### 🚀 NEW FEATURES: Moving Average Momentum Indicators
+
+Added 4 classic technical indicators based on 50-day and 200-day moving averages:
+
+**New Features**:
+1. **`return_50dma`** - % above/below 50-day moving average
+2. **`return_200dma`** - % above/below 200-day moving average
+3. **`above_50dma`** - Binary flag: 1 if price above 50-day MA, 0 otherwise
+4. **`above_200dma`** - Binary flag: 1 if price above 200-day MA, 0 otherwise
+
+**Why this matters**:
+- Classic trend identification (stocks above 200-day MA = uptrend)
+- Momentum strength signals (large deviations from MA = strong moves)
+- Mean reversion opportunities (far from MA may snap back)
+- Support/resistance dynamics (MAs act as dynamic levels)
+
+**Zero look-ahead bias**:
+- ✅ All features use T-1 lagged prices only
+- ✅ Moving averages computed backwards from T-1 (no future data)
+- ✅ Production-safe for live trading
+
+**Impact**: Total feature count increases from ~294 → **298 features**
+
+**See CHANGELOG.md for complete v3.3.18 details**
+
+---
 
 ## 🆕 What's New in v3.3.12 (2026-01-16)
 
@@ -349,7 +378,7 @@ python forecast_returns_ml_walk_forward.py \
 1. **`--pca`** - Has look-ahead bias in walk-forward mode
    - PCA fits on ALL training data (including future months)
    - Model sees future feature distributions
-   - Use raw features instead (290 features work well)
+   - Use raw features instead (298 features work well)
 
 2. **`--no-walk-forward`** - Single model with look-ahead bias
    - Trains one model on all historical data
@@ -394,7 +423,7 @@ If you see this warning, **DO NOT** use for production:
 
 ### Performance Without PCA
 
-**Good news:** HistGradientBoosting handles 290 features efficiently:
+**Good news:** HistGradientBoosting handles 298 features efficiently:
 - Training time: Fast (no PCA overhead)
 - Memory: Modest (fits in RAM easily)
 - Accuracy: Better (preserves all signal)
@@ -447,11 +476,11 @@ Predict any return horizon:
 
 **Key Insight:** Longer periods = better predictions (fundamentals predict long-term better than short-term noise)
 
-### 5. Extensive Feature Engineering (70-290+ features)
+### 5. Extensive Feature Engineering (70-298+ features)
 
 The number of features depends on your input data:
 - **LSEG-only dataset**: ~70-100 features
-- **Production dataset (LSEG + FMP + Sharadar)**: 290 features
+- **Production dataset (LSEG + FMP + Sharadar)**: 298 features
 
 **Price-based features:**
 - Momentum: 5, 10, 20-day returns
@@ -472,7 +501,7 @@ The number of features depends on your input data:
 
 ### 6. PCA Dimensionality Reduction (Optional)
 
-> **⚠️ PRODUCTION WARNING:** PCA has look-ahead bias in walk-forward mode and is **NOT RECOMMENDED for live trading**. Use PCA only for exploration or with `forecast_returns_ml.py` (single model, non-walk-forward). For production deployment, skip PCA and use all 290 features - HistGradientBoosting handles them efficiently with zero look-ahead bias.
+> **⚠️ PRODUCTION WARNING:** PCA has look-ahead bias in walk-forward mode and is **NOT RECOMMENDED for live trading**. Use PCA only for exploration or with `forecast_returns_ml.py` (single model, non-walk-forward). For production deployment, skip PCA and use all 298 features - HistGradientBoosting handles them efficiently with zero look-ahead bias.
 
 **What is PCA?**
 
@@ -491,7 +520,7 @@ Principal Component Analysis (PCA) is a dimensionality reduction technique that 
 | Scenario | Recommendation |
 |----------|---------------|
 | Initial exploration | Try `--pca 20` for fast iterations (non-walk-forward only) |
-| **Production/Live Trading** | **❌ DO NOT USE PCA** - Use all 290 features |
+| **Production/Live Trading** | **❌ DO NOT USE PCA** - Use all 298 features |
 | Research/Backtesting | `forecast_returns_ml.py` (single model) with `--pca 30-50` |
 | Maximum accuracy | No PCA (use all features) |
 
@@ -793,7 +822,7 @@ ltg_lag2 = shift(ltg, 1 day)
 
 **Total Features (Production Dataset with LSEG + FMP + Sharadar):**
 - **Input**: ~240 raw fundamental columns
-- **After lagging + engineering**: **290 features** used for training
+- **After lagging + engineering**: **298 features** used for training
 - **Feature breakdown**:
   - ~240 lagged fundamentals (_lag1 versions)
   - 6 price momentum features
@@ -853,7 +882,7 @@ Rank 4000+:                weight = 0.1  (low but not ignored)
 ### Final Training Matrix
 
 ```
-X = 70-290+ features (depending on input data - all lagged or engineered, NO raw fundamentals)
+X = 70-298+ features (depending on input data - all lagged or engineered, NO raw fundamentals)
 y = forward_return (90-day return starting 10 days ahead)
 sample_weights = market cap based weights
 
@@ -862,7 +891,7 @@ Prediction rows: 9.0M+ rows (includes recent dates without forward_return)
 
 Example production dataset:
   • Input: ~240 raw fundamental columns
-  • Output: 290 features (240 lagged + 50 engineered)
+  • Output: 298 features (240 lagged + 50 engineered)
 ```
 
 ### Feature Importance
@@ -898,7 +927,7 @@ The model automatically learns which features are most predictive. Typically:
 
 **The model learns from all features simultaneously to predict future returns!**
 - LSEG-only dataset: ~70-100 features
-- Production dataset (LSEG + FMP + Sharadar): 290 features
+- Production dataset (LSEG + FMP + Sharadar): 298 features
 - Your custom dataset: Features scale automatically with your input columns
 
 ## 🚀 Quick Start
@@ -1478,7 +1507,7 @@ Part of the Zipline-Reloaded project by Hidden Point Capital.
 - **NEW**: Production Deployment Guide section with safety checklist
 - **NEW**: Look-ahead bias protection table documenting all safe operations
 - **NEW**: Clear warnings in code and documentation about PCA in production
-- **WARNING**: PCA not recommended for production walk-forward (use all 290 features)
+- **WARNING**: PCA not recommended for production walk-forward (use all 298 features)
 
 **Bug Fixes:**
 - **BUGFIX**: Raw LSEG fundamentals now included when using `--no-lag` mode

@@ -468,6 +468,23 @@ class ReturnForecaster:
                 .std() * np.sqrt(252) * 100
             )
 
+        # Moving average features (50-day and 200-day)
+        print("  • Creating moving average features...")
+        df['ma_50d'] = df.groupby('Symbol')[price_col].transform(
+            lambda x: x.rolling(50, min_periods=1).mean()
+        )
+        df['ma_200d'] = df.groupby('Symbol')[price_col].transform(
+            lambda x: x.rolling(200, min_periods=1).mean()
+        )
+
+        # Return relative to moving averages (% above/below)
+        df['return_50dma'] = ((df[price_col] / df['ma_50d']) - 1) * 100
+        df['return_200dma'] = ((df[price_col] / df['ma_200d']) - 1) * 100
+
+        # Binary features: 1 if price above MA, 0 otherwise
+        df['above_50dma'] = (df[price_col] > df['ma_50d']).astype(int)
+        df['above_200dma'] = (df[price_col] > df['ma_200d']).astype(int)
+
         # Volume features (from lagged volume)
         print("  • Creating volume features...")
         df['volume_ma_20'] = df.groupby('Symbol')[volume_col].transform(
@@ -846,6 +863,10 @@ class ReturnForecaster:
             'return_5d': '5-day price momentum (% return)',
             'return_10d': '10-day price momentum (% return)',
             'return_20d': '20-day price momentum (% return)',
+            'return_50dma': '% above/below 50-day moving average',
+            'return_200dma': '% above/below 200-day moving average',
+            'above_50dma': 'Binary: 1 if price above 50-day MA, 0 otherwise',
+            'above_200dma': 'Binary: 1 if price above 200-day MA, 0 otherwise',
             'volatility_5d': '5-day annualized volatility (%)',
             'volatility_10d': '10-day annualized volatility (%)',
             'volatility_20d': '20-day annualized volatility (%)',

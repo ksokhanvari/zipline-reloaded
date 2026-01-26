@@ -577,6 +577,106 @@ When continuing a session:
 
 ---
 
+## Recent Session: ML Forecasting v3.3.18 - Moving Average Momentum Features (2026-01-26)
+
+### Summary
+
+Added four classic technical indicators based on 50-day and 200-day moving averages to enhance momentum signal capture. All features use T-1 lagged prices with zero look-ahead bias for production-safe live trading.
+
+### Key Accomplishments
+
+1. **Added 4 Moving Average Features**:
+   - `return_50dma` - % above/below 50-day moving average
+   - `return_200dma` - % above/below 200-day moving average
+   - `above_50dma` - Binary flag: 1 if price above 50-day MA, 0 otherwise
+   - `above_200dma` - Binary flag: 1 if price above 200-day MA, 0 otherwise
+
+2. **Zero Look-Ahead Bias Verification**:
+   - All features use `price_col = 'RefPriceClose_lag1'` (T-1 lagged price)
+   - Moving averages computed backwards from T-1 (no future data)
+   - Grouped by Symbol (independent per stock, no cross-contamination)
+   - min_periods=1 (handles stocks with < 50 or 200 days gracefully)
+
+3. **Feature Documentation**:
+   - Added descriptions for all 4 features in `_describe_feature()` method
+   - Features automatically logged during training with human-readable descriptions
+
+4. **Updated Documentation**:
+   - `CHANGELOG.md` - Added v3.3.18 with implementation details
+   - `README.md` - Updated "What's New" section, feature counts (290→298)
+   - `Docs/INDEX.md` - Added v3.3.18 entry with key benefits
+
+### Files Modified
+
+**ML Forecasting Scripts**:
+- `data/csv/forecast_returns_ml_walk_forward.py` - Added MA features (lines 471-486), descriptions (lines 866-869)
+- `data/csv/CHANGELOG.md` - Added v3.3.18 release notes
+- `data/csv/README.md` - Updated feature counts and "What's New"
+- `data/csv/Docs/INDEX.md` - Added v3.3.18 documentation entry
+
+### Key Code Changes
+
+**Moving Average Computation** (lines 473-478):
+```python
+df['ma_50d'] = df.groupby('Symbol')[price_col].transform(
+    lambda x: x.rolling(50, min_periods=1).mean()
+)
+df['ma_200d'] = df.groupby('Symbol')[price_col].transform(
+    lambda x: x.rolling(200, min_periods=1).mean()
+)
+```
+
+**Return Relative to MA** (lines 481-482):
+```python
+df['return_50dma'] = ((df[price_col] / df['ma_50d']) - 1) * 100
+df['return_200dma'] = ((df[price_col] / df['ma_200d']) - 1) * 100
+```
+
+**Binary Trend Flags** (lines 485-486):
+```python
+df['above_50dma'] = (df[price_col] > df['ma_50d']).astype(int)
+df['above_200dma'] = (df[price_col] > df['ma_200d']).astype(int)
+```
+
+### Use Cases
+
+1. **Trend Identification**: `above_200dma = 1` indicates stock in long-term uptrend
+2. **Momentum Strength**: `return_50dma = 15%` shows strong positive momentum
+3. **Mean Reversion**: Stocks far from MA (high absolute return_*dma) may revert to mean
+4. **Support/Resistance**: MAs often act as dynamic support/resistance levels
+
+### Look-Ahead Bias Protection
+
+| Component | Time Used | Look-Ahead Safe? |
+|-----------|-----------|------------------|
+| `RefPriceClose_lag1` | T-1 | ✅ YES |
+| `ma_50d` | Avg(T-1, T-2, ..., T-50) | ✅ YES |
+| `ma_200d` | Avg(T-1, T-2, ..., T-200) | ✅ YES |
+| `return_50dma` | (T-1 price / T-1 to T-50 MA) - 1 | ✅ YES |
+| `return_200dma` | (T-1 price / T-1 to T-200 MA) - 1 | ✅ YES |
+| `above_50dma` | T-1 price > T-1 to T-50 MA | ✅ YES |
+| `above_200dma` | T-1 price > T-1 to T-200 MA | ✅ YES |
+
+### Git Commits (Branch: claude/continue-session-011-011CUzneiQ5d1tV3Y3r29tCA)
+
+- `[pending]` - feat: Add 4 moving average momentum features (50d/200d MA) - v3.3.18
+
+### Impact
+
+- ✅ Total feature count: 294 → 298 features (+4)
+- ✅ Classic technical indicators widely used by traders
+- ✅ Zero look-ahead bias (production-safe)
+- ✅ Automatic feature logging and descriptions
+
+### Next Steps
+
+1. Retrain models to incorporate new MA features
+2. Analyze feature importance to see MA contribution
+3. Monitor prediction stability with new features
+4. Consider adding additional technical indicators if needed
+
+---
+
 ## Recent Session: ML Forecasting v3.3.16 - Forecast Stability Suite (2026-01-22)
 
 ### Summary
@@ -2328,6 +2428,6 @@ Completed comprehensive ML-based return forecasting system with production-grade
 
 ---
 
-**Document Version**: 16.0
-**Last Updated**: 2026-01-22
-**Key Features**: Hidden Point Capital branding, Sharadar + LSEG integration, multi-source pipelines, FlightLog monitoring, MRQ configuration, auto-detection workflows, comprehensive strategy debugging, **ML-based return forecasting v3.3.16 (production-ready with COMPLETE MONTH BOUNDARY rankings - universal principle for any lookback window, quarterly seasonality, intelligent ETA, total forecast stability)**, **Feature importance analysis notebook (10 visualizations for model interpretability)**
+**Document Version**: 17.0
+**Last Updated**: 2026-01-26
+**Key Features**: Hidden Point Capital branding, Sharadar + LSEG integration, multi-source pipelines, FlightLog monitoring, MRQ configuration, auto-detection workflows, comprehensive strategy debugging, **ML-based return forecasting v3.3.18 (298 features with 50d/200d moving averages, quarterly seasonality, complete month boundary rankings, intelligent ETA, zero look-ahead bias)**, **Feature importance analysis notebook (10 visualizations for model interpretability)**

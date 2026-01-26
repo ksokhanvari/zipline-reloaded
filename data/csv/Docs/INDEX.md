@@ -6,6 +6,7 @@ This directory contains detailed technical documentation for the ML-based stock 
 
 Start here for general usage:
 - **[../USAGE.md](../USAGE.md)** - Complete command-line reference and usage examples ⭐ **START HERE**
+- **[../weekly_command_guide.md](../weekly_command_guide.md)** - When to use --preserve-existing vs --overwrite-months ⭐ **PRODUCTION GUIDE**
 - **[../README.md](../README.md)** - Feature overview, what's new, production guide
 - **[../CHANGELOG.md](../CHANGELOG.md)** - Complete version history and release notes
 

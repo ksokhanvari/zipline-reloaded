@@ -18,7 +18,8 @@ This tool uses **Histogram-based Gradient Boosting** with extensive feature engi
 
 ## 📖 Quick Links
 
-- **[USAGE.md](USAGE.md)** - Complete command-line reference with all flags and examples ⭐ **NEW**
+- **[USAGE.md](USAGE.md)** - Complete command-line reference with all flags and examples ⭐ **START HERE**
+- **[weekly_command_guide.md](weekly_command_guide.md)** - When to use --preserve-existing vs --overwrite-months ⭐ **PRODUCTION GUIDE**
 - **[CHANGELOG.md](CHANGELOG.md)** - Version history with detailed explanations
 - **[LOOK_AHEAD_BIAS_AUDIT.md](LOOK_AHEAD_BIAS_AUDIT.md)** - Production safety verification
 - **[Docs/INDEX.md](Docs/INDEX.md)** - Technical deep dives and advanced topics

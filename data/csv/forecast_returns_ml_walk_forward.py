@@ -2479,7 +2479,14 @@ For full documentation, see README.md in this directory.
                         print(f"  • Rows with predictions: {len(prev_df_with_preds):,}")
 
                         # Calculate resume date (go back N months)
-                        if args.overwrite_months > 0:
+                        # CRITICAL: Skip resume_from_date logic when --preserve-existing is used
+                        # preserve_existing handles month skipping at the walk-forward level
+                        if args.preserve_existing:
+                            # Don't set resume_from_date - let preserve_existing logic handle it
+                            print(f"  • 🔒 PRESERVE MODE: Will skip months with existing predictions")
+                            print(f"  • Last prediction date: {last_prediction_date.strftime('%Y-%m-%d')}")
+                            resume_from_date = None  # Let all months flow through to preserve_existing check
+                        elif args.overwrite_months > 0:
                             resume_from_date = (last_prediction_date - pd.DateOffset(months=args.overwrite_months)).strftime('%Y-%m-%d')
                             print(f"  • Overwrite buffer: {args.overwrite_months} months")
                             print(f"  • Resume from: {resume_from_date}")

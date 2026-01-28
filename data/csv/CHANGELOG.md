@@ -1,5 +1,89 @@
 # Changelog - ML Return Forecasting
 
+## [3.3.19] - 2026-01-27
+
+### 🐛 CRITICAL BUG FIX: --preserve-existing Flag Not Working
+
+**FIXED**: The `--preserve-existing` flag was being overridden by `--overwrite-months` logic, causing historical forecasts to be recomputed instead of preserved.
+
+**The Problem**:
+- User specified `--preserve-existing` to freeze historical forecasts
+- Code still set `resume_from_date` based on `--overwrite-months` (default=1)
+- This filtered months BEFORE the preserve_existing logic could run
+- Result: Script recomputed last month instead of skipping it
+
+**Example of buggy behavior**:
+```bash
+python forecast_ml.py --resume-file old.parquet --preserve-existing
+
+# Expected: Skip ALL months with predictions, only train new months
+# Actual:   Re-predicted last 1 month (because overwrite_months=1 default)
+```
+
+**The Root Cause**:
+Lines 2482-2491 set `resume_from_date` WITHOUT checking if `args.preserve_existing` is True:
+```python
+# BUG: Runs even when --preserve-existing is set
+if args.overwrite_months > 0:
+    resume_from_date = ... - overwrite_months
+    # Filters months_to_process to skip months before this date
+```
+
+Then at line 1418, months are filtered by `resume_from_date` BEFORE preserve_existing check:
+```python
+if resume_from_date:  # This runs first!
+    months_to_process = [m for m in unique_months if m >= resume_from_month]
+
+# preserve_existing check at line 1427 operates on already-filtered list
+if preserve_existing:  # Too late - months already filtered!
+    ...
+```
+
+**The Solution**:
+Added check to skip `resume_from_date` logic when `--preserve-existing` is used:
+```python
+if args.preserve_existing:
+    # Don't set resume_from_date - let preserve_existing logic handle it
+    print(f"  • 🔒 PRESERVE MODE: Will skip months with existing predictions")
+    resume_from_date = None  # Let all months flow through to preserve_existing check
+elif args.overwrite_months > 0:
+    resume_from_date = ... - overwrite_months
+```
+
+**Changes**:
+- Lines 2481-2499: Added `if args.preserve_existing` check before setting `resume_from_date`
+- Now `resume_from_date` stays `None` when `--preserve-existing` is used
+- All months flow through to preserve_existing logic (line 1427), which correctly skips months with predictions
+
+**Impact**:
+- ✅ **CRITICAL FIX**: --preserve-existing now works correctly
+- ✅ Historical forecasts truly frozen (not recomputed)
+- ✅ Console shows "🔒 PRESERVE MODE: Skipping N months with existing predictions"
+- ✅ Only trains for months with missing predictions
+
+**Before fix** (buggy):
+```
+📂 RESUME MODE
+  • Overwrite buffer: 1 months  ← Wrong! Should preserve
+  • Resume from: 2025-12-21
+  • Months to process: 2 (skipping 203)  ← Recomputing Dec + Jan
+```
+
+**After fix** (correct):
+```
+📂 RESUME MODE
+  • 🔒 PRESERVE MODE: Will skip months with existing predictions
+  • Last prediction date: 2026-01-21
+  • 🔒 PRESERVE MODE: Skipping 204 months with existing predictions
+  • Processing 1 months with missing predictions  ← Only Jan 2026
+```
+
+**Migration**:
+- No code changes needed - just re-run with `--preserve-existing`
+- Historical forecasts will now be correctly preserved
+
+---
+
 ## [3.3.17] - 2026-01-23
 
 ### 🐛 BUG FIX: Forward-Fill Ranking Access Error

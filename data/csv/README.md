@@ -24,6 +24,34 @@ This tool uses **Histogram-based Gradient Boosting** with extensive feature engi
 - **[LOOK_AHEAD_BIAS_AUDIT.md](LOOK_AHEAD_BIAS_AUDIT.md)** - Production safety verification
 - **[Docs/INDEX.md](Docs/INDEX.md)** - Technical deep dives and advanced topics
 
+## 🆕 What's New in v3.3.22 (2026-01-27)
+
+### 🎯 TOP 10 Report Now Shows Large-Cap Stocks Only
+
+**NEW**: TOP 10 UNIQUE SYMBOLS report filters to top 25% by market cap.
+
+**What changed**:
+- Report now shows only large-cap stocks (top quartile by market cap)
+- Displays market cap threshold in report header
+- More actionable picks for institutional strategies
+
+**Why this matters**:
+```
+Before:  VTYX ($13.99, +440%) ← Microcap, illiquid
+After:   AAPL ($175.23, +35%) ← Large-cap, liquid
+         MSFT ($420.15, +32%) ← Large-cap, liquid
+```
+
+**Benefits**:
+- ✅ Focus on tradeable, liquid names
+- ✅ Better signal-to-noise ratio
+- ✅ Relevant for institutional portfolios
+- ✅ Eliminates data quality issues from microcaps
+
+**See CHANGELOG.md for complete v3.3.22 details**
+
+---
+
 ## 🆕 What's New in v3.3.21 (2026-01-27)
 
 ### 🎯 Strict Matching for Recent Forecasts in --preserve-existing

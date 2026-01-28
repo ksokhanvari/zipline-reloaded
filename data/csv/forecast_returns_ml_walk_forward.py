@@ -2674,6 +2674,13 @@ For full documentation, see README.md in this directory.
             # Group by Symbol, take most recent date for each
             recent_by_symbol = recent.sort_values('Date').groupby('Symbol').last().reset_index()
 
+            # Filter to top 25% by market cap (large-cap stocks only)
+            if 'CompanyMarketCap' in recent_by_symbol.columns:
+                # Calculate 75th percentile of market cap
+                marketcap_75th = recent_by_symbol['CompanyMarketCap'].quantile(0.75)
+                recent_by_symbol = recent_by_symbol[recent_by_symbol['CompanyMarketCap'] >= marketcap_75th]
+                print(f"  (Filtered to top 25% by market cap: ${marketcap_75th/1e9:.1f}B+ | {len(recent_by_symbol)} symbols)")
+
             # Get top 10 unique symbols
             top_unique = recent_by_symbol.nlargest(10, pred_col)[['Date', 'Symbol', 'RefPriceClose', pred_col]]
 

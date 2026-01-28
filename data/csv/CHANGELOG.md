@@ -1,5 +1,43 @@
 # Changelog - ML Return Forecasting
 
+## [3.3.22] - 2026-01-27
+
+### 🎯 IMPROVEMENT: Filter TOP 10 Report to Top 25% Market Cap
+
+**IMPROVED**: TOP 10 UNIQUE SYMBOLS report now only shows large-cap stocks (top 25% by market cap).
+
+**User Feedback**: "Make sure we are looking at the symbols in the top 25% of market cap" - small-cap stocks with extreme predictions were dominating the report.
+
+**The Enhancement**:
+- TOP 10 UNIQUE SYMBOLS report now filters to top quartile by market cap
+- Shows 75th percentile threshold in report header
+- Focuses on liquid, large-cap stocks with meaningful predictions
+
+**Why This Matters**:
+- Small-cap stocks often have data quality issues or extreme volatility
+- Large-cap predictions are more actionable for institutional strategies
+- Eliminates noise from illiquid microcap stocks
+
+**Example Output**:
+```
+🎯 TOP 10 UNIQUE SYMBOLS (most recent prediction per symbol):
+  (Filtered to top 25% by market cap: $15.2B+ | 1,234 symbols)
+  2026-01-27  AAPL    $  175.23  →  +35.12%
+  2026-01-27  MSFT    $  420.15  →  +32.45%
+  ...
+```
+
+**Impact**:
+- ✅ More relevant picks for institutional portfolios
+- ✅ Better signal-to-noise ratio in top predictions
+- ✅ Focus on liquid, tradeable names
+
+**Changes**:
+- Lines 2677-2681: Added market cap filter (75th percentile)
+- Graceful fallback if CompanyMarketCap column missing
+
+---
+
 ## [3.3.21] - 2026-01-27
 
 ### 🎯 IMPROVEMENT: Strict Matching for Recent Months in --preserve-existing

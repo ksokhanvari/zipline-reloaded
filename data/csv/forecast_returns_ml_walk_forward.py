@@ -1424,11 +1424,12 @@ class ReturnForecaster:
             months_to_process = unique_months
 
         # If preserve_existing, skip months that already have predictions
-        # Use "high water mark" approach: find last month with >95% predictions, skip everything before it
+        # Use "high water mark" approach: find last month with predictions, skip everything before it
         if preserve_existing and previous_predictions is not None:
-            # Find the last month with substantial predictions (>95% coverage)
+            # Find the last month with complete predictions
             # This is more efficient than checking every month from 2003 onwards
             last_complete_month = None
+            months_checked = 0
 
             # Iterate backwards through months to find the high water mark
             for month in reversed(months_to_process):
@@ -1436,12 +1437,22 @@ class ReturnForecaster:
                 month_positions = np.where(month_mask)[0]
                 month_preds = predictions[month_positions]
 
-                # Check coverage (allow up to 5% missing for alignment issues)
+                # Check coverage
                 coverage = (~np.isnan(month_preds)).sum() / len(month_preds)
+                months_checked += 1
 
-                if coverage >= 0.95:  # 95% or more rows have predictions
-                    last_complete_month = month
-                    break  # Found the high water mark
+                # CRITICAL: Use strict 100% matching for last 2 months (most recent data)
+                # Use 95% threshold for older months (tolerance for historical data changes)
+                if months_checked <= 2:
+                    # Last 2 months: require 100% strict matching
+                    if coverage >= 1.0:  # ALL rows must have predictions
+                        last_complete_month = month
+                        break  # Found the high water mark
+                else:
+                    # Older months: allow 95% threshold (more forgiving)
+                    if coverage >= 0.95:
+                        last_complete_month = month
+                        break  # Found the high water mark
 
             if last_complete_month is not None:
                 # Skip all months up to and including the last complete month

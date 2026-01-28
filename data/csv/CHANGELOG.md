@@ -1,5 +1,51 @@
 # Changelog - ML Return Forecasting
 
+## [3.3.21] - 2026-01-27
+
+### 🎯 IMPROVEMENT: Strict Matching for Recent Months in --preserve-existing
+
+**IMPROVED**: Added tiered coverage thresholds - 100% strict for last 2 months, 95% for older months.
+
+**User Feedback**: "For the most recent data, let's say the last two months, we should have strict matching of previous predictions"
+
+**The Enhancement**:
+- **Last 2 months**: Require 100% strict matching (ALL rows must have predictions)
+- **Older months**: Allow 95% threshold (tolerance for minor data provider changes)
+
+**Why This Matters**:
+- Recent months are your latest work - should be preserved exactly
+- Historical months may have minor alignment changes over time (symbol additions, data revisions)
+- Balances strictness for recent data with robustness for historical data
+
+**Implementation**:
+```python
+months_checked = 0
+for month in reversed(months_to_process):
+    months_checked += 1
+    coverage = predictions_exist / total_rows
+
+    if months_checked <= 2:
+        # Last 2 months: 100% strict
+        if coverage >= 1.0:
+            high_water_mark = month
+            break
+    else:
+        # Older months: 95% threshold
+        if coverage >= 0.95:
+            high_water_mark = month
+            break
+```
+
+**Impact**:
+- ✅ Recent forecasts preserved with 100% accuracy
+- ✅ Historical data robust to minor changes
+- ✅ Best of both worlds: strict + forgiving
+
+**Changes**:
+- Lines 1434-1449: Added tiered threshold logic
+
+---
+
 ## [3.3.20] - 2026-01-27
 
 ### 🚀 PERFORMANCE: Efficient High Water Mark for --preserve-existing

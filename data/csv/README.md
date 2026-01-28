@@ -24,6 +24,52 @@ This tool uses **Histogram-based Gradient Boosting** with extensive feature engi
 - **[LOOK_AHEAD_BIAS_AUDIT.md](LOOK_AHEAD_BIAS_AUDIT.md)** - Production safety verification
 - **[Docs/INDEX.md](Docs/INDEX.md)** - Technical deep dives and advanced topics
 
+## 🆕 What's New in v3.3.23 (2026-01-27)
+
+### 🐛 CRITICAL FIX: --preserve-existing Reproducibility
+
+**FIXED**: Historical predictions now stay stable when data providers backfill historical months.
+
+**The Problem**:
+Running the same command twice with `--preserve-existing` produced different backtest returns. The high water mark was failing when new rows were added to historical months (data provider backfill).
+
+**Example**:
+```
+First run:  December returns = 0.489%, 0.109%, 5.433%
+Second run: December returns = 0.635%, 0.570%, 4.056%  ❌ CHANGED!
+```
+
+**Root Cause**:
+```
+Old CSV:  December has 1,000 rows
+New CSV:  December has 1,050 rows (50 backfilled symbols)
+Coverage: 1,000/1,050 = 95.2% → Fails 100% check → Re-predicts December
+```
+
+**The Fix**:
+Smart threshold logic:
+- **Current incomplete month**: 90% (expects new data)
+- **Last complete month**: 99% (allows minor backfill)
+- **Older months**: 95% (standard tolerance)
+
+**Result**:
+```bash
+# Now produces identical backtests across runs!
+First run:  December = 0.489%, 0.109%, 5.433%
+Second run: December = 0.489%, 0.109%, 5.433%  ✅ IDENTICAL
+```
+
+**Diagnostic Output**:
+```
+  [1] 2026-01 (CURRENT): 35,240/41,538 rows (84.8%) - Threshold: 90% - ✓ PASS
+  [2] 2025-12: 41,122/41,385 rows (99.4%) - Threshold: 99% - ✓ PASS
+  • Found predictions through 2025-12
+```
+
+**See CHANGELOG.md for complete v3.3.23 details**
+
+---
+
 ## 🆕 What's New in v3.3.22 (2026-01-27)
 
 ### 🎯 TOP 10 Report Now Shows Large-Cap Stocks Only

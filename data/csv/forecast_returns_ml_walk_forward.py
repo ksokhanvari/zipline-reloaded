@@ -1431,6 +1431,18 @@ class ReturnForecaster:
             last_complete_month = None
             months_checked = 0
 
+            # Determine the most recent complete month (current month is likely incomplete)
+            df_dates = pd.to_datetime(df['Date'])
+            most_recent_date = df_dates.max()
+            most_recent_month = pd.Period(most_recent_date, freq='M')
+
+            # Check if current month is complete (has data through last day of month)
+            last_day_of_month = most_recent_month.end_time.normalize()
+            current_month_is_complete = (most_recent_date >= last_day_of_month)
+
+            print(f"  • Most recent date in data: {most_recent_date.strftime('%Y-%m-%d')}")
+            print(f"  • Current month: {most_recent_month} ({'COMPLETE' if current_month_is_complete else 'INCOMPLETE'})")
+
             # Iterate backwards through months to find the high water mark
             for month in reversed(months_to_process):
                 month_mask = df['_year_month'] == month
@@ -1438,21 +1450,36 @@ class ReturnForecaster:
                 month_preds = predictions[month_positions]
 
                 # Check coverage
-                coverage = (~np.isnan(month_preds)).sum() / len(month_preds)
+                rows_with_preds = (~np.isnan(month_preds)).sum()
+                total_rows = len(month_preds)
+                coverage = rows_with_preds / total_rows
                 months_checked += 1
 
-                # CRITICAL: Use strict 100% matching for last 2 months (most recent data)
-                # Use 95% threshold for older months (tolerance for historical data changes)
-                if months_checked <= 2:
-                    # Last 2 months: require 100% strict matching
-                    if coverage >= 1.0:  # ALL rows must have predictions
-                        last_complete_month = month
-                        break  # Found the high water mark
+                # Determine threshold based on whether this is current month or complete month
+                # CRITICAL: Current incomplete month should use lenient threshold (it has new data!)
+                # Last complete month should use strict 99% threshold (allows minor backfill)
+                # Older months use 95% threshold (allows historical data changes)
+                is_current_month = (month == str(most_recent_month))
+
+                if is_current_month and not current_month_is_complete:
+                    # Current incomplete month: very lenient (90%) - expect new rows
+                    threshold = 0.90
+                elif months_checked == 1 or (is_current_month and current_month_is_complete):
+                    # First month checked OR complete current month: strict 99%
+                    threshold = 0.99
                 else:
-                    # Older months: allow 95% threshold (more forgiving)
-                    if coverage >= 0.95:
-                        last_complete_month = month
-                        break  # Found the high water mark
+                    # Older complete months: 95% threshold
+                    threshold = 0.95
+
+                # Diagnostic output
+                status = "✓ PASS" if coverage >= threshold else "✗ FAIL"
+                month_label = f"{month} (CURRENT)" if is_current_month else month
+                print(f"    [{months_checked}] {month_label}: {rows_with_preds:,}/{total_rows:,} rows ({coverage*100:.1f}%) - Threshold: {threshold*100:.0f}% - {status}")
+
+                # Check if this month passes the threshold
+                if coverage >= threshold:
+                    last_complete_month = month
+                    break  # Found the high water mark
 
             if last_complete_month is not None:
                 # Skip all months up to and including the last complete month

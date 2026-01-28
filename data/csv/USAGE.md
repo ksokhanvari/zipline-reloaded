@@ -126,11 +126,11 @@ python forecast_returns_ml_walk_forward.py \
 
 ### Resume & Incremental Updates
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--resume-file PATH` | None | Resume from previous predictions file |
-| `--overwrite-months N` | 1 | Re-train last N months (for data revisions) |
-| `--preserve-existing` | False | 🔒 **Never overwrite existing predictions** (freeze historical forecasts) |
+| Flag                   | Default | Description                                                               |
+| ---------------------- | ------- | ------------------------------------------------------------------------- |
+| `--resume-file PATH`   | None    | Resume from previous predictions file                                     |
+| `--overwrite-months N` | 1       | Re-train last N months (for data revisions)                               |
+| `--preserve-existing`  | False   | 🔒 **Never overwrite existing predictions** (freeze historical forecasts) |
 
 **Resume workflow**:
 ```bash
@@ -169,9 +169,14 @@ python forecast_returns_ml_walk_forward.py \
 **What --preserve-existing does** (⭐ RECOMMENDED for backtesting stability):
 1. Loads previous predictions
 2. **Never overwrites existing predictions** (keeps historical forecasts frozen)
-3. Only computes predictions for rows with NaN
-4. Ensures forecast stability when adding new data
-5. Prevents historical predictions from changing due to new training data
+3. Uses efficient "high water mark" approach:
+   - Checks most recent months first (backwards search)
+   - **Last 2 months**: 100% strict matching (ALL rows must have predictions)
+   - **Older months**: 95% threshold (tolerates minor data provider changes)
+   - Skips all months up to and including the high water mark
+4. Only computes predictions for months with missing data
+5. Ensures forecast stability when adding new data
+6. Prevents historical predictions from changing due to new training data
 
 ---
 

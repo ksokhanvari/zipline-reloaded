@@ -24,6 +24,44 @@ This tool uses **Histogram-based Gradient Boosting** with extensive feature engi
 - **[LOOK_AHEAD_BIAS_AUDIT.md](LOOK_AHEAD_BIAS_AUDIT.md)** - Production safety verification
 - **[Docs/INDEX.md](Docs/INDEX.md)** - Technical deep dives and advanced topics
 
+## 🆕 What's New in v3.3.21 (2026-01-27)
+
+### 🎯 Strict Matching for Recent Forecasts in --preserve-existing
+
+**NEW**: Tiered coverage thresholds ensure your most recent forecasts are preserved with 100% accuracy.
+
+**How it works**:
+- **Last 2 months**: 100% strict matching - ALL rows must have predictions (zero tolerance)
+- **Older months**: 95% threshold - allows minor data provider changes
+
+**Why this matters**:
+```
+Your latest work (Jan 2026, Dec 2025):  100% exact preservation
+Historical data (2025 and earlier):      95% threshold (robust to minor changes)
+```
+
+**Benefits**:
+- ✅ Recent forecasts frozen with perfect accuracy
+- ✅ Historical data robust to symbol additions, data revisions
+- ✅ Efficient high water mark approach (checks recent months first)
+- ✅ Only processes months AFTER last complete month
+
+**Example**:
+```bash
+python forecast_returns_ml_walk_forward.py \
+    --resume-file predictions_jan21.parquet \
+    --preserve-existing  # Strict for recent, robust for history
+
+# Output:
+# • Found predictions through 2026-01
+# • Skipping 204 months (100% strict for Jan/Dec, 95% for older)
+# • Processing 1 month (only new data!)
+```
+
+**See CHANGELOG.md for complete v3.3.21 details**
+
+---
+
 ## 🆕 What's New in v3.3.12 (2026-01-16)
 
 ### 🎯 Parameter Update: min_samples_leaf = 100 (Default):

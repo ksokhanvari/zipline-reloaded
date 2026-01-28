@@ -34,16 +34,25 @@ python forecast_returns_ml_walk_forward.py \
 
 ### What It Does:
 
+**Efficient High Water Mark Approach**:
+- Checks months backwards from most recent
+- **Last 2 months**: Requires 100% strict matching (ALL rows must have predictions)
+- **Older months**: Allows 95% threshold (tolerates minor data provider changes)
+- Finds the "high water mark" (last complete month)
+- Skips all months up to and including that month
+- Only processes months AFTER the high water mark
+
 **Behavior**:
 ```
 Previous run had predictions through Dec 2025:
-  Nov 2025: 13.230%
-  Dec 2025:  9.772%
+  Nov 2025: 13.230%  (100% complete)
+  Dec 2025:  9.772%  (100% complete)
 
 New run with --preserve-existing:
-  Nov 2025: 13.230% ← FROZEN (not recalculated)
-  Dec 2025:  9.772% ← FROZEN (not recalculated)
-  Jan 2026: 27.500% ← NEW (computed)
+  Checks Dec 2025: 100% complete → High water mark found!
+  Nov 2025: 13.230% ← SKIPPED (below high water mark)
+  Dec 2025:  9.772% ← SKIPPED (high water mark)
+  Jan 2026: 27.500% ← NEW (computed - after high water mark)
 ```
 
 ### Why This Matters:
@@ -71,12 +80,19 @@ Week 4: Add new data → Dec 2025 prediction = 9.772% (frozen)
 ### Console Output:
 ```
 📂 RESUME MODE
-  • Last prediction date: 2025-12-31
-  • 🔒 PRESERVE MODE: Skipping 195 months with existing predictions
+  • 🔒 PRESERVE MODE: Will skip months with existing predictions
+  • 🔒 PRESERVE MODE: Found predictions through 2025-12
+  • Skipping 195 months with existing predictions
   • Processing 1 months with missing predictions
 
   [196/196] 2026-01: Trained on 9,240,123 rows → Predicted 41,538 rows (45.2s)
 ```
+
+**Key Features**:
+- ✅ **100% strict** for last 2 months (your latest work)
+- ✅ **95% threshold** for older months (robust to minor changes)
+- ✅ **Efficient** - finds high water mark in 1-5 iterations
+- ✅ **Only processes new months** - skips all historical data
 
 ---
 

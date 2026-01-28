@@ -1424,30 +1424,37 @@ class ReturnForecaster:
             months_to_process = unique_months
 
         # If preserve_existing, skip months that already have predictions
+        # Use "high water mark" approach: find last month with >95% predictions, skip everything before it
         if preserve_existing and previous_predictions is not None:
-            months_with_predictions = []
-            months_without_predictions = []
+            # Find the last month with substantial predictions (>95% coverage)
+            # This is more efficient than checking every month from 2003 onwards
+            last_complete_month = None
 
-            for month in months_to_process:
-                # Get rows for this month
+            # Iterate backwards through months to find the high water mark
+            for month in reversed(months_to_process):
                 month_mask = df['_year_month'] == month
                 month_positions = np.where(month_mask)[0]
-
-                # Check if ALL rows in this month have predictions (not NaN)
                 month_preds = predictions[month_positions]
-                has_all_predictions = np.all(~np.isnan(month_preds))
 
-                if has_all_predictions:
-                    months_with_predictions.append(month)
-                else:
-                    months_without_predictions.append(month)
+                # Check coverage (allow up to 5% missing for alignment issues)
+                coverage = (~np.isnan(month_preds)).sum() / len(month_preds)
 
-            # Only process months without predictions
-            months_to_process = months_without_predictions
+                if coverage >= 0.95:  # 95% or more rows have predictions
+                    last_complete_month = month
+                    break  # Found the high water mark
 
-            if len(months_with_predictions) > 0:
-                print(f"  • 🔒 PRESERVE MODE: Skipping {len(months_with_predictions)} months with existing predictions")
+            if last_complete_month is not None:
+                # Skip all months up to and including the last complete month
+                months_to_skip = [m for m in months_to_process if m <= last_complete_month]
+                months_to_process = [m for m in months_to_process if m > last_complete_month]
+
+                print(f"  • 🔒 PRESERVE MODE: Found predictions through {last_complete_month}")
+                print(f"  • Skipping {len(months_to_skip)} months with existing predictions")
                 print(f"  • Processing {len(months_to_process)} months with missing predictions")
+            else:
+                # No months with substantial predictions found - process all
+                print(f"  • 🔒 PRESERVE MODE: No complete months found in previous predictions")
+                print(f"  • Processing all {len(months_to_process)} months")
 
         # Track statistics
         months_trained = 0

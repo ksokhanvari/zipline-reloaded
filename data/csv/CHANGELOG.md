@@ -1,5 +1,68 @@
 # Changelog - ML Return Forecasting
 
+## [3.3.20] - 2026-01-27
+
+### 🚀 PERFORMANCE: Efficient High Water Mark for --preserve-existing
+
+**IMPROVED**: Changed preserve_existing logic to use "high water mark" approach instead of checking every single month from 2003 onwards.
+
+**The Problem**:
+- Old logic checked ALL 205 months individually for complete predictions
+- If even one row was missing in 2009 (due to alignment), marked whole month as "needs prediction"
+- Resulted in inefficient iteration through hundreds of early months
+- Console showed: "Processing 25 months" when only 1-2 months actually needed processing
+
+**The Old Logic**:
+```python
+for month in months_to_process:  # ALL 205 months!
+    if ALL rows have predictions:
+        skip month
+    else:
+        process month  # Even if 99.9% have predictions!
+```
+
+**The New Logic (High Water Mark)**:
+```python
+# Start from LAST month, work backwards
+for month in reversed(months_to_process):
+    coverage = predictions / total_rows
+    if coverage >= 0.95:  # 95% threshold
+        last_complete_month = month
+        break  # Found the high water mark!
+
+# Skip everything up to and including high water mark
+months_to_process = [m for m in months if m > last_complete_month]
+```
+
+**Benefits**:
+- ✅ Much more efficient (finds high water mark in 1-5 iterations instead of 205)
+- ✅ Tolerates 5% alignment mismatches (realistic for production)
+- ✅ Only processes months AFTER last complete month
+- ✅ Matches user expectations (skip history, only process new data)
+
+**Example**:
+```
+Before (inefficient):
+  • Skipping 180 months with existing predictions
+  • Processing 25 months with missing predictions
+  [1/205] 2003-06: SKIPPED (insufficient data)
+  ...
+  [193/205] 2025-01: Training...
+
+After (efficient):
+  • Found predictions through 2026-01
+  • Skipping 204 months with existing predictions
+  • Processing 1 months with missing predictions
+  [205/205] 2026-01: Training...  (only the new month!)
+```
+
+**Changes**:
+- Lines 1427-1450: Replaced full-scan logic with high water mark approach
+- Works backwards from last month to find 95%+ coverage
+- Skips all months up to and including high water mark
+
+---
+
 ## [3.3.19] - 2026-01-27
 
 ### 🐛 CRITICAL BUG FIX: --preserve-existing Flag Not Working

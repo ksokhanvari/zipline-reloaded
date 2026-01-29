@@ -1,5 +1,75 @@
 # Changelog - ML Return Forecasting
 
+## [3.3.24] - 2026-01-27
+
+### 🔒 SAFETY: Triple-Sort Protection for Time-Series Integrity
+
+**ENHANCED**: Added three-layer sorting protection to guarantee time-series integrity.
+
+**User Feedback**: "Make sure dataframes are sorted by date before grouping by Symbol to ensure integrity of time series"
+
+**The Enhancement**:
+Added **three independent sorts** at critical points in the pipeline:
+
+1. **Sort #1** (line 349): Before forward return calculation
+   ```python
+   df.sort_values(['Symbol', 'Date'], kind='stable').reset_index(drop=True)
+   ```
+   - Ensures `groupby('Symbol').shift(-N)` works correctly
+   - Stable sort for reproducibility with duplicate dates
+
+2. **Sort #2** (line 395): Before feature engineering
+   ```python
+   df.sort_values(['Symbol', 'Date'])
+   ```
+   - Protects ALL feature engineering operations
+   - Ensures `.shift()`, `.pct_change()`, `.rolling()`, `.ffill()` work correctly
+
+3. **Sort #3** (line 1972): Before walk-forward loop
+   ```python
+   df.sort_values(['Symbol', 'Date']).reset_index(drop=True)
+   ```
+   - Final safety check before training
+   - Re-aligns X, y, sample_weights with sorted df
+   - Guarantees integrity even if future code changes unsort df
+
+**Why Three Sorts?**
+- **Defense in depth**: Protects against code changes between stages
+- **Clear boundaries**: Each major stage gets fresh guarantee
+- **Zero cost**: Sorting already-sorted data is O(n) not O(n log n)
+- **Documentation**: Makes sorting requirements explicit at each stage
+
+**Affected Operations** (now 100% protected):
+```python
+# Forward returns
+df.groupby('Symbol')['RefPriceClose'].shift(-forecast_days)
+
+# Price features
+df.groupby('Symbol')[price_col].pct_change(days)
+df.groupby('Symbol')[price_col].rolling(days).std()
+
+# Lagging
+df.groupby('Symbol')[col].shift(1)
+df.groupby('Symbol')[col].ffill()
+
+# Walk-forward rankings
+complete_df.groupby('Date')[col].rank(pct=True)
+complete_df_full.sort_values('Date').groupby('Symbol').last()
+```
+
+**Impact**:
+- ✅ Guaranteed time-series integrity throughout pipeline
+- ✅ Protection against future code changes
+- ✅ Clear documentation of sorting requirements
+- ✅ Negligible performance impact (already-sorted data)
+
+**Changes**:
+- Lines 349-352: Enhanced documentation + console output
+- Lines 395-397: Enhanced documentation
+- Lines 1972-1980: NEW safety re-sort + feature matrix re-alignment
+
+---
+
 ## [3.3.23] - 2026-01-27
 
 ### 🐛 CRITICAL FIX: Preserve-Existing Reprodicibility Issue

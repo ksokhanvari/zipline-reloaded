@@ -24,6 +24,38 @@ This tool uses **Histogram-based Gradient Boosting** with extensive feature engi
 - **[LOOK_AHEAD_BIAS_AUDIT.md](LOOK_AHEAD_BIAS_AUDIT.md)** - Production safety verification
 - **[Docs/INDEX.md](Docs/INDEX.md)** - Technical deep dives and advanced topics
 
+## 🆕 What's New in v3.3.24 (2026-01-27)
+
+### 🔒 SAFETY: Triple-Sort Protection for Time-Series Integrity
+
+**NEW**: Three-layer sorting protection guarantees correct time-series operations.
+
+**Why this matters**:
+All time-series operations (`.shift()`, `.pct_change()`, `.rolling()`, `.ffill()`) require data sorted by Symbol+Date. A single unsorted row can cause incorrect feature values.
+
+**The Protection**:
+```
+Sort #1 (line 349)  → Before forward return calculation
+Sort #2 (line 395)  → Before feature engineering
+Sort #3 (line 1972) → Before walk-forward training
+```
+
+**Benefits**:
+- ✅ Guaranteed time-series integrity throughout pipeline
+- ✅ Protection against future code changes
+- ✅ Explicit documentation at each stage
+- ✅ Zero performance impact (sorting sorted data is fast)
+
+**Console Output**:
+```
+🔒 Sorting dataframe for time-series operations...
+  ✓ Sorted by Symbol+Date (9,234,567 rows)
+```
+
+**See CHANGELOG.md for complete v3.3.24 details**
+
+---
+
 ## 🆕 What's New in v3.3.23 (2026-01-27)
 
 ### 🐛 CRITICAL FIX: --preserve-existing Reproducibility

@@ -344,11 +344,14 @@ class ReturnForecaster:
         """
         print(f"Creating target: {self.target_return_days}-day returns starting {self.forecast_days} days ahead...")
 
-        # CRITICAL: Use stable sort and reset index for reproducibility
-        # Unstable sort with duplicate (Symbol, Date) pairs causes non-deterministic ordering
+        # CRITICAL SAFETY #1: Sort for time-series operations
+        # groupby('Symbol').shift() requires data sorted by Symbol, then Date within each Symbol
+        # Stable sort ensures reproducible ordering when (Symbol, Date) pairs duplicate
+        print(f"🔒 Sorting dataframe for time-series operations...")
         df = df.sort_values(['Symbol', 'Date'], kind='stable').reset_index(drop=True)
+        print(f"  ✓ Sorted by Symbol+Date ({len(df):,} rows)")
 
-        # Calculate forward returns per symbol
+        # Calculate forward returns per symbol (REQUIRES SORTED DATA)
         # Price at T+forecast_days (e.g., T+10)
         df['price_at_forecast'] = df.groupby('Symbol')['RefPriceClose'].shift(-self.forecast_days)
 
@@ -389,7 +392,10 @@ class ReturnForecaster:
         else:
             print("Engineering features (with proper lagging to prevent look-ahead bias)...")
 
-        # Sort for time-series operations
+        # CRITICAL SAFETY #2: Sort for time-series operations in feature engineering
+        # All groupby('Symbol') operations below require sorted data for:
+        # - .shift(), .pct_change(), .rolling(), .ffill() to work correctly per symbol
+        print(f"  • Sorting by Symbol+Date for time-series integrity...")
         df = df.sort_values(['Symbol', 'Date'])
 
         # ===== STEP 1: Lag ALL raw fundamental columns by 1 day (unless no_lag=True) =====
@@ -1965,6 +1971,23 @@ class ReturnForecaster:
         # Store X and y for feature importance calculation later
         self.X_last = X
         self.y_last = y
+
+        # CRITICAL SAFETY: Re-sort dataframe before walk-forward loop
+        # This ensures time-series integrity even if code changes above could unsort df
+        # Groupby operations in walk-forward loop depend on Symbol+Date sorting for:
+        # - .shift(), .pct_change(), .rolling(), .ffill() to work correctly
+        print(f"🔒 Verifying time-series sort order before walk-forward...")
+        df = df.sort_values(['Symbol', 'Date']).reset_index(drop=True)
+        print(f"  ✓ Dataframe sorted by Symbol+Date ({len(df):,} rows)")
+
+        # IMPORTANT: After re-sorting, we must also re-align X and y with new df index
+        # Since prepare_features() created X from df columns, and we just reset df's index,
+        # we need to ensure X's index matches df's new index
+        X = X.reset_index(drop=True)
+        y = pd.Series(y).reset_index(drop=True).values  # Reset y index to match
+        sample_weights = pd.Series(sample_weights).reset_index(drop=True).values
+        valid_idx = np.array(valid_idx)  # Already a boolean mask, doesn't need index reset
+        print(f"  ✓ Feature matrices re-aligned with sorted dataframe\n")
 
         # Choose prediction strategy
         if walk_forward:

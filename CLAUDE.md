@@ -577,6 +577,188 @@ When continuing a session:
 
 ---
 
+## Recent Session: ML Forecasting v3.3.17-v3.3.24 - Production Stability & Quality Improvements (2026-01-23 to 2026-01-27)
+
+### Summary
+
+Completed comprehensive production hardening of the ML forecasting system with 8 major releases focused on forecast reproducibility, data quality handling, and time-series integrity. Critical fixes ensure stable backtests when data providers backfill historical data, plus performance optimizations for real-world production workflows.
+
+### Key Accomplishments
+
+1. **v3.3.24 - Triple-Sort Protection for Time-Series Integrity**:
+   - Added three-layer sorting at critical pipeline stages (lines 349, 395, 1972)
+   - Guarantees correct time-series operations (`.shift()`, `.pct_change()`, `.rolling()`, `.ffill()`)
+   - Defense-in-depth: Protects against future code changes unsorted data
+   - Zero performance impact (sorting already-sorted data is O(n))
+
+2. **v3.3.23 - CRITICAL: Preserve-Existing Reproducibility with Data Backfill** (MAJOR FIX):
+   - **Problem**: Historical predictions changed when data providers backfilled rows to historical months
+   - **Root Cause**: 100% strict matching failed when December had 1,000 rows → 1,050 rows (50 backfilled)
+   - **Solution**: Context-aware thresholds
+     - Current incomplete month: 90% (expects new data)
+     - Last complete month: 99% (allows minor backfill)
+     - Older months: 95% (standard tolerance)
+   - **Result**: Stable backtests across runs even with data provider backfill
+   - **Impact**: CRITICAL for production - ensures reproducible results
+
+3. **v3.3.22 - Large-Cap Focus for TOP 10 Report**:
+   - Filters TOP 10 UNIQUE SYMBOLS report to top 25% by market cap
+   - Eliminates noise from illiquid microcap stocks
+   - More actionable picks for institutional strategies
+   - Shows market cap threshold in report header
+
+4. **v3.3.21 - Tiered Coverage Thresholds**:
+   - Last 2 months: 100% strict matching (zero tolerance)
+   - Older months: 95% threshold (robust to minor changes)
+   - Balances strictness for recent work with robustness for historical data
+
+5. **v3.3.20 - High Water Mark Performance Optimization**:
+   - Changed `--preserve-existing` to backward search from most recent month
+   - Finds preservation cutoff in 1-5 iterations instead of checking all 205 months
+   - 95% threshold tolerates minor alignment mismatches
+   - Much faster for production workflows
+
+6. **v3.3.19 - CRITICAL: --preserve-existing Flag Not Working** (BUG FIX):
+   - **Problem**: `--preserve-existing` was overridden by `--overwrite-months` default logic
+   - **Root Cause**: `resume_from_date` set BEFORE preserve_existing check, filtered months early
+   - **Solution**: Skip `resume_from_date` logic entirely when `--preserve-existing` is used
+   - **Impact**: Historical forecasts now truly frozen (not recomputed)
+
+7. **v3.3.17 - Forward-Fill Ranking Access Error Fix**:
+   - Fixed KeyError when accessing rank columns during forward-fill
+   - Rank columns exist in `X` (feature matrix), not `df` (original dataframe)
+   - Changed forward-fill to access rank columns from correct source
+
+8. **Documentation Enhancements**:
+   - Created `weekly_command_guide.md` (569 lines) - Production guide for `--preserve-existing` vs `--overwrite-months`
+   - Updated CHANGELOG.md with 377+ new lines documenting all improvements
+   - Enhanced README.md with v3.3.22-v3.3.24 features
+   - Updated Docs/INDEX.md to v3.3.24
+
+### Files Modified
+
+**ML Forecasting Scripts**:
+- `data/csv/forecast_returns_ml_walk_forward.py` - All 8 versions of improvements (triple-sort, tiered thresholds, high water mark, bug fixes)
+- `data/csv/analyze_feature_importance.ipynb` - Feature importance visualization updates
+
+**Documentation**:
+- `data/csv/CHANGELOG.md` - Added comprehensive v3.3.17-v3.3.24 entries (377 lines)
+- `data/csv/README.md` - Updated with latest features (147 new lines)
+- `data/csv/USAGE.md` - Enhanced command-line reference (21 lines)
+- `data/csv/weekly_command_guide.md` - NEW production guide (569 lines)
+- `data/csv/Docs/INDEX.md` - Updated version to v3.3.24
+
+### Production Impact
+
+**Forecast Stability** (v3.3.23 - MOST CRITICAL):
+```bash
+# Before fix (data backfill causes re-predictions):
+First run:  December = 0.489%, 0.109%, 5.433%
+Second run: December = 0.635%, 0.570%, 4.056%  ❌ CHANGED!
+
+# After fix (stable across runs):
+First run:  December = 0.489%, 0.109%, 5.433%
+Second run: December = 0.489%, 0.109%, 5.433%  ✅ IDENTICAL
+```
+
+**Data Quality**:
+- ✅ Handles data provider backfill gracefully (v3.3.23)
+- ✅ Time-series integrity guaranteed (v3.3.24)
+- ✅ Large-cap focus in reports (v3.3.22)
+
+**Performance**:
+- ✅ High water mark optimization (v3.3.20) - 1-5 iterations vs 205
+- ✅ Efficient preservation logic
+
+**Bug Fixes**:
+- ✅ `--preserve-existing` actually works (v3.3.19)
+- ✅ Ranking forward-fill fixed (v3.3.17)
+
+### Git Commits (Branch: claude/continue-session-011-011CUzneiQ5d1tV3Y3r29tCA)
+
+- `21c85429` - docs: Update Docs/INDEX.md to v3.3.24
+- `4c1cbbe8` - fix: Add triple-sort protection for time-series integrity (v3.3.24)
+- `0811ab60` - fix: CRITICAL - Preserve-existing now handles data backfill (v3.3.23)
+- `f2b47adc` - feat: Filter TOP 10 report to top 25% market cap (v3.3.22)
+- `6d374d86` - docs: Update all guides for v3.3.21 tiered thresholds
+- `eb5c1a45` - feat: Strict 100% matching for last 2 months in --preserve-existing (v3.3.21)
+- `5adfaddf` - perf: Use high water mark for --preserve-existing (v3.3.20)
+- `b97d70bc` - fix: CRITICAL - --preserve-existing flag not working (v3.3.19)
+- `912a2c1e` - Revert "feat: Add 4 moving average momentum features (50d/200d MA) - v3.3.18"
+- `80c8bd3e` - docs: Add comprehensive weekly command guide for production updates
+- Earlier commits for v3.3.17 and feature importance notebook improvements
+
+### Production Workflow (Recommended)
+
+**Weekly/Monthly Updates** (Standard workflow):
+```bash
+python forecast_returns_ml_walk_forward.py \
+    --input-file data_2026_jan.csv \
+    --output predictions_2026_jan.parquet \
+    --resume-file predictions_2025.parquet \
+    --preserve-existing  # 🔒 FREEZE historical forecasts
+```
+
+**When to Use Each Flag**:
+
+| Scenario | Flag | Why |
+|----------|------|-----|
+| Normal weekly update | `--preserve-existing` | Stable historical forecasts |
+| Data provider revised past data | `--overwrite-months N` | Recompute affected months |
+| Bug fix in data pipeline | `--overwrite-months N` | Correct affected period |
+
+See `weekly_command_guide.md` for complete production guide.
+
+### Console Output Examples
+
+**v3.3.24 - Triple-Sort Protection**:
+```
+🔒 Sorting dataframe for time-series operations...
+  ✓ Sorted by Symbol+Date (9,234,567 rows)
+```
+
+**v3.3.23 - Tiered Thresholds**:
+```
+  • Most recent date in data: 2026-01-27
+  • Current month: 2026-01 (INCOMPLETE)
+    [1] 2026-01 (CURRENT): 35,240/41,538 rows (84.8%) - Threshold: 90% - ✓ PASS
+    [2] 2025-12: 41,122/41,385 rows (99.4%) - Threshold: 99% - ✓ PASS
+  • 🔒 PRESERVE MODE: Found predictions through 2025-12
+  • Processing 1 month (only 2026-01!)
+```
+
+**v3.3.22 - Large-Cap Filter**:
+```
+🎯 TOP 10 UNIQUE SYMBOLS (most recent prediction per symbol):
+  (Filtered to top 25% by market cap: $15.2B+ | 1,234 symbols)
+  2026-01-27  AAPL    $  175.23  →  +35.12%
+  2026-01-27  MSFT    $  420.15  →  +32.45%
+```
+
+### Critical Production Fixes Summary
+
+**v3.3.23 is the MOST CRITICAL fix** for production users:
+- Ensures stable backtests when data providers backfill historical data
+- Context-aware thresholds (90%/99%/95%) handle real-world data changes
+- Eliminates spurious re-predictions of historical months
+
+**v3.3.19 fixes critical bug**:
+- `--preserve-existing` flag now actually works
+- Historical forecasts properly frozen (not recomputed)
+
+**v3.3.24 guarantees correctness**:
+- Triple-sort protection ensures time-series operations work correctly
+- Defense against future code changes
+
+### Next Steps
+
+1. Monitor production forecasts for stability across weekly updates
+2. Verify backtest reproducibility with `--preserve-existing`
+3. Check TOP 10 reports focus on large-cap actionable names
+4. Review weekly_command_guide.md for production best practices
+
+---
+
 ## Recent Session: ML Forecasting v3.3.16 - Forecast Stability Suite (2026-01-22)
 
 ### Summary
@@ -2328,6 +2510,6 @@ Completed comprehensive ML-based return forecasting system with production-grade
 
 ---
 
-**Document Version**: 16.0
-**Last Updated**: 2026-01-22
-**Key Features**: Hidden Point Capital branding, Sharadar + LSEG integration, multi-source pipelines, FlightLog monitoring, MRQ configuration, auto-detection workflows, comprehensive strategy debugging, **ML-based return forecasting v3.3.16 (production-ready with COMPLETE MONTH BOUNDARY rankings - universal principle for any lookback window, quarterly seasonality, intelligent ETA, total forecast stability)**, **Feature importance analysis notebook (10 visualizations for model interpretability)**
+**Document Version**: 17.0
+**Last Updated**: 2026-02-03
+**Key Features**: Hidden Point Capital branding, Sharadar + LSEG integration, multi-source pipelines, FlightLog monitoring, MRQ configuration, auto-detection workflows, comprehensive strategy debugging, **ML-based return forecasting v3.3.24 (production-ready with triple-sort time-series protection, --preserve-existing data backfill handling, complete month boundary rankings, quarterly seasonality, large-cap focused reports, total forecast stability)**, **Feature importance analysis notebook (10 visualizations for model interpretability)**

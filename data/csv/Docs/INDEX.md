@@ -131,4 +131,4 @@ data/csv/
 ---
 
 **Last Updated:** 2026-01-20
-**Current Version:** v3.3.14
+**Current Version:** v3.3.24

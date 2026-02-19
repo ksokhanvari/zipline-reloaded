@@ -166,16 +166,17 @@ python forecast_returns_ml_walk_forward.py \
 3. Skips months already predicted
 4. Trains only for new months
 
-**What --preserve-existing does** (⭐ RECOMMENDED for backtesting stability):
+**What --preserve-existing does** (⭐ RECOMMENDED for weekly updates):
 1. Loads previous predictions
-2. **Never overwrites existing predictions** (keeps historical forecasts frozen)
-3. Uses efficient "high water mark" approach:
-   - Checks most recent months first (backwards search)
-   - **Last 2 months**: 100% strict matching (ALL rows must have predictions)
+2. **Never overwrites existing predictions at the ROW level** (v3.3.25+)
+3. Two layers of protection:
+   - **Month-level**: High water mark skips complete months entirely (no training needed)
+   - **Row-level**: Within reprocessed months, only fills rows that have NaN (new rows)
+4. High water mark uses efficient backwards search:
+   - **Current incomplete month**: 90% threshold (expects new rows)
+   - **Last complete month**: 99% strict matching
    - **Older months**: 95% threshold (tolerates minor data provider changes)
-   - Skips all months up to and including the high water mark
-4. Only computes predictions for months with missing data
-5. Ensures forecast stability when adding new data
+5. Ensures forecast stability during weekly updates within the same month
 6. Prevents historical predictions from changing due to new training data
 
 ---
@@ -383,32 +384,121 @@ python forecast_returns_ml_walk_forward.py \
 
 ---
 
+## Production Workflow
+
+This section describes the recommended workflow for production use. The key principle:
+**use `--preserve-existing` for weekly updates (stability), `--overwrite-months` for monthly refreshes (accuracy).**
+
+### How the Flags Work Together
+
+| Flag | Scope | Behavior | Use When |
+|------|-------|----------|----------|
+| `--preserve-existing` | **Row-level** (v3.3.25+) | Never overwrites any existing prediction | Weekly updates |
+| `--overwrite-months N` | **Month-level** | Recomputes last N complete months | Monthly refresh, data corrections |
+| Neither | Default | Recomputes last 1 month | Ad-hoc runs |
+
+### Weekly Update Cycle (Within a Month)
+
+Use `--preserve-existing` for every weekly update. This preserves all prior predictions at the row level - even within the same month.
+
+```bash
+# Week 1: Initial run for the month (e.g., data through Jan 7)
+python forecast_returns_ml_walk_forward.py \
+    --input-file data_20260107.csv \
+    --output predictions_20260107.parquet \
+    --resume-file predictions_december.parquet \
+    --preserve-existing
+
+# Week 2: Add new week of data (through Jan 14)
+python forecast_returns_ml_walk_forward.py \
+    --input-file data_20260114.csv \
+    --output predictions_20260114.parquet \
+    --resume-file predictions_20260107.parquet \
+    --preserve-existing
+
+# Week 3: Add new week (through Jan 21)
+python forecast_returns_ml_walk_forward.py \
+    --input-file data_20260121.csv \
+    --output predictions_20260121.parquet \
+    --resume-file predictions_20260114.parquet \
+    --preserve-existing
+
+# Week 4: End of month (through Jan 31)
+python forecast_returns_ml_walk_forward.py \
+    --input-file data_20260131.csv \
+    --output predictions_20260131.parquet \
+    --resume-file predictions_20260121.parquet \
+    --preserve-existing
+```
+
+**What happens each week** (v3.3.25 row-level preservation):
+```
+Week 1: Predicts Jan 1-7 rows (new)
+Week 2: Preserves Jan 1-7 predictions, predicts Jan 8-14 (new rows only)
+Week 3: Preserves Jan 1-14 predictions, predicts Jan 15-21 (new rows only)
+Week 4: Preserves Jan 1-21 predictions, predicts Jan 22-31 (new rows only)
+```
+
+**Console output** (Week 2 example):
+```
+  [205/205] 2026-01: Trained on 9,240,123 rows → Predicted 41,538 rows (45.2s) ETA: 0s
+    🔒 Preserved 35,240 existing predictions, filled 6,298 new rows
+```
+
+**Time**: ~30 seconds to 2 minutes per update
+
+---
+
+### When to Use `--overwrite-months N`
+
+Use `--overwrite-months N` only when you intentionally want to recompute predictions. This is NOT part of the regular weekly workflow.
+
+```bash
+# Recompute last 3 months after a data correction
+python forecast_returns_ml_walk_forward.py \
+    --input-file data_corrected.csv \
+    --output predictions_corrected.parquet \
+    --resume-file predictions_previous.parquet \
+    --overwrite-months 3
+```
+
+| Scenario | Command | Why |
+|----------|---------|-----|
+| Data provider revised past data | `--overwrite-months N` | Correct affected months |
+| Bug fix in data pipeline | `--overwrite-months N` | Recompute affected period |
+| Added new features to model | `--overwrite-months N` | Apply new features to recent months |
+| Changed model parameters | `--overwrite-months N` | See impact on recent predictions |
+| Full baseline refresh | No resume flags (fresh run) | Start from scratch |
+
+---
+
 ## Common Use Cases
 
 ### 1. Weekly Production Update (Fastest)
 ```bash
-# Add new week of data to existing predictions
-python forecast_returns_ml_walk_forward.py \
-    --input-file data_latest.parquet \
-    --output predictions_latest.parquet \
-    --resume-file predictions_previous.parquet
-```
-
-**Time**: ~30 seconds to 2 minutes (only trains new months)
-
----
-
-### 2. Monthly Re-training (Recommended)
-```bash
-# Re-train last 2 months (for data revisions)
+# Add new week of data, preserve all existing predictions
 python forecast_returns_ml_walk_forward.py \
     --input-file data_latest.parquet \
     --output predictions_latest.parquet \
     --resume-file predictions_previous.parquet \
-    --overwrite-months 2
+    --preserve-existing
 ```
 
-**Time**: ~2-5 minutes (re-trains 2 months + new data)
+**Time**: ~30 seconds to 2 minutes (only predicts new rows)
+
+---
+
+### 2. Data Correction (When needed)
+```bash
+# Recompute last 3 months after data provider revision
+python forecast_returns_ml_walk_forward.py \
+    --input-file data_corrected.parquet \
+    --output predictions_corrected.parquet \
+    --resume-file predictions_previous.parquet \
+    --overwrite-months 3
+```
+
+**Time**: ~5-10 minutes (retrains 3 months)
 
 ---
 
@@ -795,22 +885,23 @@ python forecast_returns_ml_walk_forward.py \
 
 ### Production Weekly Update
 ```bash
-# Resume from last week, skip diagnostics
+# Preserve all existing predictions, only fill new rows
 python forecast_returns_ml_walk_forward.py \
     --input-file data_2026_week3.parquet \
     --output predictions_2026_week3.parquet \
     --resume-file predictions_2026_week2.parquet \
+    --preserve-existing \
     --skip-feature-importance
 ```
 
-### Production Monthly Re-training
+### Production Data Correction
 ```bash
-# Re-train last 2 months, full diagnostics
+# Recompute after data provider revised Q4 fundamentals
 python forecast_returns_ml_walk_forward.py \
-    --input-file data_2026_jan.parquet \
-    --output predictions_2026_jan.parquet \
-    --resume-file predictions_2025_dec.parquet \
-    --overwrite-months 2 \
+    --input-file data_2026_corrected.parquet \
+    --output predictions_2026_corrected.parquet \
+    --resume-file predictions_2026.parquet \
+    --overwrite-months 3 \
     --temporal-diagnostics
 ```
 
@@ -888,6 +979,6 @@ python forecast_returns_ml_walk_forward.py --input-file data.csv --output predic
 
 ---
 
-**Last Updated**: 2026-01-16
-**Version**: v3.3.12
+**Last Updated**: 2026-02-19
+**Version**: v3.3.25
 **Script**: `forecast_returns_ml_walk_forward.py`

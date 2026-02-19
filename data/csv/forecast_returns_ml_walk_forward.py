@@ -1537,6 +1537,14 @@ class ReturnForecaster:
             if len(predict_positions) == 0:
                 continue
 
+            # OPTIMIZATION: If preserve_existing and ALL positions already have predictions,
+            # skip training entirely for this month (saves significant computation)
+            if preserve_existing and previous_predictions is not None:
+                nan_mask = np.isnan(predictions[predict_positions])
+                if not nan_mask.any():
+                    print(f"  [{i:3d}/{len(unique_months)}] {current_month}: 🔒 All {len(predict_positions):,} predictions exist - SKIPPED training")
+                    continue
+
             # Training data: all rows BEFORE this month with valid forward_return
             # Window strategy depends on lookback_months parameter
             if self.lookback_months:
@@ -1677,7 +1685,26 @@ class ReturnForecaster:
             month_predictions = self.predict(X_predict)
 
             # Store predictions using position-based indexing
-            predictions[predict_positions] = month_predictions
+            # CRITICAL: When preserve_existing is True, only fill positions that don't
+            # already have predictions. This ensures weekly updates within the same month
+            # don't overwrite existing predictions (e.g., Week 1 predictions preserved
+            # when adding Week 2 data, even though the month is reprocessed).
+            if preserve_existing and previous_predictions is not None:
+                nan_mask = np.isnan(predictions[predict_positions])
+                if nan_mask.any():
+                    positions_to_fill = predict_positions[nan_mask]
+                    predictions_to_fill = month_predictions[nan_mask]
+                    predictions[positions_to_fill] = predictions_to_fill
+                    filled_count = nan_mask.sum()
+                    preserved_count = len(predict_positions) - filled_count
+                    if preserved_count > 0:
+                        print(f"    🔒 Preserved {preserved_count:,} existing predictions, filled {filled_count:,} new rows")
+                else:
+                    # All positions already have predictions - skip writing entirely
+                    preserved_count = len(predict_positions)
+                    print(f"    🔒 Preserved all {preserved_count:,} existing predictions (no new rows)")
+            else:
+                predictions[predict_positions] = month_predictions
 
             # Track time
             month_time = (pd.Timestamp.now() - month_start_time).total_seconds()

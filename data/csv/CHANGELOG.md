@@ -1,5 +1,51 @@
 # Changelog - ML Return Forecasting
 
+## [3.3.25] - 2026-02-19
+
+### 🐛 CRITICAL FIX: Row-Level Prediction Preservation in --preserve-existing
+
+**FIXED**: `--preserve-existing` was overwriting predictions within reprocessed months.
+
+**User Report**: "As I add some new data the previous week's forecast is somehow not the same - it produces a different portfolio for the week before."
+
+**Root Cause**:
+`--preserve-existing` worked at the **month level** but not the **row level**. When doing weekly updates within the same month:
+
+1. User has predictions for Jan 1-15 (Week 1-2)
+2. User adds data for Jan 16-22 (Week 3)
+3. High water mark checks January: coverage = ~60% (only 15 of 22 days have predictions)
+4. 60% < 90% threshold → month gets **reprocessed**
+5. **Line 1680 unconditionally overwrote ALL January predictions** including Week 1-2
+
+Additionally, the retrained model was slightly different because adding Jan 16-22 data made `forward_return` (via `shift()`) available for more historical rows (~October), giving the model more training samples.
+
+**The Fix**:
+Changed prediction storage from month-level to **row-level** preservation:
+
+```python
+# BEFORE: Unconditionally overwrites all predictions in month
+predictions[predict_positions] = month_predictions
+
+# AFTER: Only fill positions that don't already have predictions
+if preserve_existing and previous_predictions is not None:
+    nan_mask = np.isnan(predictions[predict_positions])
+    positions_to_fill = predict_positions[nan_mask]
+    predictions[positions_to_fill] = month_predictions[nan_mask]
+```
+
+**Console Output** (new):
+```
+  [205/205] 2026-01: Trained on 9,240,123 rows → Predicted 41,538 rows (45.2s) ETA: 0s
+    🔒 Preserved 35,240 existing predictions, filled 6,298 new rows
+```
+
+**Impact**:
+- Weekly updates within the same month now preserve existing predictions exactly
+- Only genuinely new rows (dates not in previous file) get predictions
+- Complete months are still skipped entirely by high water mark (unchanged)
+
+---
+
 ## [3.3.24] - 2026-01-27
 
 ### 🔒 SAFETY: Triple-Sort Protection for Time-Series Integrity

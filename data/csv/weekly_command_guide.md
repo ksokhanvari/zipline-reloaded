@@ -2,23 +2,26 @@
 
 This guide explains the difference between `--preserve-existing` and `--overwrite-months` flags, and when to use each one for production ML forecasting.
 
+**Updated for v3.3.25**: `--preserve-existing` now works at the **row level** (not month level), ensuring weekly updates within the same month preserve all prior predictions exactly.
+
 ---
 
 ## Quick Reference
 
 | Scenario | Flag to Use | Why |
 |----------|------------|-----|
-| **Weekly/Monthly production update** | `--preserve-existing` ✅ | Keep historical forecasts frozen |
+| **Weekly production update** | `--preserve-existing` ✅ | Preserve all existing predictions, only fill new rows |
+| **End-of-month refresh** | `--overwrite-months 1` | Recompute entire last month with best model |
 | **Data provider revised past data** | `--overwrite-months N` | Recompute affected months |
-| **You want to repredict with new features** | `--overwrite-months N` | Recalculate with updated model |
+| **Added new features to model** | `--overwrite-months N` | Recalculate with updated model |
 | **Bug fix in data pipeline** | `--overwrite-months N` | Correct affected period |
 
 ---
 
-## `--preserve-existing` (For Stable Backtesting)
+## `--preserve-existing` (For Weekly Updates & Stable Backtesting)
 
 ### When to Use:
-- ✅ **Normal weekly/monthly updates** (adding new data)
+- ✅ **Weekly production updates** (adding new data within the same month)
 - ✅ **Production backtesting** (need stable historical forecasts)
 - ✅ **Research reproducibility** (same data = same predictions)
 - ✅ **Live trading** (don't want historical signals to drift)
@@ -29,53 +32,63 @@ python forecast_returns_ml_walk_forward.py \
     --input-file data_2026_jan.csv \
     --output predictions_2026_jan.parquet \
     --resume-file predictions_2025.parquet \
-    --preserve-existing  # 🔒 FREEZE all historical predictions
+    --preserve-existing  # 🔒 FREEZE all existing predictions
 ```
 
-### What It Does:
+### What It Does (v3.3.25 - Row-Level Preservation):
 
-**Efficient High Water Mark Approach**:
-- Checks months backwards from most recent
-- **Last 2 months**: Requires 100% strict matching (ALL rows must have predictions)
-- **Older months**: Allows 95% threshold (tolerates minor data provider changes)
-- Finds the "high water mark" (last complete month)
-- Skips all months up to and including that month
-- Only processes months AFTER the high water mark
+**Two layers of protection**:
 
-**Behavior**:
+1. **Month-level**: Complete months are skipped entirely (no training needed)
+   - Uses "high water mark" backwards search
+   - Current incomplete month: 90% threshold
+   - Last complete month: 99% strict
+   - Older months: 95% threshold
+
+2. **Row-level** (NEW in v3.3.25): Within any reprocessed month, only fills rows that don't already have predictions
+   - Existing predictions are NEVER overwritten
+   - Only genuinely new rows (dates not in previous file) get predictions
+   - Fixes the bug where weekly updates within the same month would overwrite prior weeks
+
+**Behavior - Cross-Month Update** (complete month preserved):
 ```
-Previous run had predictions through Dec 2025:
-  Nov 2025: 13.230%  (100% complete)
-  Dec 2025:  9.772%  (100% complete)
+Previous run had predictions through Dec 2025.
+New run adds January 2026 data:
 
-New run with --preserve-existing:
-  Checks Dec 2025: 100% complete → High water mark found!
-  Nov 2025: 13.230% ← SKIPPED (below high water mark)
-  Dec 2025:  9.772% ← SKIPPED (high water mark)
-  Jan 2026: 27.500% ← NEW (computed - after high water mark)
+  Dec 2025: 100% coverage → High water mark → SKIPPED entirely
+  Jan 2026: 0% coverage → Trained, all rows predicted (NEW)
+```
+
+**Behavior - Within-Month Update** (row-level preservation):
+```
+Previous run had predictions through Jan 15 (Week 2).
+New run adds Jan 16-22 (Week 3) data:
+
+  Dec 2025: 100% coverage → High water mark → SKIPPED entirely
+  Jan 2026: 60% coverage (only Jan 1-15 have predictions) → Month reprocessed
+    🔒 Preserved 35,240 existing predictions (Jan 1-15)
+    Filled 6,298 new rows (Jan 16-22)
 ```
 
 ### Why This Matters:
 
 **Problem without `--preserve-existing`**:
 ```
-Week 1: Dec 2025 prediction = 9.772%
-Week 2: Add new data → Dec 2025 prediction = 10.981% (+1.2%)
-Week 3: Add new data → Dec 2025 prediction = 11.150% (+1.4%)
-Week 4: Add new data → Dec 2025 prediction = 10.500% (-0.6%)
+Week 1: Jan 1-7 prediction for AAPL = 12.5%
+Week 2: Add Jan 8-14 → Jan 1-7 AAPL prediction = 13.1% (+0.6%) ← CHANGED!
+Week 3: Add Jan 15-21 → Jan 1-7 AAPL prediction = 12.8% (-0.3%) ← CHANGED AGAIN!
 ```
 
-❌ Historical predictions keep changing! This makes backtesting unstable and performance tracking impossible.
+❌ Prior week's predictions keep changing! Portfolio rebalances on stale signals.
 
-**Solution with `--preserve-existing`**:
+**Solution with `--preserve-existing` (v3.3.25)**:
 ```
-Week 1: Dec 2025 prediction = 9.772%
-Week 2: Add new data → Dec 2025 prediction = 9.772% (frozen)
-Week 3: Add new data → Dec 2025 prediction = 9.772% (frozen)
-Week 4: Add new data → Dec 2025 prediction = 9.772% (frozen)
+Week 1: Jan 1-7 prediction for AAPL = 12.5%
+Week 2: Add Jan 8-14 → Jan 1-7 AAPL = 12.5% (frozen), Jan 8-14 = NEW
+Week 3: Add Jan 15-21 → Jan 1-14 AAPL = 12.5% (frozen), Jan 15-21 = NEW
 ```
 
-✅ Historical predictions **never change** - stable backtests, consistent performance tracking.
+✅ All existing predictions preserved exactly. Only new rows get predictions.
 
 ### Console Output:
 ```
@@ -86,13 +99,14 @@ Week 4: Add new data → Dec 2025 prediction = 9.772% (frozen)
   • Processing 1 months with missing predictions
 
   [196/196] 2026-01: Trained on 9,240,123 rows → Predicted 41,538 rows (45.2s)
+    🔒 Preserved 35,240 existing predictions, filled 6,298 new rows
 ```
 
 **Key Features**:
-- ✅ **100% strict** for last 2 months (your latest work)
-- ✅ **95% threshold** for older months (robust to minor changes)
-- ✅ **Efficient** - finds high water mark in 1-5 iterations
-- ✅ **Only processes new months** - skips all historical data
+- ✅ **Row-level preservation** (v3.3.25) - never overwrites individual predictions
+- ✅ **Month-level skipping** - complete months not even trained
+- ✅ **Efficient** - high water mark found in 1-5 iterations
+- ✅ **Correct within-month handling** - weekly updates truly stable
 
 ---
 
@@ -269,70 +283,61 @@ python forecast_returns_ml_walk_forward.py \
 
 ---
 
-### Phase 2: Weekly Updates (Ongoing - Use `--preserve-existing`)
+### Phase 2: Weekly Updates (Use `--preserve-existing`)
+
+Each week, add new data and preserve all prior predictions. Only new rows get predictions.
+
 ```bash
-# Week 1: Add new week of data (2026-01-07)
+# Week 1 (Jan 7): Add first week of new month
 python forecast_returns_ml_walk_forward.py \
-    --input-file data_2026_01_week1.csv \
-    --output predictions_2026_01_week1.parquet \
+    --input-file data_20260107.csv \
+    --output predictions_20260107.parquet \
     --resume-file predictions_2025.parquet \
-    --lookback-months 24 \
-    --forecast-days 10 \
-    --target-return-days 90 \
-    --no-lag \
-    --num-leaves 127 \
-    --n-estimators 1000 \
-    --preserve-existing  # 🔒 Freeze all historical forecasts
+    --preserve-existing \
+    --skip-feature-importance
 
-# Week 2: Add another week (2026-01-14)
+# Week 2 (Jan 14): Add second week
 python forecast_returns_ml_walk_forward.py \
-    --input-file data_2026_01_week2.csv \
-    --output predictions_2026_01_week2.parquet \
-    --resume-file predictions_2026_01_week1.parquet \
-    --lookback-months 24 \
-    --forecast-days 10 \
-    --target-return-days 90 \
-    --no-lag \
-    --num-leaves 127 \
-    --n-estimators 1000 \
-    --preserve-existing  # 🔒 Freeze all historical forecasts
+    --input-file data_20260114.csv \
+    --output predictions_20260114.parquet \
+    --resume-file predictions_20260107.parquet \
+    --preserve-existing \
+    --skip-feature-importance
 
-# Week 3: Add another week (2026-01-21)
+# Week 3 (Jan 21): Add third week
 python forecast_returns_ml_walk_forward.py \
-    --input-file data_2026_01_week3.csv \
-    --output predictions_2026_01_week3.parquet \
-    --resume-file predictions_2026_01_week2.parquet \
-    --lookback-months 24 \
-    --forecast-days 10 \
-    --target-return-days 90 \
-    --no-lag \
-    --num-leaves 127 \
-    --n-estimators 1000 \
-    --preserve-existing  # 🔒 Freeze all historical forecasts
+    --input-file data_20260121.csv \
+    --output predictions_20260121.parquet \
+    --resume-file predictions_20260114.parquet \
+    --preserve-existing \
+    --skip-feature-importance
 
-# Week 4: End of month (2026-01-31)
+# Week 4 (Jan 31): End of month
 python forecast_returns_ml_walk_forward.py \
-    --input-file data_2026_01_week4.csv \
-    --output predictions_2026_01_final.parquet \
-    --resume-file predictions_2026_01_week3.parquet \
-    --lookback-months 24 \
-    --forecast-days 10 \
-    --target-return-days 90 \
-    --no-lag \
-    --num-leaves 127 \
-    --n-estimators 1000 \
-    --preserve-existing  # 🔒 Freeze all historical forecasts
+    --input-file data_20260131.csv \
+    --output predictions_20260131.parquet \
+    --resume-file predictions_20260121.parquet \
+    --preserve-existing \
+    --skip-feature-importance
+```
+
+**What happens each week** (v3.3.25 row-level preservation):
+```
+Week 1: Predicts Jan 1-7 (new rows)
+Week 2: Preserves Jan 1-7, predicts Jan 8-14 (new rows only)
+Week 3: Preserves Jan 1-14, predicts Jan 15-21 (new rows only)
+Week 4: Preserves Jan 1-21, predicts Jan 22-31 (new rows only)
 ```
 
 **Key Points**:
-- ✅ Historical predictions (2009-2025) **never change** across all 4 weeks
-- ✅ Only new weeks get predictions
-- ✅ Stable backtests throughout the month
-- ✅ Performance metrics remain consistent
+- ✅ All predictions from prior weeks **never change** (row-level preservation)
+- ✅ Portfolio positions based on prior predictions remain valid
+- ✅ Only genuinely new rows get predictions
+- ✅ ~30 seconds to 2 minutes per update
 
 ---
 
-### Phase 3: Model Updates (Occasional - Use `--overwrite-months`)
+### Phase 3: Corrections & Model Updates (Only When Needed - Use `--overwrite-months`)
 
 #### Scenario A: Added New Features
 ```bash
@@ -392,9 +397,9 @@ Are you adding NEW data to your input file?
 ├─ YES → Is this a normal weekly/monthly update?
 │   │
 │   ├─ YES → Use --preserve-existing ✅
-│   │         (Keep historical forecasts stable)
+│   │         (Preserve all prior predictions, only fill new rows)
 │   │
-│   └─ NO → Did something change?
+│   └─ NO → Did something change that requires recomputation?
 │       │
 │       ├─ Added new features → Use --overwrite-months N
 │       │                       (Recompute with new features)
@@ -533,19 +538,20 @@ Speed: Baseline (full retraining)
 
 ## Summary
 
-### For Production (Most Common):
+### Regular Workflow (Weekly/Monthly Updates):
 ```bash
-# Use this for 95% of your weekly/monthly updates
+# Use for every data update - preserves all existing predictions, fills new rows only
 python forecast_returns_ml_walk_forward.py \
     --input-file data_latest.csv \
     --output predictions_latest.parquet \
     --resume-file predictions_previous.parquet \
-    --preserve-existing  # 🔒 FREEZE historical forecasts
+    --preserve-existing \
+    --skip-feature-importance
 ```
 
-### For Model Updates (Occasional):
+### Corrections & Model Updates (Only When Needed):
 ```bash
-# Use this when you add features, fix bugs, or handle data revisions
+# Use when you add features, fix bugs, or handle data revisions
 python forecast_returns_ml_walk_forward.py \
     --input-file data_latest.csv \
     --output predictions_latest.parquet \
@@ -557,13 +563,13 @@ python forecast_returns_ml_walk_forward.py \
 
 ## Related Documentation
 
-- **[USAGE.md](USAGE.md)** - Complete command-line reference
+- **[USAGE.md](USAGE.md)** - Complete command-line reference with production workflow
 - **[Docs/FORECAST_STABILITY.md](Docs/FORECAST_STABILITY.md)** - Technical deep dive on prediction variance
-- **[CHANGELOG.md](CHANGELOG.md)** - Version history and v3.3.14 --preserve-existing release
+- **[CHANGELOG.md](CHANGELOG.md)** - Version history (v3.3.25 row-level preservation fix)
 - **[README.md](README.md)** - Feature overview and production guide
 
 ---
 
-**Document Version**: 1.0
-**Last Updated**: 2026-01-26
-**Related Version**: v3.3.14+ (--preserve-existing flag introduced)
+**Document Version**: 2.0
+**Last Updated**: 2026-02-19
+**Related Version**: v3.3.25 (row-level preservation fix)

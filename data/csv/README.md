@@ -24,6 +24,46 @@ This tool uses **Histogram-based Gradient Boosting** with extensive feature engi
 - **[LOOK_AHEAD_BIAS_AUDIT.md](LOOK_AHEAD_BIAS_AUDIT.md)** - Production safety verification
 - **[Docs/INDEX.md](Docs/INDEX.md)** - Technical deep dives and advanced topics
 
+## 🆕 What's New in v3.3.25 (2026-02-19)
+
+### 🐛 CRITICAL FIX: Row-Level Prediction Preservation
+
+**FIXED**: `--preserve-existing` now preserves predictions at the **row level**, not just the month level.
+
+**The Problem (v3.3.14-v3.3.24)**:
+Weekly updates within the same month overwrote prior weeks' predictions. When you added Week 2 data, ALL of January was reprocessed and Week 1 predictions changed.
+
+**The Fix (v3.3.25)**:
+Two layers of protection:
+1. **Month-level**: Complete months skipped entirely (no training)
+2. **Row-level**: Within reprocessed months, only fills rows with NaN (new rows)
+
+**Example**:
+```
+Week 1: Predicts Jan 1-7 (new)
+Week 2: Preserves Jan 1-7, predicts Jan 8-14 (new rows only)
+Week 3: Preserves Jan 1-14, predicts Jan 15-21 (new rows only)
+```
+
+**Console Output**:
+```
+  [205/205] 2026-01: Trained → Predicted 41,538 rows (45.2s)
+    🔒 Preserved 35,240 existing predictions, filled 6,298 new rows
+```
+
+**Production Workflow**: Just use `--preserve-existing` for every update:
+```bash
+python forecast_returns_ml_walk_forward.py \
+    --input-file data_latest.csv \
+    --output predictions_latest.parquet \
+    --resume-file predictions_previous.parquet \
+    --preserve-existing
+```
+
+**See [CHANGELOG.md](CHANGELOG.md) for complete v3.3.25 details**
+
+---
+
 ## 🆕 What's New in v3.3.24 (2026-01-27)
 
 ### 🔒 SAFETY: Triple-Sort Protection for Time-Series Integrity

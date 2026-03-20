@@ -14,6 +14,19 @@ Start here for general usage:
 
 ## 🔧 Technical Deep Dives
 
+### v3.3.25 - Row-Level Prediction Preservation (2026-02-19)
+
+**Critical Bug Fix:**
+- **[FORECAST_STABILITY.md](FORECAST_STABILITY.md)** - Updated with v3.3.25 row-level preservation ⭐ **PRODUCTION CRITICAL**
+
+**Key Change:**
+- `--preserve-existing` now works at the **row level** (not month level)
+- Weekly updates within the same month no longer overwrite prior weeks' predictions
+- Only genuinely new rows (NaN predictions) get filled
+- Complete months still skipped entirely (unchanged)
+
+---
+
 ### v3.3.14 - Forecast Stability (2026-01-20)
 
 **Core Design Document:**
@@ -130,5 +143,5 @@ data/csv/
 
 ---
 
-**Last Updated:** 2026-01-20
-**Current Version:** v3.3.24
+**Last Updated:** 2026-02-19
+**Current Version:** v3.3.25

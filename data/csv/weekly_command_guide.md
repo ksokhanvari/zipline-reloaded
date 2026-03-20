@@ -8,13 +8,13 @@ This guide explains the difference between `--preserve-existing` and `--overwrit
 
 ## Quick Reference
 
-| Scenario | Flag to Use | Why |
-|----------|------------|-----|
-| **Weekly production update** | `--preserve-existing` ✅ | Preserve all existing predictions, only fill new rows |
-| **End-of-month refresh** | `--overwrite-months 1` | Recompute entire last month with best model |
-| **Data provider revised past data** | `--overwrite-months N` | Recompute affected months |
-| **Added new features to model** | `--overwrite-months N` | Recalculate with updated model |
-| **Bug fix in data pipeline** | `--overwrite-months N` | Correct affected period |
+| Scenario                            | Flag to Use             | Why                                                   |
+| ----------------------------------- | ----------------------- | ----------------------------------------------------- |
+| **Weekly production update**        | `--preserve-existing` ✅ | Preserve all existing predictions, only fill new rows |
+| **End-of-month refresh**            | `--overwrite-months 1`  | Recompute entire last month with best model           |
+| **Data provider revised past data** | `--overwrite-months N`  | Recompute affected months                             |
+| **Added new features to model**     | `--overwrite-months N`  | Recalculate with updated model                        |
+| **Bug fix in data pipeline**        | `--overwrite-months N`  | Correct affected period                               |
 
 ---
 

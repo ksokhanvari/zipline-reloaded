@@ -1,7 +1,7 @@
 # Forecast Stability & --preserve-existing Flag
 
-**Version**: v3.3.14
-**Date**: 2026-01-20
+**Version**: v3.3.25
+**Date**: 2026-02-19
 **Status**: Production-Ready
 
 ---
@@ -225,50 +225,42 @@ _rank_cols = [
 
 ### What It Does
 
-The `--preserve-existing` flag **freezes historical forecasts** so they never change when adding new data.
+The `--preserve-existing` flag **freezes all existing predictions** so they never change when adding new data.
 
-**Mechanism**:
+**Mechanism (v3.3.25 - Two Layers of Protection)**:
 
-1. Loads previous predictions from `--resume-file`
-2. Identifies months that **already have predictions** (non-NaN values)
-3. **Skips those months entirely** in the walk-forward loop
-4. Only trains and predicts for months with **missing predictions** (NaN)
+1. **Month-level**: Complete months with high coverage are skipped entirely (no training needed)
+   - Uses "high water mark" backwards search with tiered thresholds
+   - Current incomplete month: 90%, last complete month: 99%, older months: 95%
+2. **Row-level**: Within any reprocessed month, only fills rows that have NaN predictions
+   - Existing predictions are NEVER overwritten, even within reprocessed months
+   - This is the critical v3.3.25 fix for weekly updates within the same month
 
 ### How It Works (Code Flow)
 
-**File**: `forecast_returns_ml_walk_forward.py:1407-1433`
+**Two stages in `forecast_returns_ml_walk_forward.py`**:
 
+**Stage 1 - Month-level skipping** (high water mark):
 ```python
-# Step 1: Determine candidate months to process
-if resume_from_date:
-    months_to_process = [m for m in unique_months if m >= resume_from_month]
-else:
-    months_to_process = unique_months
+# Search backwards for last month with sufficient coverage
+for month in reversed(months_to_process):
+    coverage = rows_with_preds / total_rows
+    if coverage >= threshold:  # 90%/99%/95% depending on recency
+        last_complete_month = month
+        break
 
-# Step 2: Filter out months that already have predictions
+# Skip all months up to and including the high water mark
+months_to_process = [m for m in months_to_process if m > last_complete_month]
+```
+
+**Stage 2 - Row-level preservation** (v3.3.25):
+```python
+# Within processed months, only fill NaN positions
 if preserve_existing and previous_predictions is not None:
-    months_with_predictions = []
-    months_without_predictions = []
-
-    for month in months_to_process:
-        # Get all rows for this month
-        month_mask = df['_year_month'] == month
-        month_positions = np.where(month_mask)[0]
-
-        # Check if ALL rows have predictions (not NaN)
-        month_preds = predictions[month_positions]
-        has_all_predictions = np.all(~np.isnan(month_preds))
-
-        if has_all_predictions:
-            months_with_predictions.append(month)  # SKIP
-        else:
-            months_without_predictions.append(month)  # PROCESS
-
-    # Only process months without predictions
-    months_to_process = months_without_predictions
-
-    print(f"🔒 PRESERVE MODE: Skipping {len(months_with_predictions)} months")
-    print(f"Processing {len(months_without_predictions)} months")
+    nan_mask = np.isnan(predictions[predict_positions])
+    positions_to_fill = predict_positions[nan_mask]
+    predictions[positions_to_fill] = month_predictions[nan_mask]
+    # Existing predictions untouched!
 ```
 
 ### Example Output
@@ -539,24 +531,28 @@ If both are provided:
 
 ### Q4: What happens if I have partial predictions for a month?
 
-**A: The month is processed (not skipped).**
+**A (v3.3.25): The month is reprocessed, but only NaN rows get new predictions.**
 
 ```python
-# Code checks: ALL rows must have predictions
-has_all_predictions = np.all(~np.isnan(month_preds))
+# Stage 1: Month coverage check (high water mark)
+# If coverage < threshold, the month is reprocessed
+
+# Stage 2: Row-level preservation
+nan_mask = np.isnan(predictions[predict_positions])
+positions_to_fill = predict_positions[nan_mask]
+predictions[positions_to_fill] = month_predictions[nan_mask]
 ```
 
-**Scenario**:
-- Dec 2025: 4,440 stocks
-- 4,430 have predictions (existing)
-- 10 have NaN (new stocks added)
-- **Result**: Dec 2025 is **processed** (trains and predicts all 4,440 stocks)
+**Scenario - New stocks added**:
+- Dec 2025: 4,440 stocks → data provider adds 10 new stocks → 4,450 stocks
+- 4,440 have predictions (existing), 10 have NaN (new stocks)
+- Coverage: 4,440/4,450 = 99.8% → Passes 95% threshold → Month SKIPPED entirely
 
-This ensures new stocks get predictions, but existing stocks will be **overwritten**.
-
-**Workaround**: If you want to preserve existing predictions and only add new stocks, you need to:
-1. Manually merge predictions
-2. Or accept that the month is recomputed
+**Scenario - Weekly update within month**:
+- Jan 2026: Had predictions for Jan 1-15 (Week 1-2)
+- Add Jan 16-22 data (Week 3)
+- Coverage: ~60% → Fails 90% threshold → Month reprocessed
+- **Result**: Jan 1-15 predictions **preserved**, Jan 16-22 predictions **filled** (new only)
 
 ### Q5: How do I verify --preserve-existing is working?
 
@@ -617,9 +613,10 @@ With --preserve-existing:
 - Impact: 1-7% prediction drift
 
 ### The Solution
-- Use `--preserve-existing` flag
-- Freezes historical forecasts (immutable)
-- Only predicts new months
+- Use `--preserve-existing` flag for every data update
+- Month-level: Complete months skipped entirely
+- Row-level (v3.3.25): Within reprocessed months, only new rows get predictions
+- Existing predictions are never overwritten
 
 ### Production Command
 ```bash
@@ -627,17 +624,16 @@ python forecast_returns_ml_walk_forward.py \
     --input-file data_latest.csv \
     --output predictions_latest.parquet \
     --resume-file predictions_previous.parquet \
-    --lookback-months 12 \
     --preserve-existing
 ```
 
 ### Benefits
 - ✅ Reproducible backtests
-- ✅ Stable performance metrics
+- ✅ Stable weekly updates (row-level preservation)
 - ✅ Clear audit trail
 - ✅ Production-ready
 
 ---
 
-**Last Updated**: 2026-01-20
-**Version**: v3.3.14
+**Last Updated**: 2026-02-19
+**Version**: v3.3.25

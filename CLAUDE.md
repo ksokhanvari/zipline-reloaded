@@ -605,10 +605,10 @@ When continuing a session:
 
 ### ML Forecasting Status
 
-**Current Version**: v3.3.24
+**Current Version**: v3.3.25
 **Key Features**:
+- Row-level prediction preservation in `--preserve-existing` (v3.3.25)
 - Triple-sort time-series protection
-- `--preserve-existing` handles data backfill correctly
 - Large-cap focus for TOP 10 report (top 25% market cap)
 - Complete month boundary rankings for stability
 
@@ -2564,6 +2564,6 @@ Completed comprehensive ML-based return forecasting system with production-grade
 
 ---
 
-**Document Version**: 17.1
-**Last Updated**: 2026-02-05
-**Key Features**: Hidden Point Capital branding, Sharadar + LSEG integration, multi-source pipelines, FlightLog monitoring, MRQ configuration, auto-detection workflows, comprehensive strategy debugging, **ML-based return forecasting v3.3.24 (production-ready with triple-sort time-series protection, --preserve-existing data backfill handling, complete month boundary rankings, quarterly seasonality, large-cap focused reports, total forecast stability)**, **Feature importance analysis notebook (10 visualizations for model interpretability)**
+**Document Version**: 17.2
+**Last Updated**: 2026-02-19
+**Key Features**: Hidden Point Capital branding, Sharadar + LSEG integration, multi-source pipelines, FlightLog monitoring, MRQ configuration, auto-detection workflows, comprehensive strategy debugging, **ML-based return forecasting v3.3.25 (production-ready with row-level prediction preservation in --preserve-existing, triple-sort time-series protection, complete month boundary rankings, quarterly seasonality, large-cap focused reports, total forecast stability)**, **Feature importance analysis notebook (10 visualizations for model interpretability)**

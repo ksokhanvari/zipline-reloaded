@@ -1465,7 +1465,7 @@ class ReturnForecaster:
                 # CRITICAL: Current incomplete month should use lenient threshold (it has new data!)
                 # Last complete month should use strict 99% threshold (allows minor backfill)
                 # Older months use 95% threshold (allows historical data changes)
-                is_current_month = (month == str(most_recent_month))
+                is_current_month = (month == most_recent_month)
 
                 if is_current_month and not current_month_is_complete:
                     # Current incomplete month: very lenient (90%) - expect new rows

@@ -2733,6 +2733,45 @@ For full documentation, see README.md in this directory.
             direction_accuracy = (pred_direction == actual_direction).mean()
             print(f"  • Direction accuracy: {direction_accuracy:.2%}")
 
+            # ============================================================
+            # LAST 12 MONTHS - recent performance (most relevant to today)
+            # ============================================================
+            # The stats above cover ALL history, which is dominated by older years.
+            # Recent skill is what tells you whether the model is STILL working, so
+            # report the trailing 12 months of rows that have a realized outcome.
+            # NOTE: rows whose forward_return was forward-filled (outcome not yet
+            # realized) will flatter these numbers - treat the very recent edge with care.
+            recent_perf = df_predictions.loc[both_valid, ['Date', pred_col, actual_col]].copy()
+            recent_perf['Date'] = pd.to_datetime(recent_perf['Date'])
+            last_date_12m = recent_perf['Date'].max()
+            cutoff_12m = last_date_12m - pd.DateOffset(months=12)
+            recent_perf = recent_perf[recent_perf['Date'] > cutoff_12m]
+
+            if len(recent_perf) > 0:
+                corr_12m = recent_perf[pred_col].corr(recent_perf[actual_col])
+                mae_12m = mean_absolute_error(recent_perf[actual_col], recent_perf[pred_col])
+                rmse_12m = np.sqrt(mean_squared_error(recent_perf[actual_col], recent_perf[pred_col]))
+                dir_12m = ((recent_perf[pred_col] > 0) == (recent_perf[actual_col] > 0)).mean()
+
+                # Cross-sectional rank IC: mean per-date Spearman (ranking quality,
+                # the metric that actually matters for picking stocks)
+                ic_by_date = recent_perf.groupby('Date').apply(
+                    lambda g: g[pred_col].corr(g[actual_col], method='spearman')
+                    if len(g) >= 20 else np.nan
+                ).dropna()
+
+                print(f"\n📅 LAST 12 MONTHS ({cutoff_12m:%Y-%m-%d} → {last_date_12m:%Y-%m-%d}):")
+                print(f"  • Rows with realized outcome: {len(recent_perf):,}")
+                print(f"  • Correlation with actual returns: {corr_12m:.4f} ({corr_12m*100:.1f}%)")
+                print(f"  • Mean Absolute Error: {mae_12m:.2f}%")
+                print(f"  • Root Mean Squared Error: {rmse_12m:.2f}%")
+                print(f"  • Direction accuracy: {dir_12m:.2%}")
+                if len(ic_by_date) > 0:
+                    print(f"  • Cross-sectional rank IC (mean daily): {ic_by_date.mean():+.4f} "
+                          f"[{100*(ic_by_date > 0).mean():.0f}% of {len(ic_by_date)} days positive]")
+            else:
+                print(f"\n📅 LAST 12 MONTHS: no rows with realized outcomes in the trailing 12 months")
+
         # Top predictions
         print(f"\n🏆 TOP 10 PREDICTED GAINERS (most recent data):")
         recent_data = df_predictions[df_predictions[pred_col].notna()].copy()

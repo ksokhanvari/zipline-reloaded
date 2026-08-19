@@ -1,8 +1,10 @@
 # Forecast Stability & --preserve-existing Flag
 
-**Version**: v3.3.25
-**Date**: 2026-02-19
+**Version**: v3.3.27
+**Date**: 2026-06-11
 **Status**: Production-Ready
+
+> **v3.3.26 note**: A latent `Period == str` comparison bug was fixed in the high-water-mark threshold check (line 1468). The documented threshold tiers (90% current incomplete / 99% last complete / 95% older) now activate as described below. Preservation behavior itself is unchanged from v3.3.25 — empirically verified bit-identical across runs.
 
 ---
 
@@ -635,5 +637,5 @@ python forecast_returns_ml_walk_forward.py \
 
 ---
 
-**Last Updated**: 2026-02-19
-**Version**: v3.3.25
+**Last Updated**: 2026-06-11
+**Version**: v3.3.27

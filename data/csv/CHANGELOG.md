@@ -1,5 +1,77 @@
 # Changelog - ML Return Forecasting
 
+## [3.3.27] - 2026-08-19
+
+### 📅 FEATURE: "Last 12 Months" Performance Section in Run Summary
+
+**ADDED**: A trailing-12-month performance block printed immediately after the existing `🎯 MODEL PERFORMANCE` summary.
+
+**Why**: The headline metrics cover the model's *entire* history, which is dominated by older years. A strong all-history correlation can mask materially weaker recent behavior — exactly the number you need when deciding whether the model is *still* working today.
+
+**New output**:
+
+```
+🎯 MODEL PERFORMANCE (Out-of-sample, NO LOOK-AHEAD BIAS):
+  • Correlation with actual returns: 0.6955 (69.5%)
+  • Mean Absolute Error: 13.40%
+  • Root Mean Squared Error: 22.88%
+  • Direction accuracy: 73.60%
+
+📅 LAST 12 MONTHS (2025-08-04 → 2026-08-04):
+  • Rows with realized outcome: 763,470
+  • Correlation with actual returns: 0.3425 (34.3%)
+  • Mean Absolute Error: 22.18%
+  • Root Mean Squared Error: 38.26%
+  • Direction accuracy: 64.04%
+  • Cross-sectional rank IC (mean daily): +0.3208 [95% of 267 days positive]
+```
+
+**Metrics reported**:
+- Same four metrics as the headline block (correlation, MAE, RMSE, direction accuracy), restricted to the trailing 12 months
+- Row count and explicit date range covered
+- **NEW — Cross-sectional rank IC**: mean per-date Spearman correlation between prediction and realized return, plus the share of days with positive IC. This is the metric that matters for *ranking* stocks (as opposed to predicting return magnitude), and it is the standard measure of signal quality.
+
+**Interpretation note**: rows whose `forward_return` was forward-filled (outcome not yet realized) inflate these figures at the very recent edge. Treat the last few months as optimistic, and prefer the rank IC over raw correlation when judging ranking skill.
+
+**Implementation**: purely additive reporting — computed after training from the output dataframe. No change to feature engineering, target construction, training, or predictions.
+
+---
+
+## [3.3.26] - 2026-06-11
+
+### 🐛 BUG FIX: Current-Month Detection in Preserve-Existing Threshold Logic
+
+**FIXED**: The `is_current_month` check in the high-water-mark loop compared a `pd.Period` to `str(most_recent_month)`. `Period == str` always returns `False`, so the intended 90% lenient threshold for the current incomplete month never activated — the current month always fell through to the strict 99% first-iteration threshold instead.
+
+**Code Change** (one line, `forecast_returns_ml_walk_forward.py:1468`):
+
+```python
+# BEFORE (broken):
+is_current_month = (month == str(most_recent_month))
+
+# AFTER (fixed):
+is_current_month = (month == most_recent_month)
+```
+
+**Impact**:
+- Runs where the current incomplete month had between 90% and 99% coverage would needlessly fail the threshold check and march the high-water-mark back to the previous month. With v3.3.25 row-level preservation, the existing predictions were still preserved exactly, so end-user prediction values were unchanged — but the script did more work than it needed to.
+- The `(CURRENT)` diagnostic tag in the per-month coverage log was silently broken and never appeared. It now correctly marks the current month.
+
+**Discovery**: Identified during a user-reported investigation into perceived portfolio drift across weekly runs. Empirical comparison of two consecutive weekly parquet outputs (2026-05-19 and 2026-05-27) showed all 9,543,307 overlapping `(Date, Symbol)` predictions were bit-identical (max abs diff = 0.0) — confirming `--preserve-existing` worked correctly despite this latent bug. The reported portfolio differences traced entirely to upstream sources (custom fundamentals DB rewrites, universe membership shifts, cross-sectional rank changes in the trading algorithm), not the ML forecasts.
+
+**Console Output** (corrected):
+
+```
+  • Most recent date in data: 2026-06-09
+  • Current month: 2026-06 (INCOMPLETE)
+    [1] 2026-06 (CURRENT): 39,766/54,850 rows (72.5%) - Threshold: 90% - ✗ FAIL
+    [2] 2026-05: 63,218/64,310 rows (98.3%) - Threshold: 95% - ✓ PASS
+```
+
+Previously the `(CURRENT)` tag never printed and the threshold for the top line read `99%` instead of `90%`.
+
+---
+
 ## [3.3.25] - 2026-02-19
 
 ### 🐛 CRITICAL FIX: Row-Level Prediction Preservation in --preserve-existing

@@ -979,6 +979,6 @@ python forecast_returns_ml_walk_forward.py --input-file data.csv --output predic
 
 ---
 
-**Last Updated**: 2026-02-19
-**Version**: v3.3.25
+**Last Updated**: 2026-08-19
+**Version**: v3.3.27
 **Script**: `forecast_returns_ml_walk_forward.py`

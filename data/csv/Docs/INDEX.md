@@ -14,6 +14,33 @@ Start here for general usage:
 
 ## 🔧 Technical Deep Dives
 
+### v3.3.27 - Last-12-Months Performance Section (2026-08-19)
+
+**Reporting addition (no model changes):**
+- The run summary now prints a trailing-12-month performance block after the all-history `🎯 MODEL PERFORMANCE` metrics: correlation, MAE, RMSE, direction accuracy, row count, date range — plus a **cross-sectional rank IC** (mean per-date Spearman + % of days positive).
+
+**Why:** the headline metrics are dominated by older years and can mask weaker recent behavior. This shows whether the model is *still* working.
+
+**Caveat:** forward-filled (not-yet-realized) outcomes inflate the figures at the very recent edge — prefer rank IC and treat the last few months as optimistic.
+
+See **[../CHANGELOG.md](../CHANGELOG.md)** for the full entry.
+
+---
+
+### v3.3.26 - Current-Month Threshold Bug Fix (2026-06-11)
+
+**One-line fix:**
+- `forecast_returns_ml_walk_forward.py:1468` — `is_current_month = (month == str(most_recent_month))` always returned `False` because `month` is a `pd.Period` and the RHS was its string form. Changed to `(month == most_recent_month)` so the intended 90% lenient threshold actually activates on the current incomplete month.
+
+**Why end-user output didn't change:**
+- v3.3.25 row-level preservation already guarantees existing predictions are bit-identical across runs. This fix only affects whether the current month *needs* to be reprocessed — the values for previously-predicted rows were correct either way.
+
+**Side benefit:** the `(CURRENT)` diagnostic tag in the per-month coverage log now appears correctly.
+
+See **[../CHANGELOG.md](../CHANGELOG.md)** for the full entry.
+
+---
+
 ### v3.3.25 - Row-Level Prediction Preservation (2026-02-19)
 
 **Critical Bug Fix:**
@@ -143,5 +170,5 @@ data/csv/
 
 ---
 
-**Last Updated:** 2026-02-19
-**Current Version:** v3.3.25
+**Last Updated:** 2026-08-19
+**Current Version:** v3.3.27

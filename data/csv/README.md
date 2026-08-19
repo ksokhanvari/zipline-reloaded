@@ -24,6 +24,52 @@ This tool uses **Histogram-based Gradient Boosting** with extensive feature engi
 - **[LOOK_AHEAD_BIAS_AUDIT.md](LOOK_AHEAD_BIAS_AUDIT.md)** - Production safety verification
 - **[Docs/INDEX.md](Docs/INDEX.md)** - Technical deep dives and advanced topics
 
+## 🆕 What's New in v3.3.27 (2026-08-19)
+
+### 📅 "Last 12 Months" Performance Section
+
+**NEW**: The run summary now prints a trailing-12-month performance block right after the all-history `🎯 MODEL PERFORMANCE` metrics.
+
+**Why it matters**: the headline correlation covers the model's *entire* history and is dominated by older years — it can look strong while recent behavior has weakened. This section shows how the model is performing *now*.
+
+```
+📅 LAST 12 MONTHS (2025-08-04 → 2026-08-04):
+  • Rows with realized outcome: 763,470
+  • Correlation with actual returns: 0.3425 (34.3%)
+  • Mean Absolute Error: 22.18%
+  • Root Mean Squared Error: 38.26%
+  • Direction accuracy: 64.04%
+  • Cross-sectional rank IC (mean daily): +0.3208 [95% of 267 days positive]
+```
+
+Includes a **cross-sectional rank IC** (mean per-date Spearman + % of days positive) — the standard measure of *ranking* quality, which matters more than raw correlation for stock selection.
+
+⚠️ Forward-filled (not-yet-realized) outcomes inflate these figures at the very recent edge — treat the last few months as optimistic.
+
+**See [CHANGELOG.md](CHANGELOG.md) for the full v3.3.27 entry.**
+
+---
+
+## 🆕 What's New in v3.3.26 (2026-06-11)
+
+### 🐛 BUG FIX: Current-Month Threshold in `--preserve-existing`
+
+**FIXED**: A `pd.Period == str` comparison at line 1468 always returned `False`, so the intended 90% lenient threshold for the current incomplete month never fired — the script silently used the strict 99% threshold instead.
+
+**One-line fix**:
+```python
+# BEFORE: is_current_month = (month == str(most_recent_month))   # always False
+# AFTER:  is_current_month = (month == most_recent_month)         # Period == Period
+```
+
+**Impact**:
+- Existing predictions were still preserved correctly thanks to v3.3.25 row-level protection — empirical comparison of two weekly outputs showed bit-identical values on all 9.5M overlapping `(Date, Symbol)` rows.
+- The fix avoids unnecessary high-water-mark walkback in runs where the current month has 90–99% coverage, and makes the `(CURRENT)` diagnostic label appear correctly in the per-month coverage log.
+
+**See [CHANGELOG.md](CHANGELOG.md) for the full v3.3.26 entry.**
+
+---
+
 ## 🆕 What's New in v3.3.25 (2026-02-19)
 
 ### 🐛 CRITICAL FIX: Row-Level Prediction Preservation

@@ -570,6 +570,6 @@ python forecast_returns_ml_walk_forward.py \
 
 ---
 
-**Document Version**: 2.0
-**Last Updated**: 2026-02-19
-**Related Version**: v3.3.25 (row-level preservation fix)
+**Document Version**: 2.2
+**Last Updated**: 2026-08-19
+**Related Version**: v3.3.27 (adds last-12-months performance section; preservation logic unchanged since v3.3.25)

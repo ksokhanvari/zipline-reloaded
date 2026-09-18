@@ -254,7 +254,9 @@ class ReturnForecaster:
                  n_estimators=300, learning_rate=0.05, max_depth=6, num_leaves=31, no_lag=False,
                  sample_fraction=1.0, pca_components=None, lookback_months=None, log_features=False,
                  point_in_time=False, feature_whitelist=None, technicals_only=False,
-                 fundamental_only=False, ffill_target=False):
+                 fundamental_only=False, ffill_target=False,
+                 train_universe_top=0, target_normalize='none', target_winsor=1.0,
+                 emulate_prod_ffill=False):
         """
         Initialize the return forecaster.
 
@@ -347,6 +349,23 @@ class ReturnForecaster:
         # last-known realized target (forward-fill). Non-leaky reproduction of the live
         # "keep all X, ffill y" process. Takes precedence over --point-in-time.
         self.ffill_target = ffill_target
+
+        # --- OBJECTIVE-ALIGNMENT EXPERIMENTS -------------------------------
+        # Squared-error loss on raw % forward returns is dominated by the most
+        # volatile names: measured on this data the smallest market-cap decile
+        # carries ~81% of total squared error while the largest two deciles carry
+        # ~1.3%. The model therefore spends nearly all of its capacity on stocks
+        # that are never traded. Two levers to fix that:
+        #   train_universe_top : restrict TRAINING rows to the top-N by market cap
+        #                        (blunt - fixes alignment but discards breadth)
+        #   target_normalize   : rescale the target WITHIN each date so every date
+        #                        contributes comparably (keeps breadth)
+        # Both affect training only; feature construction and the PIT guards are
+        # untouched.
+        self.train_universe_top = int(train_universe_top or 0)
+        self.target_normalize = target_normalize
+        self.target_winsor = float(target_winsor)
+        self.emulate_prod_ffill = emulate_prod_ffill
         self.feature_log_path = None  # Will hold CSV path if logging features
         self.model = None  # Will hold trained model
         self.feature_cols = None  # Will hold list of feature column names
@@ -400,6 +419,53 @@ class ReturnForecaster:
         df.loc[df['forward_return'] < -99, 'forward_return'] = np.nan
 
         df = df.drop(['price_at_forecast', 'price_at_target'], axis=1)
+
+        # ===== CROSS-SECTIONAL TARGET NORMALIZATION (optional) =====
+        # Rescale the target WITHIN each date. This is a transform of the LABEL
+        # only - it uses no information beyond the forward returns already in the
+        # label, and never touches features - so it introduces no look-ahead:
+        # every value used for date D's transform is itself a date-D label.
+        #
+        # Why: raw % returns are wildly heteroskedastic across the cross-section,
+        # so squared-error loss is spent almost entirely on the most volatile
+        # (smallest) names. Normalizing per date equalizes each date's
+        # contribution and puts capacity where the dispersion is informative
+        # rather than where it is merely large.
+        #
+        #   zscore : winsorize at the +/- target_winsor percentile, then
+        #            standardize within the date. Keeps relative MAGNITUDE, which
+        #            downstream softplus/z-score tilting relies on.
+        #   rank   : per-date percentile in [-0.5, +0.5]. Maximally robust but
+        #            makes spacing uniform, which neutralizes magnitude tilts.
+        #
+        # The untransformed target is preserved as forward_return_raw so the
+        # performance report can still be read in percent.
+        if self.target_normalize and self.target_normalize != 'none':
+            df['forward_return_raw'] = df['forward_return']
+            g = df.groupby('Date')['forward_return']
+
+            if self.target_normalize == 'zscore':
+                lo_q, hi_q = self.target_winsor / 100.0, 1.0 - self.target_winsor / 100.0
+                lo = g.transform(lambda s: s.quantile(lo_q))
+                hi = g.transform(lambda s: s.quantile(hi_q))
+                clipped = df['forward_return'].clip(lower=lo, upper=hi)
+                mu = clipped.groupby(df['Date']).transform('mean')
+                sd = clipped.groupby(df['Date']).transform('std')
+                # Dates with no dispersion carry no cross-sectional information
+                df['forward_return'] = np.where(sd > 0, (clipped - mu) / sd, np.nan)
+                print(f"  ✓ Target normalized: per-date z-score, winsorized at "
+                      f"{self.target_winsor:g}/{100 - self.target_winsor:g} pct")
+
+            elif self.target_normalize == 'rank':
+                df['forward_return'] = g.transform(lambda s: s.rank(pct=True)) - 0.5
+                print(f"  ✓ Target normalized: per-date percentile rank, centered on 0")
+
+            else:
+                raise ValueError(f"Unknown --target-normalize: {self.target_normalize}")
+
+            n_ok = df['forward_return'].notna().sum()
+            print(f"    Target rows retained: {n_ok:,} "
+                  f"(predictions are now in normalized units, NOT percent)")
 
         print(f"  ✓ Target created: Predicting {self.target_return_days}-day return from day {self.forecast_days}")
         return df
@@ -701,6 +767,13 @@ class ReturnForecaster:
         # Size factor
         df['log_marketcap'] = np.log1p(df[get_col('CompanyMarketCap')])
 
+        # Universe rank for --train-universe-top: descending market-cap rank within
+        # each date (1 = largest). Uses the LAGGED market cap (get_col always lags
+        # CompanyMarketCap), so selection is knowable at decision time. Bookkeeping
+        # only - excluded from the feature matrix.
+        df['_mc_rank_pit'] = df.groupby('Date')[get_col('CompanyMarketCap')].rank(
+            ascending=False, method='first')
+
         # ===== STEP 4: Cross-sectional features (rank within date) =====
         # IMPORTANT: Rankings are computed PER-MONTH in walk-forward loop (not here)
         # This ensures adding new data doesn't change historical rankings
@@ -737,7 +810,16 @@ class ReturnForecaster:
         # unrealized, and preserves target_date). --ffill-target instead masks-and-ffills the
         # target PER MONTH inside the walk-forward (see the training-row selection), which is
         # the non-leaky way to keep the full history with a stale recent target.
-        exclude_from_ffill = ['Date', 'Symbol', 'forward_return']
+        # DIAGNOSTIC: --emulate-prod-ffill deliberately REINTRODUCES the production
+        # bug (forward_return left in the ffill set, so rows whose target has not
+        # yet realized inherit a stale carried value instead of NaN and survive the
+        # valid_idx guard). Used ONLY to test whether that bug explains the gap
+        # between the live production track record and a properly-guarded rerun.
+        # Never use this for a model you intend to trade.
+        exclude_from_ffill = ['Date', 'Symbol'] if self.emulate_prod_ffill \
+            else ['Date', 'Symbol', 'forward_return']
+        if self.emulate_prod_ffill:
+            print("  ⚠️  EMULATING PRODUCTION FFILL BUG: target will be forward-filled")
         cols_to_ffill = [col for col in numeric_cols if col not in exclude_from_ffill]
 
         # Forward-fill per symbol (use last known value)
@@ -772,7 +854,9 @@ class ReturnForecaster:
             'sharadar_exchange', 'sharadar_category',  # Exchange/category not predictive
             'sharadar_location', 'sharadar_sector', 'sharadar_industry',  # Redundant with GICS/SIC
             'forward_return',  # Target variable
+            'forward_return_raw',  # Un-normalized target (reporting only, never a feature)
             'target_date',  # POINT-IN-TIME GUARD bookkeeping (target realization date, not a feature)
+            '_mc_rank_pit',  # Universe bookkeeping for --train-universe-top (not a feature)
             'volume_ma_20',  # Intermediate calculation
             'RefPriceClose', 'RefVolume', 'CompanyMarketCap',  # ALWAYS exclude (we use lagged versions)
             # Identifiers (not features)
@@ -1922,6 +2006,25 @@ class ReturnForecaster:
                           f"(PIT left insufficient training data: {len(train_positions_fit):,} < 2,000)")
                     continue
 
+            # --train-universe-top: restrict the rows the model LEARNS from to the
+            # largest N names on each date. Applied here, after the PIT/ffill guards
+            # and after the cross-sectional rankings were computed above, so the
+            # ranking universe stays the full cross-section and only the fit shrinks.
+            # Predictions are still produced for every name.
+            if self.train_universe_top > 0 and '_mc_rank_pit' in df.columns:
+                mc_rank_train = df['_mc_rank_pit'].values[train_positions_fit]
+                in_univ = mc_rank_train <= self.train_universe_top
+                n_cut = int((~in_univ).sum())
+                if in_univ.sum() >= 2000:
+                    train_positions_fit = train_positions_fit[in_univ]
+                    if y_fit is not None:
+                        y_fit = y_fit[in_univ]
+                    print(f"    🎯 universe: training on top-{self.train_universe_top} by mcap "
+                          f"({len(train_positions_fit):,} rows, dropped {n_cut:,})")
+                else:
+                    print(f"    ⚠️  universe filter would leave {int(in_univ.sum()):,} rows "
+                          f"(< 2,000) - training on the full cross-section this month")
+
             # Get training data using position-based indexing (now with updated rankings)
             X_train = X.iloc[train_positions_fit]
             y_train = y_fit if y_fit is not None else y[train_positions_fit]
@@ -2478,6 +2581,30 @@ For full documentation, see README.md in this directory.
                              "the stock's last-known realized target (forward-fill). Non-leaky "
                              'reproduction of the live "keep all X, ffill y" process. Takes precedence '
                              'over --point-in-time.')
+    parser.add_argument('--train-universe-top', type=int, default=0, metavar='N',
+                        help='Train only on the top N names by (lagged) market cap on each date. '
+                             'Predictions are still produced for every name, and cross-sectional '
+                             'rankings still use the full universe - only the fitted rows shrink. '
+                             'Blunt fix for objective misalignment: squared-error loss is otherwise '
+                             'dominated by microcaps (smallest decile carries ~81%% of total squared '
+                             'error). Costs breadth. 0 = off (default).')
+    parser.add_argument('--target-normalize', choices=['none', 'zscore', 'rank'], default='none',
+                        help="Rescale the target WITHIN each date so every date contributes "
+                             "comparably to the loss, instead of letting the most volatile names "
+                             "dominate. 'zscore' winsorizes then standardizes per date (keeps "
+                             "magnitude, so downstream softplus tilting still works); 'rank' uses "
+                             "per-date percentiles centered on 0 (most robust, but uniform spacing "
+                             "neutralizes magnitude tilts). Keeps full breadth, unlike "
+                             "--train-universe-top. NOTE: predictions come out in normalized units, "
+                             "not percent. Default: none.")
+    parser.add_argument('--target-winsor', type=float, default=1.0, metavar='PCT',
+                        help='Percentile for winsorizing the target before z-scoring, per date '
+                             '(default: 1.0 = clip at the 1st/99th percentile). Only used with '
+                             '--target-normalize zscore.')
+    parser.add_argument('--emulate-prod-ffill', action='store_true',
+                        help='DIAGNOSTIC ONLY. Reintroduce the production ffill bug (target is '
+                             'forward-filled, so unrealized rows train with a stale label). Use to '
+                             'test whether that bug explains live underperformance. Never trade this.')
     parser.add_argument('--fundamental-only', action='store_true',
                         help='Drop ONLY the newly-added t_ technical batch; keep the earlier '
                              'price features (return_/volatility_/momentum_/zscore/volume) and all '
@@ -2736,7 +2863,11 @@ For full documentation, see README.md in this directory.
         feature_whitelist=[f.strip() for f in args.feature_whitelist.split(',')] if args.feature_whitelist else None,
         technicals_only=args.technicals_only,
         fundamental_only=args.fundamental_only,
-        ffill_target=args.ffill_target
+        ffill_target=args.ffill_target,
+        train_universe_top=args.train_universe_top,
+        target_normalize=args.target_normalize,
+        target_winsor=args.target_winsor,
+        emulate_prod_ffill=args.emulate_prod_ffill
     )
     if args.ffill_target and args.point_in_time:
         print("\n⚠️  --ffill-target and --point-in-time both set: using --ffill-target "

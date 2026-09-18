@@ -369,6 +369,10 @@ class ReturnForecaster:
         df.loc[df['forward_return'] > 500, 'forward_return'] = np.nan
         df.loc[df['forward_return'] < -99, 'forward_return'] = np.nan
 
+        # FIX: date on which this row's target actually completes. A row's
+        # forward_return is only KNOWABLE once this date has passed.
+        df['target_date'] = df.groupby('Symbol')['Date'].shift(-(self.forecast_days + self.target_return_days))
+
         df = df.drop(['price_at_forecast', 'price_at_target'], axis=1)
 
         print(f"  ✓ Target created: Predicting {self.target_return_days}-day return from day {self.forecast_days}")
@@ -568,7 +572,10 @@ class ReturnForecaster:
 
         # Get all numeric columns except Date and Symbol
         numeric_cols = df.select_dtypes(include=[np.float64, np.float32, np.int64, np.int32]).columns
-        exclude_from_ffill = ['Date', 'Symbol']
+        # FIX: 'forward_return' MUST be excluded. Forward-filling the target gives
+        # rows whose outcome has not realized a stale label, which then survives the
+        # valid_idx guard and trains the model against wrong y.
+        exclude_from_ffill = ['Date', 'Symbol', 'forward_return']
         cols_to_ffill = [col for col in numeric_cols if col not in exclude_from_ffill]
 
         # Forward-fill per symbol (use last known value)
@@ -603,6 +610,7 @@ class ReturnForecaster:
             'sharadar_exchange', 'sharadar_category',  # Exchange/category not predictive
             'sharadar_location', 'sharadar_sector', 'sharadar_industry',  # Redundant with GICS/SIC
             'forward_return',  # Target variable
+            'target_date',  # FIX: PIT bookkeeping, not a feature
             'volume_ma_20',  # Intermediate calculation
             'RefPriceClose', 'RefVolume', 'CompanyMarketCap',  # ALWAYS exclude (we use lagged versions)
             # Identifiers (not features)
@@ -1658,10 +1666,29 @@ class ReturnForecaster:
                     print(f"    📊 Rankings: Computed through {ranking_cutoff_date.date()} (complete), " +
                           f"Forward-filled to {current_month} (partial: {len(predict_incomplete_positions)} rows)")
 
+            # FIX: POINT-IN-TIME GUARD. Rankings above used the FULL cross-section, so
+            # percentiles stay correct. Only NOW restrict the rows the model LEARNS from
+            # to those whose target had already realized before this month. Without this,
+            # a rebuild trains on outcomes that complete after the decision date.
+            # NaT compares False, so rows without enough future data drop out too.
+            train_positions_fit = train_positions
+            if 'target_date' in df.columns:
+                td = df['target_date'].values[train_positions]
+                realized = td < np.datetime64(first_day_of_month)
+                train_positions_fit = train_positions[realized]
+                n_dropped = len(train_positions) - len(train_positions_fit)
+                if n_dropped > 0:
+                    print(f"    PIT: training on {len(train_positions_fit):,} rows "
+                          f"(dropped {n_dropped:,} unrealized as of {first_day_of_month.date()})")
+                if len(train_positions_fit) < 2000:
+                    print(f"  [{i:3d}/{len(unique_months)}] {current_month}: SKIPPED "
+                          f"(PIT left {len(train_positions_fit):,} < 2,000 training rows)")
+                    continue
+
             # Get training data using position-based indexing (now with updated rankings)
-            X_train = X.iloc[train_positions]
-            y_train = y[train_positions]
-            weights_train = sample_weights[train_positions]
+            X_train = X.iloc[train_positions_fit]
+            y_train = y[train_positions_fit]
+            weights_train = sample_weights[train_positions_fit]
 
             # Train model on data available up to this month
             self.train(X_train, y_train, sample_weight=weights_train, sample_fraction=self.sample_fraction)

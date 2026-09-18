@@ -17,6 +17,72 @@ The riskbrakes strategy file is **already committed** inside `dd457051` — noth
 
 **It is an INTERMEDIATE build, not the final one.** Missing vs. the last known state: only **20** `t_` technical indicators (not ~73 — this is the *earlier* batch that `--fundamental-only` was defined to keep), and only `momentum_90d` + `momentum_90d_zscore` (no `momentum_30d`/`momentum_60d`). Re-adding those is the remaining gap; the hard part (leak-free plumbing) is done.
 
+## Objective-alignment experiments (2026-08-31) — RESULTS IN
+**Motivation:** measured on real data, squared-error loss on raw % returns is spent almost entirely on stocks that are never traded. By market-cap decile: smallest decile carries **80.8%** of total squared error, bottom 20% of names carry **88%**, top 20% carry **1.3%** — a **65× loss-per-row** imbalance. The model optimizes ~99% for names outside the tradeable universe.
+
+**New flags added to the PIT script only** (production untouched):
+`--train-universe-top N`, `--target-normalize {none,zscore,rank}`, `--target-winsor PCT`.
+Applied AFTER the PIT guard and AFTER the ranking block, so the ranking universe stays the full cross-section. Target normalization transforms the LABEL only (every value in date D's transform is itself a date-D label ⇒ no look-ahead). Unit-tested: per-date mean 0 / std 1, within-date ordering preserved exactly (rank corr 1.0000), imbalance cut 34×, and `none` byte-identical to the old default.
+
+**Setup:** 2023-01-01→2026-08-25 full-universe slice (2.79M rows, all symbols), `--forecast-days 1 --target-return-days 90 --lookback-months 12 --point-in-time`. Scored 2024-01→2026-04-21 on independently recomputed outcomes. Identical row counts (1,675,078) across runs. ~52 min/run.
+
+| run | IC full | IC top-400 | excess/90d | train rows/mo |
+|---|---|---|---|---|
+| A baseline | +0.0985 | +0.0566 | +1.64% | ~455,000 |
+| B `--train-universe-top 400` | **+0.0458** | **+0.0546** | +1.60% | ~65,000 |
+| C `--target-normalize zscore` | **+0.1020** | **+0.0619** | **+1.89%** | ~455,000 |
+
+- **B is decisively wrong — breadth matters.** It loses even on the top-400 evaluation (0.0546 vs A 0.0566, C 0.0619): training only on large caps doesn't even help predict large caps. Beats A in **1 of 28 months**. Microcap rows carry signal that transfers upward. **Never restrict the training universe.**
+- **C wins, and its edge is entirely regime-conditional:** strong months C−A = **+0.0003** (nothing); 2025-06..12 drawdown C−A = **+0.0131** (roughly doubles IC, flips two negative months positive). Beats A 5/7 in the drawdown, 11/21 otherwise. Mechanism: turbulent markets blow up cross-sectional dispersion, so MSE gets even more outlier-dominated; per-date normalization caps that. **Z-scoring the target is insurance, not alpha** — but it is free (no added training time) and never materially lost. Adopt it.
+- **Answer to "IC as objective vs returns":** returns, but *normalized*. Not raw returns, not a ranking objective — LambdaRank would discard the magnitude the softplus tilt depends on, and this result says the payoff wouldn't justify the migration.
+- **Biggest takeaway:** correcting a 65× loss misallocation bought 3.6% relative IC. Combined with 50 trees ≈ 1000 trees, **the edge is data-limited, not model- or objective-limited.** Spend effort on features/data, not on objectives or capacity.
+- Both objectives collapse identically 2025-06..11 (A +0.0105, C +0.0236, B negative). That is a regime the signal does not work in; no objective fixes it.
+
+**Artifacts:** `data/csv/experiments/exp{A_baseline,B_top400,C_zscore}.parquet`; slice `data/csv/20230101_20260825_fulluniv_with_metadata_with_fmpdata.csv` (1.93 GB). Both untracked — same exposure that lost the PIT script before.
+
+## 🔴 RESOLVED + HIGHEST-VALUE FINDING (2026-09-01): the production ffill is costing LIVE performance
+Six controlled runs on the same slice, same flags, one variable each. Scored 2024-01→2026-04-21 on independently recomputed outcomes.
+
+| run | config | IC full | IC top-400 | excess/90d |
+|---|---|---|---|---|
+| A | PIT guard (drop unrealized rows) | +0.0985 | +0.0566 | +1.64% |
+| C | + per-date z-score target | +0.1020 | +0.0619 | +1.89% |
+| D | ffill bug **+ PIT guard** | +0.0899 | +0.0585 | +1.79% |
+| **E** | **ffill bug, NO guard (rebuild)** | **+0.3282** | **+0.3101** | **+7.90%** |
+| **F** | **`--ffill-target` (live emulation)** | **+0.0573** | **+0.0194** | **+1.19%** |
+
+**1. The leak is now reproduced from code.** E hits IC +0.3282 with a **100% daily win rate** (+21.9%/yr basket excess) on data where a guarded model gets +0.0985. That is the mechanism behind the live parquet's fake 0.38–0.72 pre-2026 IC. Not inferred any more — generated on demand.
+
+**2. The ffill is not just a backtest illusion — it degrades the LIVE model.** F (what production actually does: keep every row, fill unknown targets with last-known) drops IC to +0.0573 full and **+0.0194 top-400** — a two-thirds cut exactly where the book trades. F also reproduces the live *shape*, which A does not:
+`F 2026: +0.178 → +0.141 → +0.078 → +0.016` vs `live: +0.164 → +0.116 → +0.022 → −0.060` (A stays flat ~+0.10–0.14 and never fades).
+
+**3. Non-leaky and harmful are compatible.** The user's earlier intuition ("why does it leak if you mask+ffill?") was correct — mask-and-ffill does NOT leak. But it trains the model against labels that are simply wrong for those rows, and the model learns worse relationships. Dropping beats filling.
+
+**4. D shows the damage is conditional:** with the PIT guard present the ffill bug costs almost nothing (+0.0899 vs +0.0985), because the guard removes precisely the rows the bug corrupts. The bug is only devastating when nothing else drops unrealized rows — which is production's situation.
+
+**THE FIX (production, one line + its consequence):**
+```python
+exclude_from_ffill = ['Date', 'Symbol', 'forward_return']   # add the target
+```
+then let `valid_idx` drop the resulting NaN rows. Expected: full IC ~+73%, top-400 IC ~3×. Optionally stack per-date z-score normalization (run C) for a further small, regime-conditional gain.
+**Not yet applied — production remains untouched pending the user's decision.**
+
+**Caveats:** 28 months of overlapping 90-day windows ≈ 6 independent observations; F approximates production rather than being it. But A-vs-F is internally controlled (same script/data/pipeline, one variable), so the direction is solid even if the magnitude is not pinned.
+
+Artifacts: `data/csv/experiments/exp{A,B,C,D,E,F}*.parquet`. New PIT flag `--emulate-prod-ffill` (diagnostic only, never trade it).
+
+## ✅ CLOSED: PIT rerun vs live weekly discrepancy — explained by the above
+Same claimed point-in-time basis, very different recent IC:
+
+| month | PIT rerun (expA) | live weekly parquet |
+|---|---|---|
+| 2026-01 | +0.0975 | +0.164 |
+| 2026-02 | +0.1411 | +0.116 |
+| 2026-03 | **+0.1416** | **+0.022** |
+| 2026-04 | **+0.0988** | **−0.060** |
+
+Leading hypothesis: the production script's ffill bug corrupts **training labels** (rows whose target has not realized get a stale carried value instead of NaN, so they train with wrong y). The PIT script excludes them properly. If that is the cause, fixing the production ffill could roughly double recent live IC — which would make it the highest-value open item in the project. Not yet verified. Alternative: the 2023+ slice vs full-history training data differ in some way that matters despite both using a 12-month rolling window.
+
 ## v3.3.27 (this session) — production change
 Added a **LAST 12 MONTHS** block to the run summary, printed right after `🎯 MODEL PERFORMANCE` (forecast_returns_ml_walk_forward.py ~line 2736). Reports correlation/MAE/RMSE/direction accuracy over trailing 12 months + row count + date range + **cross-sectional rank IC** (mean per-date Spearman, % days positive).
 **Diff was 39 insertions, 0 deletions** — purely additive reporting; reads only the finished `df_predictions`. Forecasts/output files bit-identical to before. Docs all bumped to v3.3.27 (CHANGELOG/README/USAGE/weekly_command_guide/Docs INDEX+FORECAST_STABILITY/FILES.md).

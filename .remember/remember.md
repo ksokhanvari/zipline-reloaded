@@ -40,7 +40,43 @@ Applied AFTER the PIT guard and AFTER the ranking block, so the ranking universe
 
 **Artifacts:** `data/csv/experiments/exp{A_baseline,B_top400,C_zscore}.parquet`; slice `data/csv/20230101_20260825_fulluniv_with_metadata_with_fmpdata.csv` (1.93 GB). Both untracked — same exposure that lost the PIT script before.
 
-## 🔴 RESOLVED + HIGHEST-VALUE FINDING (2026-09-01): the production ffill is costing LIVE performance
+## ✅ LSEG IS FULLY REPLACEABLE (2026-09-18) — verified end-to-end
+Question: can the 38 LSEG columns in `20091231_YYYYMMDD.csv` be sourced from Sharadar/FMP instead?
+**Answer: yes, all 38. Zero LSEG columns still required, and the signal got BETTER.**
+
+| group | n | resolution |
+|---|---|---|
+| keys, price/volume, identity | 8 | unchanged / `sharadar_*` already merged |
+| quarterly fundamentals | 8 | **already in the file** as `*_fmp` — no download |
+| daily EV, market cap, 3 EV ratios | 5 | one `SHARADAR/DAILY` pull |
+| analyst estimates + StarMine ranks | 20 | **drop** — removing them RAISED IC |
+
+**Measured, live window 2026-01-26..04-21 (top-400 rank IC):**
+- FULL (LSEG, 383 feat): **+0.1672**
+- TIER-A (LSEG, 20 cols nulled, 278 feat): **+0.2177**  ← dropping the 20 gained ~30%
+- SUBST (FMP+Sharadar, 278 feat): **+0.2196**  ← substitution is FREE (+0.9%, inside noise)
+
+SUBST matched or beat TIER-A in all 3 live months and led on the top-50 book (+20.69% vs +19.35%).
+
+**Why the 20 are droppable rather than a loss:** FMP exposes only *current* estimate snapshots, so backfilling them would stamp 2026 views onto 2009-2025 history. They are also mostly collinear (forward P/S, P/CF, EV/OCF, PEG all reduce to price ÷ an estimate) and stale between sparse revisions. Do NOT buy the TipRanks point-in-time add-on — the evidence says these fields do not earn their place.
+
+**The quarterly half needed no work at all.** The `*_fmp` columns already land on `accepteddate_fmp` (the filing's publication timestamp), 97.8% of symbols, ~5 filings/symbol/yr. Sparse (~2% of rows) by design; the forecast script's per-symbol ffill propagates each forward, which is correct PIT behaviour. Agreement with LSEG on filing rows (Spearman): debt +0.971, cash +0.964, FCF +0.952, interest +0.909, EPS +0.861.
+
+**Scripts (committed):**
+- `data/csv/fetch_sharadar_replacements.py` — bulk-export pull of SHARADAR/DAILY (+SF1 if ever needed). No `nasdaqdatalink` dependency.
+- `data/csv/substitute_lseg_columns.py` — does the replacement.
+
+**FOUR bugs found during this work — all silent, none would have raised an error:**
+1. **Units.** SHARADAR/DAILY reports `ev`/`marketcap` in MILLIONS (AAPL = 4,522,736.4); LSEG in actual USD. Scaled ×1e6. Harmless for a single tree feature, but any downstream ratio mixing it with a dollar denominator is off by 1e6.
+2. **Ratio staleness.** LSEG's `*_DailyTimeSeriesRatio_` update DAILY. Computing `ev / raw_quarterly_denominator` only yields values on ~2% of rows (filing dates); ffilling that freezes the ratio between quarters. Fix: ffill the denominator FIRST, then divide daily EV into it.
+3. **Quarter×4 ≠ TTM.** Annualising one quarter gave EV/EBITDA rank corr 0.475, EV/EBIT 0.362. A true rolling 4-filing sum plus a top-400 split showed the residual disagreement is microcaps only: **top-400 EV/EBITDA 0.816, EV/EBIT 0.716** (acceptable); beyond rank 1000 it is 0.43/0.28.
+4. **Dropping vs nulling.** Feature engineering references several of the 20 by name (`ReturnOnAssets_SmartEstimate`) and raises KeyError if absent. They must be **nulled in place**, not removed.
+
+**⚠️ `.env` defines `NASDAQ_DATA_LINK_API_KEY` TWICE** (line 18 is a placeholder ending in `#`, line 27 is real). A naive first-match regex silently returns HTTP 200 with **0 rows** — no error. Always take the LAST definition.
+
+**Coverage caveat:** SHARADAR/DAILY covers 98.0% of top-400 rows (matching LSEG) but only 82% beyond rank 1000 (SPACs, OTC, closed-end funds, renames like ABC→COR). Full-universe IC is therefore NOT comparable between LSEG-sourced and Sharadar-sourced files; top-400 metrics are.
+
+## 🔴 OPEN / HIGHEST-VALUE: the production ffill is costing LIVE performance
 Six controlled runs on the same slice, same flags, one variable each. Scored 2024-01→2026-04-21 on independently recomputed outcomes.
 
 | run | config | IC full | IC top-400 | excess/90d |
@@ -125,8 +161,27 @@ Original gaps this fixed in `LS-prod-claud-func-refactor-MLf1.py`: vixflag hardc
 `20220101_20260728_top{200,300,500}mcap_with_metadata_with_fmpdata.csv` — 2022-2026, exactly N stocks/month.
 Source CSVs `20091231_2026MMDD_with_metadata_with_fmpdata.csv` (mcap col = lowercase `companymarketcap`, date col = `date`). Weekly prediction parquets in `MLData/`.
 
+## ⚠️ LIVE SIGNAL IS NEGATIVE RIGHT NOW (measured 2026-09-17)
+Scored against realized 30-trading-day outcomes (the 90d target only realizes through 2026-04-21, so this is the freshest honest read available):
+
+| month | IC full | IC top-400 | days | % days +ve |
+|---|---|---|---|---|
+| 2026-02 | +0.056 | +0.026 | 21 | 76% |
+| 2026-03 | +0.110 | +0.168 | 22 | 95% |
+| 2026-04 | +0.073 | +0.155 | 21 | 95% |
+| 2026-05 | −0.039 | −0.035 | 22 | 32% |
+| **2026-06** | **−0.169** | **−0.270** | 21 | **0%** |
+| **2026-07** | **−0.129** | **−0.209** | 14 | **0%** |
+
+June and July had **zero positive days**. Top-50 basket returned −11.61% in June while the pool returned +1.31% and the BOTTOM-50 returned +5.39% — a −17.0% long/short spread, i.e. the ranking inverted. Two independent non-overlapping observations in that stretch agree (−0.057, −0.150).
+
+Same shape as the 2025-06..11 collapse, which appeared identically in ALL SIX objective-function experiments — so it is regime, not code. No objective, feature set, or capacity setting fixed it then. This is what the riskbrakes overlay exists for. **Treat as the top priority over any modelling work.**
+
 ## Next / open
 Nothing is mid-flight. Candidates, roughly in priority order:
+- **Investigate the June-July signal inversion** (above) — live capital is exposed.
+- **Port the two fixes into production** (`forecast_returns_ml_walk_forward_FIXED.py` is committed and validated at ~2x live IC). Requires a from-scratch rerun afterward: `--preserve-existing` would otherwise freeze the degraded predictions.
+- **Adopt the LSEG replacement** — scripts committed, verified free. Removes the vendor dependency.
 - **Decide `--target-return-days` (20 vs 42) with a measurement**, not a judgement call — see the flags caveat above.
 - **Verify and enable `USE_VIXDATA_REGIME` (RISKBRAKE-1)** — it is the one brake still defaulted off pending verification.
 - Act on (or reject) the **MLF1 exponent 1.8 → 1.0** production re-anchor.

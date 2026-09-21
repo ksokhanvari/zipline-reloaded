@@ -939,6 +939,11 @@ class ReturnForecaster:
             'forward_return',  # Target variable
             'forward_return_raw',  # Un-normalized target (reporting only, never a feature)
             'target_date',  # POINT-IN-TIME GUARD bookkeeping (target realization date, not a feature)
+            # COMPOSITE TARGET bookkeeping. These hold each horizon's FORWARD RETURN
+            # and its realization date. They are label components, never features --
+            # leaving them in hands the model the answer. Measured cost of the
+            # omission: IC +0.82 with 100%% of days positive, i.e. the model simply
+            # reading _cmp_r20 off its own feature matrix.
             '_mc_rank_pit',  # Universe bookkeeping for --train-universe-top (not a feature)
             'volume_ma_20',  # Intermediate calculation
             'RefPriceClose', 'RefVolume', 'CompanyMarketCap',  # ALWAYS exclude (we use lagged versions)
@@ -999,6 +1004,12 @@ class ReturnForecaster:
         else:
             # When using no_lag, the input is pre-lagged, so INCLUDE these columns as features
             print("  • Using pre-lagged fundamentals as features (no_lag=True)")
+
+        # Every _cmp_* column is composite-target bookkeeping: the per-horizon
+        # FORWARD RETURN and its realization date. Excluding them by prefix rather
+        # than by name means adding a new horizon to --composite-target can never
+        # silently reintroduce the leak.
+        exclude_cols = list(exclude_cols) + [c for c in df.columns if c.startswith('_cmp_')]
 
         # Select feature columns
         feature_cols = [col for col in df.columns if col not in exclude_cols]

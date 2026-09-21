@@ -40,6 +40,11 @@ API = 'https://data.nasdaq.com/api/v3/datatables/SHARADAR/{table}.json'
 # DAILY: everything we need for the daily-valuation replacements
 DAILY_COLS = ['ticker', 'date', 'ev', 'evebitda', 'marketcap', 'pe', 'pb', 'ps']
 
+# SEP: full OHLCV. Needed for the technical factor build -- the LSEG feed carries
+# only a close, which rules out ATR/Stochastic/ADX/Ichimoku and every other
+# indicator that reads the high-low range.
+SEP_COLS = ['ticker', 'date', 'open', 'high', 'low', 'close', 'volume', 'closeadj']
+
 # SF1 (ARQ): fundamentals for the calculated columns.
 #   debt, cashneq, intexp, eps            -> direct replacements
 #   fcf, ncfdiv                           -> FOCFExDividends_Discrete
@@ -122,6 +127,8 @@ def main():
     ap.add_argument('--out-dir', default='sharadar_raw')
     ap.add_argument('--skip-daily', action='store_true')
     ap.add_argument('--skip-sf1', action='store_true')
+    ap.add_argument('--sep', action='store_true',
+                    help='also download SHARADAR/SEP (OHLCV) for technical features')
     args = ap.parse_args()
 
     key = load_api_key()
@@ -159,6 +166,19 @@ def main():
                     df[c] = pd.to_datetime(df[c])
             df.to_parquet(p, engine='pyarrow', compression='snappy', index=False)
             print(f"  -> {p} ({p.stat().st_size/1e6:.0f} MB)\n")
+
+    if args.sep:
+        p = out / f'sharadar_sep_{args.start}_{args.end}.parquet'
+        if p.exists():
+            print(f'SEP: {p} exists, skipping')
+        else:
+            df = bulk_export('SEP', key, {
+                'date.gte': args.start, 'date.lte': args.end,
+                'qopts.columns': ','.join(SEP_COLS),
+            })
+            df['date'] = pd.to_datetime(df['date'])
+            df.to_parquet(p, engine='pyarrow', compression='snappy', index=False)
+            print(f'  -> {p} ({p.stat().st_size/1e6:.0f} MB)\n')
 
     print("done. next: substitute_lseg_columns.py")
 

@@ -76,7 +76,7 @@ Its prediction distribution differs from production (mean +6.69 std **26.10** vs
 2. **`trend_visual_ichimoku_a/b`** — Ichimoku cloud spans are deliberately displaced FORWARD. Caught by the `--verify` scramble (3.6e+00 vs 0.00e+00 for the other 84). Now in `NON_CAUSAL`.
 3. **`_cmp_*` composite columns became FEATURES** — handed the model the forward return. IC +0.82, 100% of days positive. **Cost 6.5h.** Now excluded by prefix.
 
-➡️ **`scratchpad/preflight.py` gates every long run in ~2 min** — fails the launch if a feature is the label, correlates >0.95 with the target, or the mode filter misfires. Use it. Always.
+➡️ **`data/csv/tools/preflight.py` gates every long run in ~2 min** (committed — it used to live in the scratchpad, which rotates) — fails the launch if a feature is the label, correlates >0.95 with the target, or the mode filter misfires. Use it. Always.
 
 ## Gotchas that cost real time
 - **Feature starvation**: 200-day windows need ~9.5 months. Slicing an input to the first training date leaves early features 0% valid. **Always build the slice ≥12 months before the first prediction date.** This invalidated one whole live-vs-PIT comparison.

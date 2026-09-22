@@ -92,6 +92,36 @@ Its prediction distribution differs from production (mean +6.69 std **26.10** vs
 ## Scripts (all committed)
 `forecast_returns_ml_walk_forward.py` (production, untouched) · `..._FIXED.py` (ffill/PIT fixes — reference only, do NOT deploy) · `forecast_returns_ml_weekly_pit.py` (weekly walk, `--train-start`, `--composite-target`, `--target-residual`, `--feature-whitelist`) · `fetch_sharadar_replacements.py` (DAILY/SF1/SEP) · `substitute_lseg_columns.py` · `build_technical_features.py` (77 indicators, `--verify`) · `merge_technical_features.py` · `build_prod2025_tech_input.py`
 
+## Artifact inventory — `data/csv/experiments/` (all gitignored, on disk only)
+Naming: `TAG_<config>_<daterange>_predfrom_<first prediction>`. Each dir holds
+`<TAG>.parquet` (full) and `<TAG>_forecast_only.csv` (Symbol,Date,predicted_return).
+
+**The runs that produced the conclusions:**
+| dir | what it settles |
+|---|---|
+| `FFILL_THEORY_MONTHLY_2024_predfrom_2025/` | **FFILL_ON vs FFILL_OFF** — the user's stale-label theory. The decisive pair. |
+| `MOMONLY_MONTHLY_COMPOSITE_2024_predfrom_2025/` | momentum-only model inverts (IC −0.034) |
+| `WEEKLY_MOMTEST_2024_predfrom_2025/WK_MOMONLY` | weekly retraining does NOT fix the inversion (−0.126 vs −0.159) |
+| `LB3_…` vs `LB12_WEEKLY_COMPOSITE_TECH_2024_predfrom_2025/` | lookback 3 vs 12, one variable. 12 wins 6.6× |
+| `PROD2025_TECH146_WEEKLY_90d_predfrom_2026/` | 77 technicals in production config — null (rank corr 0.972) |
+| `PIT_WEEKLY_20d_{,TECHONLY,FUNDONLY}_SUBSTITUTED_…/` | the three-way feature split |
+| `PIT_WEEKLY_90d_SUBSTITUTED_…/` | **the weekly LSEG-replacement forecast**, if a backtest is wanted |
+| `PRODUCTION_SUBSTITUTED_20091231_20260915/` | full-history (2010-2026) production-script run on substituted data |
+
+**Reusable inputs already built** (rebuilding costs hours):
+- `experiments/20091231_20260915_SUBSTITUTED.parquet` — full history, LSEG replaced
+- `experiments/20230101_20260915_SUBST_TECH146.parquet` — 2023+, substituted + 77 technicals
+- `experiments/LB3_…/input_2024_WITH_TECH.parquet` — 2024+, **LSEG INTACT** + 77 technicals
+- `technical_features_2022_2026.parquet` — 77 indicators, float32, causality-verified
+- `sharadar_raw/sharadar_{daily,sep}_*.parquet` — DAILY (22.4M rows) and SEP OHLCV (7.8M)
+
+## Tooling kept in-repo (`data/csv/tools/`)
+`preflight.py` — **run before every multi-hour job.** ~2 min; fails the launch on
+label leakage, any feature >0.95 correlated with the target, a mis-applied mode
+filter, or a pipeline that cannot train. `score_runs.py` — compares finished runs
+on rank IC + basket excess, always recomputing outcomes from RefPriceClose.
+See `tools/README.md`.
+
 ## Next / open — in priority order
 1. **The negative signal since April 2026.** Live exposure; nothing here addresses it. Risk management, not modelling.
 2. **Factor-attribute the book** (`cash_return` vs `fcf` vs `bc` vs `30mom` vs `mlf`). The ML contributes modestly; knowing which sleeve earns would direct effort far better than more model work.

@@ -38,7 +38,13 @@ The earlier "+766% vs +381%, Sharpe 4.0" mom=0 win was on LEAKED predictions. **
 - CONSENSUS_BOOST 0.5 (weight names both sleeves picked): corr 0.996 vs base, Sharpe 1.30 vs 1.28 → delete the multiplier.
 - Overlap as quality signal: high overlap predicts WORSE fwd returns (rank corr −0.125 @21d), regime-confounded. Book holds ~41 names
   (median 9 overlap), effective N 26.7.
-- 1/β² extra beta penalty (BETA_EXTRA_POWER): sleeve-level looked good (alpha +1.25→+2.10), user judged not worth it; not backtested. Shelved.
+- Beta-dual (extra /winsorize(beta60IWM) on the long weight; needs clip(0.3,3)+NaN→1 guard): 2023-26 Sharpe 1.62 vs 1.52 base,
+  CAGR +59.7% vs +57.0%, but book beta unchanged at 1.35 and maxDD −26.3%. Small gain, not a drawdown fix. **Keep.**
+- Posfill / top-up to 50 names with next value picks: beta 1.35→1.24 but CAGR −4.5pp, Sharpe 1.59. Flat. **Drop.**
+- Beta-dual + posfill combined: Sharpe 1.49, CAGR +48.5% — WORSE than either alone. **Drop.**
+- **Weight/selection tuning is exhausted** (consensus, overlap, top-up, beta penalty all within noise). Stop proposing them.
+  FINAL: mom=30 + weekly PIT forecast + beta-dual (guarded), CONSENSUS_BOOST=0, no top-up.
+  Remaining levers: forecast quality, and book-level risk (hedge sizing / gross / riskbrakes) for the ~−26% DD.
 - Universe narrowing, mom=0 — withdrawn (my errors: assumed 1500 universe, and pool ranks by ML not mcap).
 
 ### Next

@@ -1,8 +1,55 @@
 # Handoff
 
-## State (2026-09-22)
+## State (2026-09-24)
 Branch `claude/continue-session-011-011CUzneiQ5d1tV3Y3r29tCA`. **Production is UNCHANGED and should stay that way** — v3.3.27, only the additive 9/6/12-month reporting block was ever touched.
 Commits: `688a702f` composite leak fix + merge tooling · `b7a26935` technical factors · `d34ce024` weekly PIT script · `17b5ee10` LSEG replacement · `49029640` ffill/PIT fixes.
+
+## 🆕 SESSION 2026-09-23/24 — honest PIT baseline + algo sleeve tests (READ FIRST)
+
+### The honest history exists now
+`experiments/PIT_BASE_MONTHLY_90d_FULLHIST_LSEG/` — production config exactly (production parquet 20260922, LSEG intact,
+`--fundamental-only` = 269 feats = production's set, monthly, 90d/1d/12m, `--ffill-target`, predict 2010-06→2026-05).
+`experiments/PIT_BASE_WEEKLY_90d_from2023_LSEG/` — same, weekly, from 2023-01.
+NOTE: the PIT script adds 71 native `t_` technicals that production does NOT build → always use `--fundamental-only` for a production twin.
+
+**The production parquet's history is fiction:** top-400 IC +0.61 / ICIR 3.29 / 99% days+ (rebuild leak). Honest 16-yr: IC +0.013, ICIR 0.078, 54%.
+`PRODUCTION_SUBSTITUTED_*` (production script, rebuild) carries the same leak (IC +0.55, 100% days+) — don't evaluate on it.
+**Use ICIR as a leak detector:** real equity signals run ~0.3–1.0; >1.5 or >85% days positive = contamination.
+90d overlap: lag-1 rho 0.886, Newey-West VIF ~40 → 640 daily obs ≈ 16 independent. Never annualize ICIR by √252.
+
+### The signal selects, it doesn't rank (algo universe = top-400 by mcap, FILTERED_UNIVERSE_SIZE=400)
+Honest PIT, top-N by forecast within top-400: 150 +0.31% / 50 +1.23% / 30 +2.02% / 10 +4.55% per 90d, ~60% dates.
+Pool gate (150 of 400) is near-worthless (+0.06% in 2010s). Value is in TIGHT selection = the 30-name momentum sleeve.
+Top picks are high-beta (top-30 β 1.20, vol 1.31×) but ~60–70% of excess survives beta adjustment (top-30 alpha +1.25%/90d).
+
+### Cadence must match horizon
+90d: MONTHLY beats weekly (IC +0.049 vs +0.031, ICIR 0.358 vs 0.217, wins every year 2023–26). 20d: weekly won.
+Production walks monthly at 90d = correct.
+
+### Algo backtests (all on honest weekly PIT forecast, 2021-02→2026-09)
+| config | weekly era 2023+ CAGR / Sharpe / maxDD |
+|---|---|
+| **mom=30 (keep)** | **+57.5% / 1.54 / −25.4%** |
+| mom=0 | +35.1% / 1.48 / −15.2% |
+Pre-2023 the weekly file has NO coverage (algo ran on older mlf1) — that's where mom=0's apparent edge came from.
+The earlier "+766% vs +381%, Sharpe 4.0" mom=0 win was on LEAKED predictions. **Recommendation: keep TOP_MOMENTUM_STOCKS=30.**
+
+### Dead ends this session (all null — weight-formula tuning is exhausted)
+- CONSENSUS_BOOST 0.5 (weight names both sleeves picked): corr 0.996 vs base, Sharpe 1.30 vs 1.28 → delete the multiplier.
+- Overlap as quality signal: high overlap predicts WORSE fwd returns (rank corr −0.125 @21d), regime-confounded. Book holds ~41 names
+  (median 9 overlap), effective N 26.7.
+- 1/β² extra beta penalty (BETA_EXTRA_POWER): sleeve-level looked good (alpha +1.25→+2.10), user judged not worth it; not backtested. Shelved.
+- Universe narrowing, mom=0 — withdrawn (my errors: assumed 1500 universe, and pool ranks by ML not mcap).
+
+### Next
+1. Backtest the MONTHLY PIT forecast (2010→) — one honest long track record, better IC than weekly.
+2. Upside is in forecast quality, not weights: switching mom=30 from old→weekly PIT forecast took Sharpe 0.76→1.54.
+3. Still open: signal-quality monitor (weekly rolling ICIR/hit-rate), factor attribution.
+
+### Process lesson
+I drew conclusions from the wrong universe twice before reading `process_universe`. Grep the algo's constants
+(FILTERED_UNIVERSE_SIZE, POOL_ENTER_N, LONG_PORTFOLIO_SIZE) and trace selection BEFORE modelling it. Snippets must
+anchor on code, not line numbers (a mis-anchored insert caused an UnboundLocalError).
 
 ## 🟢 BOTTOM LINE: KEEP PRODUCTION AS-IS
 Eleven attempts to improve the signal. **Every one failed or was overturned by better measurement.** The user's instinct to resist changes was correct each time.

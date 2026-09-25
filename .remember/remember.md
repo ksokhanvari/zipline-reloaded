@@ -18,7 +18,12 @@ Algo backtests, mom=30 + regime-aware beta-dual, 2023-02→2026-09:
 | direct EQ19 (no ML) | +38.0% | 22.3% | 1.56 | −20.9% | 0.83 | +53.8% |
 | baseline weekly PIT mlf1 | +59.8% | 30.7% | 1.68 | −24.3% | 1.26 | +59.8% |
 Max-rank beats baseline 3 of 4 years (loses 2025), 22/44 months — edge is LOWER RISK, not higher return.
-**NEXT:** backtest maxrank vs monthly PIT mlf1 (`PIT_BASE_MONTHLY_90d_FULLHIST_LSEG_forecast_only.csv`) over
+**2018-26 RESULT (done):** maxrank Sharpe 1.49 vs monthly PIT mlf1 1.32, DD −22.6% vs −24.1%, vol-matched CAGR
++50.9% vs +43.6% → passes the rule. BUT 2018-22 slight loss (1.27 vs 1.34, lost 2018/2021/2022); 2023-26 sweep
+(1.88 vs 1.30). vs WEEKLY mlf1 2023-26: 1.91 vs 1.68, DD −19.6 vs −24.3. Recommendation: switch, monitor monthly.
+**TODO (on hold, user 2026-09-25):** build WEEKLY PIT mlf1 from 2018 (~6-8h run: PIT script, --walk-frequency weekly,
+--train-start 2018-01-01, --fundamental-only --ffill-target, same input as PIT_BASE_WEEKLY) → backtest vs maxrank 2018-26.
+**(superseded)** backtest maxrank vs monthly PIT mlf1 (`PIT_BASE_MONTHLY_90d_FULLHIST_LSEG_forecast_only.csv`) over
 2018-01→2026-09 (weekly file doesn't go back). Switch production only if maxrank holds there.
 
 ### The 19 factors (selected on 2010-17 ONLY, tested 2018-26)
@@ -49,6 +54,18 @@ Direct (non-ML) equal-weight score: IC +0.046 OOS; adaptive IC-weighting WORSE (
 3. 52 of 213 "month-ends" were stray weekend rows of junk symbols (mcap 0). Any month-end sampling must require a
    real cross-section (≥1500 rows). This produced a fake IC +0.15 / +70% baskets before it was caught.
 4. EV / debt metrics meaningless for Financials — null them; raw $ levels (EV, Debt_Total, PT) are size/price proxies.
+
+### NEW FMP DATA — downloaded & tested 2026-09-25: ALL NULL (don't retry)
+Script `data/csv/fetch_fmp_extras.py` (key FMP_API_KEY in .env; resumable cache experiments/FMP_EXTRAS/raw/).
+Factors `data/csv/build_fmp_extra_factors.py`, gate `experiments/FACTOR_STUDY/test_fmp_extras.py`.
+- earnings (EPS+revenue surprise, beat streaks): pass 2010-17, FADE 2018+ (rev_beat 0.032→0.005); adding 5 of them
+  HURT OOS (IC 0.079→0.073, top-30 3.44%→2.63%). Post-earnings drift has decayed.
+- analyst grade changes (net upgrades 90d): null, sign flips. insider open-market buys 180d: slightly NEGATIVE, n.s.
+  (insider effect lives in small caps; top-1000 mostly zero buys).
+- Gotchas: all-company earnings-calendar CAPS at 4,000 rows/call (a month hits it) → use per-symbol /earnings.
+  Unfiltered insider feed ~8h (award/tax filings) → filter transactionType=P-Purchase (~25 min).
+- filings.parquet has true filingDate per quarter → use to FIX the quarter-end look-ahead in production input
+  (production change — awaiting user go-ahead).
 
 ### FMP export recommendation (probed live via FMP connector)
 ✅ earnings history (EPS + REVENUE actual vs est, 2009+; treat est==actual as missing — backfilled placeholders)

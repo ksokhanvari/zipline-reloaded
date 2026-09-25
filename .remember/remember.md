@@ -4,7 +4,21 @@
 Branch `claude/continue-session-011-011CUzneiQ5d1tV3Y3r29tCA`. **Production is UNCHANGED and should stay that way** — v3.3.27, only the additive 9/6/12-month reporting block was ever touched.
 Commits: `688a702f` composite leak fix + merge tooling · `b7a26935` technical factors · `d34ce024` weekly PIT script · `17b5ee10` LSEG replacement · `49029640` ffill/PIT fixes.
 
-## 🆕 FACTOR STUDY + FORECAST CANDIDATES (2026-09-24/25) — READ FIRST
+## ✅ LIVE MAX-RANK WORKFLOW (2026-09-25) — READ FIRST
+Weekly, after the production update:  `cd data/csv && python weekly_maxrank_update.py`  → load
+`MLData/<range>_maxrank_forecast_only.csv` instead of `<range>_forecast_only.csv`.
+- LIVE 2026 test (both on the ORIGINAL algo beta treatment, 2026-02-03→09-22): max-rank +65.3%, vol 23.8%,
+  Sharpe 3.45, DD −6.1%, beta 0.92  vs  production +65.9%, vol 42.1%, Sharpe 2.10, DD −12.4%, beta 1.63.
+  Same return, ~half the risk. Beta-dual NOT needed with max-rank (3.32 with it) → keep the original algo.
+- Script: freezes history (never rewrites old rows), retrains the 19F GBM once per COMPLETED month-end
+  (60m window, 135d PIT guard), quantile ref frozen in experiments/MAXRANK_LIVE/, skips stray thin dates
+  (<1000 rows — production file has weekend rows with 3-23 names), warns if 19F scores >45d old or <350 names
+  carry both scores. Verified: reproduces the backtested file EXACTLY (rank corr 1.0000, top-30 100%, 166 days).
+- Target y = cross-sectional pct-rank of split-corrected fwd90 (T+1→T+91) among the top-1000. Model predicts
+  RELATIVE performance only. X = 19 frozen factors (cross-sectional pct-ranks) + GICS sector code.
+- Pre-2026 rows of the output use leaky production history — fine for live use, not for evaluation.
+
+## 🆕 FACTOR STUDY + FORECAST CANDIDATES (2026-09-24/25)
 
 ### Current best: MAX-RANK blend  (not yet live — pending the 2018-26 backtest)
 `data/csv/experiments/FACTOR19_FORECAST/MAXRANK_F19_MLF1_forecast_only.csv` (2015-01 → 2026-09, mlf1 units)

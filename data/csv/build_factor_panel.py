@@ -24,6 +24,11 @@ import numpy as np, pandas as pd, sys, os
 
 SRC = 'experiments/PIT_BASE_MONTHLY_90d_FULLHIST_LSEG/input_PIT_BASE_FULLHIST.parquet'
 OUT = 'experiments/FACTOR_STUDY/panel_monthly.parquet'
+# Optional overrides for the weekly live update: build_factor_panel.py [SRC] [OUT] [--force]
+_args = [a for a in sys.argv[1:] if not a.startswith('--')]
+if len(_args) >= 1: SRC = _args[0]
+if len(_args) >= 2: OUT = _args[1]
+FORCE = '--force' in sys.argv
 TOPN = 1000
 FD, TRD = 1, 90
 
@@ -57,8 +62,8 @@ def sdiv(a, b):
 
 
 def main():
-    if os.path.exists(OUT):
-        sys.exit(f'ABORT: {OUT} exists')
+    if os.path.exists(OUT) and not FORCE:
+        sys.exit(f'ABORT: {OUT} exists (use --force to rebuild)')
     base = ['Date', 'Symbol', 'RefPriceClose', 'RefVolume', 'CompanyMarketCap', 'GICSSectorName']
     print('loading daily price / LSEG columns ...')
     d = pd.read_parquet(SRC, columns=base + LSEG, engine='pyarrow')

@@ -1,8 +1,59 @@
 # Handoff
 
-## State (2026-09-24)
+## State (2026-09-25)
 Branch `claude/continue-session-011-011CUzneiQ5d1tV3Y3r29tCA`. **Production is UNCHANGED and should stay that way** — v3.3.27, only the additive 9/6/12-month reporting block was ever touched.
 Commits: `688a702f` composite leak fix + merge tooling · `b7a26935` technical factors · `d34ce024` weekly PIT script · `17b5ee10` LSEG replacement · `49029640` ffill/PIT fixes.
+
+## 🆕 FACTOR STUDY + FORECAST CANDIDATES (2026-09-24/25) — READ FIRST
+
+### Current best: MAX-RANK blend  (not yet live — pending the 2018-26 backtest)
+`data/csv/experiments/FACTOR19_FORECAST/MAXRANK_F19_MLF1_forecast_only.csv` (2015-01 → 2026-09, mlf1 units)
+score = max(pct-rank 19-factor GBM, pct-rank honest mlf1) per day → top-N = union of both models' strongest picks.
+Algo backtests, mom=30 + regime-aware beta-dual, 2023-02→2026-09:
+| file | CAGR | vol | Sharpe | maxDD | beta | vol-matched CAGR |
+|---|---|---|---|---|---|---|
+| **maxrank** | +52.0% | 23.4% | **1.91** | **−19.6%** | 1.08 | **+71.3%** |
+| blend 50/50 | +53.8% | 25.0% | 1.85 | −21.4% | 1.11 | +68.2% |
+| 19factor GBM | +41.8% | 21.4% | 1.74 | −24.7% | 0.90 | +62.6% |
+| direct EQ19 (no ML) | +38.0% | 22.3% | 1.56 | −20.9% | 0.83 | +53.8% |
+| baseline weekly PIT mlf1 | +59.8% | 30.7% | 1.68 | −24.3% | 1.26 | +59.8% |
+Max-rank beats baseline 3 of 4 years (loses 2025), 22/44 months — edge is LOWER RISK, not higher return.
+**NEXT:** backtest maxrank vs monthly PIT mlf1 (`PIT_BASE_MONTHLY_90d_FULLHIST_LSEG_forecast_only.csv`) over
+2018-01→2026-09 (weekly file doesn't go back). Switch production only if maxrank holds there.
+
+### The 19 factors (selected on 2010-17 ONLY, tested 2018-26)
+Scripts: `build_factor_panel.py`, `experiments/FACTOR_STUDY/{score_factors,select_and_validate}.py`;
+list: `experiments/FACTOR_STUDY/selected_factors_2010_2017.csv`. Families: earnings surprise (FMP sue sign, LSEG
+EPS surprise/px, GPM surprise) · quality (StarMine EarningsQuality, fscore, GP/assets, goodwill/assets) · cash-flow
+value (FOCF/mcap, FCF/EV, GP/EV, trailing E/P) · issuance (share growth, −) · analyst (StarMine Alpha sector rank,
+LTG) · growth-tilt regime bets (B/P −, div yield −, R&D/rev, SBC/rev, dollar vol). 7 of 19 are LSEG-only.
+OOS 2018-26 top-400: GBM-19 IC +0.079 (t 3.96, 70% months +) vs GBM all-85 +0.059 vs production mlf1 +0.020.
+But top-30 basket ties mlf1 (+3.4% vs +3.7%/90d) — mlf1 picks the top well, GBM ranks the list well → hence blend.
+
+### Blending — measured (OOS top-30 excess, top-400)
+max-rank +5.21% > 50/50 avg +3.49% ≈ GBM +3.43% > min-rank(AND) +3.01% ≈ screen-then-pick ≈ adaptive-IC.
+LEARNED blends (stacked ranker, tail classifier, regime-aware) do NOT beat max-rank: they overfit 2023-26 and
+fail 2018-22 (regime version: +8.29% recent, +0.03% 2018-22). With ~1 independent obs/quarter, fixed rules win.
+Direct (non-ML) equal-weight score: IC +0.046 OOS; adaptive IC-weighting WORSE (0.027); dropping growth-tilt WORSE.
+
+### Nulls — don't retry
+- Daily refresh: 21-day-old factor values keep 80-120% of IC (EV ratios ~100%). Monthly carry is fine.
+  Only untested daily idea: event-triggered re-score on earnings dates (surprises used ~2 weeks late now).
+- Technicals: 0 of 18 full-history close-based technicals pass the 2010-17 gate; most flip sign 2010-13 vs 14-17.
+  Third independent null for technicals at 90d in large caps.
+
+### DATA DEFECTS in the production input (affect production too)
+1. ~10% of FMP filings stamped ON the quarter-end (date-only) — 1-2 months before public (real median lag 38d).
+   LOOK-AHEAD in production features. Study pushes them +60d. Fix at source: re-export statements with filingDate.
+2. RefPriceClose NOT split-adjusted (AMZN 2022 −94.9%); 192 artefacts. Study uses mcap return on those days.
+3. 52 of 213 "month-ends" were stray weekend rows of junk symbols (mcap 0). Any month-end sampling must require a
+   real cross-section (≥1500 rows). This produced a fake IC +0.15 / +70% baskets before it was caught.
+4. EV / debt metrics meaningless for Financials — null them; raw $ levels (EV, Debt_Total, PT) are size/price proxies.
+
+### FMP export recommendation (probed live via FMP connector)
+✅ earnings history (EPS + REVENUE actual vs est, 2009+; treat est==actual as missing — backfilled placeholders)
+✅ insider trades (Form 4, filingDate) · ✅ analyst grade actions (2012+) · ✅ statements re-export WITH filingDate
+❌ TTM/bulk snapshots, forward estimates (look-ahead), shares float, historical consensus (2019+ only, noisy)
 
 ## 🆕 SESSION 2026-09-23/24 — honest PIT baseline + algo sleeve tests (READ FIRST)
 
@@ -43,7 +94,8 @@ The earlier "+766% vs +381%, Sharpe 4.0" mom=0 win was on LEAKED predictions. **
 - Posfill / top-up to 50 names with next value picks: beta 1.35→1.24 but CAGR −4.5pp, Sharpe 1.59. Flat. **Drop.**
 - Beta-dual + posfill combined: Sharpe 1.49, CAGR +48.5% — WORSE than either alone. **Drop.**
 - **Weight/selection tuning is exhausted** (consensus, overlap, top-up, beta penalty all within noise). Stop proposing them.
-  FINAL: mom=30 + weekly PIT forecast + beta-dual (guarded), CONSENSUS_BOOST=0, no top-up.
+  FINAL: mom=30 + beta-dual REGIME-AWARE SPY/IWM (guarded; Sharpe 1.68 vs 1.62 IWM-only), CONSENSUS_BOOST=0, no top-up.
+  Forecast input: weekly PIT today; candidate replacement = MAXRANK file (see top).
   Remaining levers: forecast quality, and book-level risk (hedge sizing / gross / riskbrakes) for the ~−26% DD.
 - Universe narrowing, mom=0 — withdrawn (my errors: assumed 1500 universe, and pool ranks by ML not mcap).
 

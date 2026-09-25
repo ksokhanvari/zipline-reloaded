@@ -4,7 +4,15 @@
 Branch `claude/continue-session-011-011CUzneiQ5d1tV3Y3r29tCA`. **Production is UNCHANGED and should stay that way** — v3.3.27, only the additive 9/6/12-month reporting block was ever touched.
 Commits: `688a702f` composite leak fix + merge tooling · `b7a26935` technical factors · `d34ce024` weekly PIT script · `17b5ee10` LSEG replacement · `49029640` ffill/PIT fixes.
 
-## ✅ LIVE MAX-RANK WORKFLOW (2026-09-25) — READ FIRST
+## ✅ DECISION (user, 2026-09-25): PRODUCTION = MAX-RANK + ORIGINAL ALGO BETA (no beta-dual)
+Final like-for-like 2026 live (02-03→09-22): max-rank orig-beta Sharpe 3.23 (+61.5%, vol 24.3%, DD −8.7%, β 0.94)
+vs mlf1+beta-dual 2.37 (+59.1%, vol 33.2%, DD −8.4%, β 1.22) vs mlf1 orig 2.10 (DD −12.4%).
+Edge vs best mlf1 config = LOWER VOL at same return/DD (DD edge seen earlier, −6.1%, was start-date path luck:
+Jan-5 vs Feb-3 start changed March −3%→−6%). Expect a smoother book, not a dramatically better one.
+MONITOR: compare max-rank vs mlf1 monthly; revisit if max-rank trails on rolling-12m Sharpe through a drawdown.
+Fallback if the second model is ever dropped: mlf1 + regime-aware beta-dual.
+
+## ✅ LIVE MAX-RANK WORKFLOW (2026-09-25)
 Weekly, after the production update:  `cd data/csv && python weekly_maxrank_update.py`  → load
 `MLData/<range>_maxrank_forecast_only.csv` instead of `<range>_forecast_only.csv`.
 - LIVE 2026 test (both on the ORIGINAL algo beta treatment, 2026-02-03→09-22): max-rank +65.3%, vol 23.8%,

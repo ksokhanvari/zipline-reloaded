@@ -112,7 +112,10 @@ def main():
     a = ap.parse_args()
     STATE.mkdir(parents=True, exist_ok=True)
     fc = Path(a.prod_forecast) if a.prod_forecast else newest('*_forecast_only.csv', exclude='maxrank')
-    pq = Path(a.prod_parquet) if a.prod_parquet else newest('*.parquet')
+    # pinned to the name CollectMLData.ipynb generates -- MLData/ also holds variant parquets (-leaf63, -1000, ...)
+    pq = Path(a.prod_parquet) if a.prod_parquet else newest('*_metadata_fmpdata_perdict-90-1-rolling-12.parquet')
+    if fc.name[:17] != pq.name[:17]:
+        sys.exit(f'ABORT: forecast ({fc.name[:17]}) and parquet ({pq.name[:17]}) are from different runs')
     out = HERE / 'MLData' / fc.name.replace('_forecast_only.csv', '_maxrank_forecast_only.csv')
     print(f'production forecast : {fc.name}\nproduction parquet  : {pq.name}\noutput              : MLData/{out.name}\n')
 

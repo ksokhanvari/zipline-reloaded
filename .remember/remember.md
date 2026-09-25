@@ -64,8 +64,11 @@ Factors `data/csv/build_fmp_extra_factors.py`, gate `experiments/FACTOR_STUDY/te
   (insider effect lives in small caps; top-1000 mostly zero buys).
 - Gotchas: all-company earnings-calendar CAPS at 4,000 rows/call (a month hits it) → use per-symbol /earnings.
   Unfiltered insider feed ~8h (award/tax filings) → filter transactionType=P-Purchase (~25 min).
-- filings.parquet has true filingDate per quarter → use to FIX the quarter-end look-ahead in production input
-  (production change — awaiting user go-ahead).
+- FILING-DATE LEAK ROOT CAUSE (found in user's collector repo /Users/kamran/Documents/Code/qtrader/fmp-data):
+  collector keeps all columns; consolidate_fmp_data.py:846 correctly uses filingDate — but FMP's OWN filingDate
+  equals the period end for 8-13% of rows (acceptedDate no better, per-symbol endpoint identical) → no clean source.
+  Fix = rule at line 846: filingDate < period_end+10d → SEC deadline (10-Q +45d, Q4/10-K +90d). Patch drafted
+  (see session), NOT applied — user said leave it for now (2026-09-25). Applying needs consolidator rerun + full retrain.
 
 ### FMP export recommendation (probed live via FMP connector)
 ✅ earnings history (EPS + REVENUE actual vs est, 2009+; treat est==actual as missing — backfilled placeholders)

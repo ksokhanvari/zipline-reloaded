@@ -109,6 +109,10 @@ def main():
     ap.add_argument('--prod-forecast', help='production *_forecast_only.csv (default: newest in MLData/)')
     ap.add_argument('--prod-parquet', help='production predictions parquet (default: newest in MLData/)')
     ap.add_argument('--dry-run', action='store_true')
+    ap.add_argument('--rescore-from', metavar='YYYY-MM-DD',
+                    help='deliberately REBUILD history from this date: drop stored 19-factor month-end scores and '
+                         'output rows on/after it, then recompute from the current data (e.g. after an upstream '
+                         'data fix). Old state is backed up to experiments/MAXRANK_LIVE/backup_<timestamp>/.')
     a = ap.parse_args()
     STATE.mkdir(parents=True, exist_ok=True)
     fc = Path(a.prod_forecast) if a.prod_forecast else newest('*_forecast_only.csv', exclude='maxrank')
@@ -118,6 +122,28 @@ def main():
         sys.exit(f'ABORT: forecast ({fc.name[:17]}) and parquet ({pq.name[:17]}) are from different runs')
     out = HERE / 'MLData' / fc.name.replace('_forecast_only.csv', '_maxrank_forecast_only.csv')
     print(f'production forecast : {fc.name}\nproduction parquet  : {pq.name}\noutput              : MLData/{out.name}\n')
+
+    if a.rescore_from:
+        cut = pd.Timestamp(a.rescore_from)
+        if not a.dry_run:
+            import shutil
+            bk = STATE / f"backup_{pd.Timestamp.now():%Y%m%d_%H%M%S}"
+            bk.mkdir()
+            for f in ('f19_scores.parquet', 'maxrank_latest.csv'):
+                if (STATE / f).exists(): shutil.copy2(STATE / f, bk / f)
+            print(f'  backed up state -> {bk.name}')
+        sp = STATE / 'f19_scores.parquet'
+        if sp.exists():
+            S0 = pd.read_parquet(sp); S0['snap'] = pd.to_datetime(S0['snap'])
+            print(f'  --rescore-from {cut:%Y-%m-%d}: dropping {S0.loc[S0.snap >= cut, "snap"].nunique()} stored month-end scores')
+            if not a.dry_run: S0[S0['snap'] < cut].to_parquet(sp, index=False)
+        op = STATE / 'maxrank_latest.csv'
+        if op.exists():
+            O0 = pd.read_csv(op, parse_dates=['Date'])
+            print(f'  --rescore-from {cut:%Y-%m-%d}: dropping {int((O0.Date >= cut).sum()):,} output rows on/after it')
+            if not a.dry_run: O0[O0['Date'] < cut].to_csv(op, index=False)
+        # the panel must be rebuilt from the CURRENT production parquet
+        (STATE / 'panel.source').unlink(missing_ok=True) if not a.dry_run else None
 
     # 1. factor panel + 19-factor scores (monthly, frozen)
     panel = STATE / 'panel_monthly.parquet'

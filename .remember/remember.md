@@ -45,6 +45,13 @@ Max-rank beats baseline 3 of 4 years (loses 2025), 22/44 months — edge is LOWE
 (1.88 vs 1.30). vs WEEKLY mlf1 2023-26: 1.91 vs 1.68, DD −19.6 vs −24.3. Recommendation: switch, monitor monthly.
 **TODO (on hold, user 2026-09-25):** build WEEKLY PIT mlf1 from 2018 (~6-8h run: PIT script, --walk-frequency weekly,
 --train-start 2018-01-01, --fundamental-only --ffill-target, same input as PIT_BASE_WEEKLY) → backtest vs maxrank 2018-26.
+**IN PROGRESS (2026-09-25 23:17):** weekly PIT mlf1 2014-2022 running on AWS (c6g.16xlarge-class, 64x Graviton2 N1,
+123 GB + 63 GB swap; ubuntu@ec2-54-211-198-213, key ~/Documents/Code/aws/myvps1.pem). Package:
+data/csv/experiments/VPS_WEEKLY_PIT_2014_2022(.tar.gz) — yearly chunks, resumable, collect.py stitches.
+Smoke test vs Mac: NOT bit-identical (thread count 64 vs 16 changes float sum order) but rank corr >= 0.99977,
+mean abs diff 0.009 — user accepted. Needs >100 GB RAM peak (OOM-killed once without swap).
+When back: join WEEKLY_PIT_2014_2022_forecast_only.csv + PIT_BASE_WEEKLY_90d_from2023_LSEG → weekly mlf1
+2014-2026 → backtest vs maxrank 2015-2026. STOP the EC2 instance afterwards.
 **(superseded)** backtest maxrank vs monthly PIT mlf1 (`PIT_BASE_MONTHLY_90d_FULLHIST_LSEG_forecast_only.csv`) over
 2018-01→2026-09 (weekly file doesn't go back). Switch production only if maxrank holds there.
 

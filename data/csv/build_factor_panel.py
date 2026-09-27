@@ -124,7 +124,11 @@ def main():
     # Month-end = last date with a REAL cross-section. Stray rows on weekends /
     # odd dates (a handful of junk symbols, market cap 0) otherwise become the
     # month's whole 'snapshot' and rank as the top-N.
-    cnt = d.groupby('Date').size()
+    # Count only rows with a valid market cap. LSEG adds fundamentals-only rows on
+    # quarter-end WEEKENDS (e.g. Sun 2024-06-30, ~3,200 names, no price/mcap). The
+    # production parquet has them forward-filled, the raw merged CSV does not -- so
+    # counting all rows picked the Sunday and then dropped the whole month.
+    cnt = d[d['CompanyMarketCap'] > 0].groupby('Date').size()
     real = cnt[cnt >= 1500].index
     me = pd.Series(real, index=real).groupby(real.to_period('M')).max()
     snap = d[d['Date'].isin(set(me.values)) & (d['CompanyMarketCap'] > 0)].copy()

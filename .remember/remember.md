@@ -4,6 +4,21 @@
 Branch `claude/continue-session-011-011CUzneiQ5d1tV3Y3r29tCA`. **Production is UNCHANGED and should stay that way** — v3.3.27, only the additive 9/6/12-month reporting block was ever touched.
 Commits: `688a702f` composite leak fix + merge tooling · `b7a26935` technical factors · `d34ce024` weekly PIT script · `17b5ee10` LSEG replacement · `49029640` ffill/PIT fixes.
 
+## ⚠️ FMP 2025-Q4 GAP — FIXED 2026-09-26
+CollectMLData.ipynb cell 2 only collected the CURRENT year (typo `yeat_text='2025'` never used) → 2025 files last
+pulled 2026-02-04 → income_statement_2025_Q4 had 1,043 rows (now 3,760). TTM/YoY need 4 consecutive quarters →
+FMP factor coverage collapsed ~95%→45% from Apr 2026 (affected production mlf1 too). User re-collected 2025.
+FIX FOREVER: collect [current_year-1, current_year].
+Max-rank rebuilt from 2025 (`weekly_maxrank_update.py --rescore-from 2025-01-01 --prod-parquet <fixed>`):
+- fixed input = merged CSV → PascalCase → per-symbol numeric ffill → fillna(0) → cut at file end date. This
+  REPLICATES the production parquet exactly (validated 100% on 3.2M pre-2025 rows). Raw CSV WITHOUT that
+  ffill/fillna shifts features (sue_pos 96%→18%) and loses quarter-end SUNDAY rows (no mcap) → dropped months.
+- build_factor_panel month-end now counts only valid-mcap rows (robust to either input).
+- Verified: panel pre-2025 100% identical, output pre-2025 identical, 2026 coverage 18.0/19.
+Backtest file: experiments/FACTOR19_FORECAST/MAXRANK_F19_WEEKLYPIT_2015_2026_FMPFIX_forecast_only.csv
+TRAP: when the data END DATE is unchanged, CollectMLData's printed production command DROPS --resume-file
+(resume==output) → full leaky rebuild overwriting live history. Don't run it; rerun only when dates advance.
+
 ## ✅ DECISION (user, 2026-09-25): PRODUCTION = MAX-RANK + ORIGINAL ALGO BETA (no beta-dual)
 Final like-for-like 2026 live (02-03→09-22): max-rank orig-beta Sharpe 3.23 (+61.5%, vol 24.3%, DD −8.7%, β 0.94)
 vs mlf1+beta-dual 2.37 (+59.1%, vol 33.2%, DD −8.4%, β 1.22) vs mlf1 orig 2.10 (DD −12.4%).
